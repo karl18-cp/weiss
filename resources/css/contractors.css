@@ -1,0 +1,342 @@
+.contractors-page {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 2rem;
+    color: #172036;
+    background: #f5f7fb;
+}
+
+.contractors-header {
+    display: flex;
+    flex: none;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.contractors-header > div:first-child > span {
+    color: #2d65e5;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.contractors-header h1 {
+    margin-top: 0.25rem;
+    font-size: clamp(1.75rem, 3vw, 2.35rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+}
+
+.contractors-header p,
+.contractors-form-title p {
+    margin-top: 0.3rem;
+    color: #718096;
+    font-size: 0.88rem;
+}
+
+.contractors-count {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid #e3e8f1;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 5px 18px rgb(35 51 79 / 5%);
+}
+
+.contractors-count__icon {
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    place-items: center;
+    border-radius: 0.75rem;
+    color: #2b64e6;
+    background: #edf3ff;
+}
+
+.contractors-count__icon svg {
+    width: 1.2rem;
+}
+
+.contractors-count strong {
+    display: block;
+    font-size: 1.15rem;
+}
+.contractors-count span {
+    display: block;
+    margin-top: 0.1rem;
+    color: #8290a5;
+    font-size: 0.72rem;
+}
+
+.contractors-workspace {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    align-items: start;
+    gap: 1.25rem;
+}
+
+.contractors-directory-heading {
+    margin-top: 1rem;
+}
+.contractors-directory-heading h2 {
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+.contractors-directory-heading p {
+    margin-top: 0.2rem;
+    color: #8290a5;
+    font-size: 0.7rem;
+}
+
+.contractors-search {
+    display: flex;
+    width: 100%;
+    height: 2.65rem;
+    align-items: center;
+    gap: 0.55rem;
+    margin-top: 0.8rem;
+    padding-inline: 0.75rem;
+    border: 1px solid #dfe5ef;
+    border-radius: 0.75rem;
+    background: #f9fafc;
+}
+
+.contractors-search svg {
+    width: 1rem;
+    color: #8290a5;
+}
+.contractors-search input {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    font-size: 0.8rem;
+    outline: none;
+}
+.contractors-search button {
+    display: grid;
+    place-items: center;
+}
+
+.contractors-list {
+    margin-top: 0.7rem;
+}
+
+.contractor-list-item {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem;
+    border-radius: 0.7rem;
+    text-align: left;
+}
+
+.contractor-list-item:hover,
+.contractor-list-item--active {
+    background: #edf3ff;
+    box-shadow: inset 0 0 0 1px #cbdcff;
+}
+
+.contractor-avatar {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 0.6rem;
+    color: #fff;
+    background: linear-gradient(135deg, #376ff0, #214dbb);
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.contractor-list-item > span:last-child {
+    min-width: 0;
+}
+.contractor-list-item strong,
+.contractor-list-item small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.contractor-list-item strong {
+    font-size: 0.76rem;
+}
+.contractor-list-item small {
+    margin-top: 0.08rem;
+    color: #8491a4;
+    font-size: 0.64rem;
+}
+
+.contractors-empty {
+    display: grid;
+    min-height: 8rem;
+    place-items: center;
+    align-content: center;
+    gap: 0.4rem;
+    color: #8995a7;
+    text-align: center;
+}
+.contractors-empty svg {
+    width: 1.5rem;
+}
+.contractors-empty strong {
+    font-size: 0.72rem;
+}
+
+.contractors-form-panel {
+    padding: 1rem 1.15rem;
+    border: 1px solid #e2e7f0;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 10px 35px rgb(35 51 79 / 6%);
+}
+
+.contractors-form-title {
+    margin-bottom: 0.75rem;
+}
+.contractors-form-title h2 {
+    font-size: 0.95rem;
+    font-weight: 800;
+}
+
+.contractors-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem 0.75rem;
+}
+
+.contractor-field {
+    display: grid;
+    min-width: 0;
+    gap: 0.28rem;
+}
+.contractor-field--wide {
+    grid-column: span 2;
+}
+.contractor-field > span {
+    color: #48566c;
+    font-size: 0.66rem;
+    font-weight: 750;
+}
+.contractor-field > small {
+    color: #dc3545;
+    font-size: 0.6rem;
+}
+
+.contractor-input {
+    display: flex;
+    height: 2.45rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding-inline: 0.65rem;
+    border: 1px solid #dce3ee;
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.contractor-input:focus-within {
+    border-color: #4a7df0;
+    box-shadow: 0 0 0 3px rgb(55 111 240 / 12%);
+}
+.contractor-input svg {
+    width: 0.85rem;
+    flex-shrink: 0;
+    color: #8997aa;
+}
+.contractor-input input {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    font-size: 0.74rem;
+    outline: none;
+}
+
+.contractors-form-actions {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid #edf0f5;
+}
+
+.contractors-save-button,
+.contractors-delete-button,
+.contractors-reset-button {
+    display: inline-flex;
+    min-height: 2.4rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding-inline: 0.8rem;
+    border-radius: 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.contractors-save-button {
+    color: #fff;
+    background: linear-gradient(105deg, #326cf0, #2458d5);
+}
+.contractors-delete-button {
+    color: #cf3f50;
+    background: #fff0f2;
+}
+.contractors-reset-button {
+    color: #65738a;
+    background: #eff2f7;
+}
+.contractors-save-button svg,
+.contractors-delete-button svg {
+    width: 0.9rem;
+}
+
+@media (max-width: 1100px) {
+    .contractors-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .contractors-page {
+        height: auto;
+        min-height: 100%;
+        padding: 1.25rem;
+        overflow: visible;
+    }
+    .contractors-workspace {
+        grid-template-columns: 1fr;
+    }
+    .contractors-list {
+        max-height: 18rem;
+    }
+}
+
+@media (max-width: 560px) {
+    .contractors-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .contractors-form {
+        grid-template-columns: 1fr;
+    }
+    .contractor-field--wide {
+        grid-column: auto;
+    }
+}

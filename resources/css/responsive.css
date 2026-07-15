@@ -1,0 +1,262 @@
+html,
+body,
+#app {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+img,
+svg {
+    max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+    max-width: 100%;
+}
+
+@media (max-width: 1200px) and (min-width: 901px) {
+    .companies-page,
+    .products-page,
+    .contractors-page,
+    .agents-page,
+    .directory-section-page,
+    .lead-card-page {
+        padding: 1.25rem !important;
+    }
+
+    .companies-workspace,
+    .products-workspace,
+    .contractors-workspace,
+    .agents-workspace,
+    .directory-section-workspace {
+        grid-template-columns: 12.5rem minmax(0, 1fr) !important;
+        gap: 0.85rem !important;
+    }
+
+    .lead-card-workspace {
+        grid-template-columns: minmax(0, 1.8fr) minmax(13rem, 0.8fr) !important;
+        gap: 0.75rem !important;
+    }
+
+    .lead-card-main,
+    .lead-card-side {
+        padding: 0.8rem !important;
+    }
+}
+
+@media (max-width: 900px) {
+    .companies-page,
+    .products-page,
+    .contractors-page,
+    .agents-page,
+    .directory-section-page,
+    .lead-card-page {
+        width: 100%;
+        height: auto !important;
+        min-height: 100svh !important;
+        overflow: visible !important;
+    }
+
+    .companies-workspace,
+    .products-workspace,
+    .contractors-workspace,
+    .agents-workspace,
+    .directory-section-workspace,
+    .lead-card-workspace {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .directory-navigation {
+        width: 100%;
+        height: auto !important;
+    }
+
+    .companies-form-panel,
+    .products-card,
+    .contractors-form-panel,
+    .agents-form-panel,
+    .directory-section-content,
+    .lead-card-main,
+    .lead-card-side {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .companies-page,
+    .products-page,
+    .contractors-page,
+    .agents-page,
+    .directory-section-page,
+    .lead-card-page {
+        padding: 1rem !important;
+    }
+
+    .companies-header,
+    .products-header,
+    .contractors-header,
+    .agents-header,
+    .directory-section-header,
+    .lead-card-header {
+        margin-bottom: 1rem !important;
+    }
+
+    .companies-header h1,
+    .products-header h1,
+    .contractors-header h1,
+    .agents-header h1,
+    .directory-section-header h1,
+    .lead-card-header h1 {
+        font-size: clamp(1.55rem, 8vw, 2rem) !important;
+    }
+
+    .companies-stats,
+    .products-summary,
+    .contractors-count,
+    .agents-count,
+    .directory-section-count {
+        margin-bottom: 1rem !important;
+    }
+
+    .directory-types {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .companies-form,
+    .contractors-form,
+    .lead-grid--customer,
+    .lead-grid--project {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .company-field,
+    .company-field--wide,
+    .contractor-field,
+    .contractor-field--wide,
+    .lead-grid--customer > *,
+    .lead-grid--customer > .lead-field--full,
+    .lead-field--notes {
+        grid-column: auto !important;
+    }
+
+    .companies-form-actions,
+    .products-form__actions,
+    .contractors-form-actions,
+    .agents-form-actions,
+    .lead-card-actions {
+        grid-template-columns: minmax(0, 1fr) !important;
+        flex-direction: column-reverse;
+        align-items: stretch !important;
+    }
+
+    .companies-form-actions button,
+    .products-form__actions button,
+    .contractors-form-actions button,
+    .agents-form-actions button,
+    .lead-card-actions button {
+        width: 100%;
+    }
+
+    .lead-card-actions p {
+        grid-column: auto !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .companies-page,
+    .products-page,
+    .contractors-page,
+    .agents-page,
+    .directory-section-page,
+    .lead-card-page {
+        padding: 0.75rem !important;
+    }
+
+    .directory-navigation,
+    .companies-form-panel,
+    .products-card,
+    .contractors-form-panel,
+    .agents-form-panel,
+    .directory-section-content,
+    .lead-card-main,
+    .lead-card-side {
+        padding: 0.8rem !important;
+        border-radius: 0.85rem !important;
+    }
+
+    .directory-type {
+        min-height: 2.75rem;
+        padding-inline: 0.3rem;
+        font-size: 0.68rem;
+    }
+}
+
+@media (max-height: 760px) and (min-width: 901px) {
+    .companies-page,
+    .products-page,
+    .contractors-page,
+    .agents-page,
+    .directory-section-page,
+    .lead-card-page {
+        height: 100svh !important;
+        padding-block: 0.75rem !important;
+    }
+
+    .companies-header,
+    .products-header,
+    .contractors-header,
+    .agents-header,
+    .directory-section-header,
+    .lead-card-header {
+        margin-bottom: 0.65rem !important;
+    }
+
+    .companies-header p,
+    .products-header p,
+    .contractors-header p,
+    .agents-header p,
+    .directory-section-header p,
+    .lead-card-header p {
+        display: none;
+    }
+
+    .companies-stats,
+    .products-summary,
+    .contractors-count,
+    .agents-count,
+    .directory-section-count {
+        margin-bottom: 0.65rem !important;
+        padding-block: 0.45rem !important;
+    }
+
+    .directory-navigation {
+        height: calc(100svh - 9.5rem) !important;
+        min-height: 0 !important;
+    }
+
+    .lead-card-main,
+    .lead-card-side {
+        overflow-y: auto !important;
+        scrollbar-width: thin;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+    .auth-login-page {
+        min-height: 100svh;
+        overflow-y: auto;
+    }
+
+    .auth-login-card {
+        min-height: auto;
+    }
+}

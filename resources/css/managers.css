@@ -1,0 +1,331 @@
+.managers-page {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1.25rem;
+    color: #172036;
+    background: #f5f7fb;
+}
+.managers-header {
+    flex: none;
+    margin-bottom: 0.8rem;
+}
+.managers-header > span {
+    color: #2d65e5;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+.managers-header h1 {
+    font-size: 1.7rem;
+    font-weight: 850;
+}
+.managers-header p,
+.manager-editor__heading p {
+    color: #718096;
+    font-size: 0.72rem;
+}
+.managers-workspace {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    gap: 1rem;
+}
+.managers-directory-heading {
+    margin-top: 0.8rem;
+}
+.managers-directory-heading h2 {
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+.managers-directory-heading p {
+    color: #8290a5;
+    font-size: 0.64rem;
+}
+.managers-search {
+    display: flex;
+    height: 2.4rem;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+    padding: 0 0.6rem;
+    border: 1px solid #dfe5ef;
+    border-radius: 0.65rem;
+    background: #f9fafc;
+}
+.managers-search svg {
+    width: 0.8rem;
+}
+.managers-search input {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    font-size: 0.68rem;
+    outline: none;
+}
+.managers-list {
+    margin-top: 0.55rem;
+}
+.manager-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 0.6rem;
+    text-align: left;
+}
+.manager-item:hover,
+.manager-item.is-active {
+    background: #edf3ff;
+}
+.manager-item > span {
+    display: grid;
+    width: 1.8rem;
+    height: 1.8rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.5rem;
+    color: #fff;
+    background: #326cf0;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+.manager-item div {
+    min-width: 0;
+}
+.manager-item strong,
+.manager-item small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.manager-item strong {
+    font-size: 0.68rem;
+}
+.manager-item small {
+    color: #8491a4;
+    font-size: 0.58rem;
+}
+.manager-editor {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1rem;
+    border: 1px solid #e2e7f0;
+    border-radius: 1rem;
+    background: #fff;
+    scrollbar-width: thin;
+}
+.manager-editor__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.manager-editor__heading h2 {
+    font-size: 0.95rem;
+    font-weight: 800;
+}
+.manager-editor__heading button {
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.5rem;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+.manager-form {
+    margin-top: 0.8rem;
+}
+.manager-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+.manager-fields label {
+    display: grid;
+    gap: 0.2rem;
+}
+.manager-fields label > span,
+.manager-types h3 {
+    color: #4a5870;
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+.manager-fields label > div {
+    display: flex;
+    height: 2.45rem;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0 0.6rem;
+    border: 1px solid #dfe5ef;
+    border-radius: 0.58rem;
+}
+.manager-fields svg {
+    width: 0.78rem;
+    color: #8290a5;
+}
+.manager-fields input,
+.manager-fields select {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    font-size: 0.68rem;
+    outline: none;
+}
+.manager-fields em,
+.manager-types em {
+    min-height: 0.6rem;
+    color: #dc3545;
+    font-size: 0.55rem;
+    font-style: normal;
+}
+.manager-field--wide {
+    grid-column: 1/-1;
+}
+.manager-types {
+    margin-top: 0.6rem;
+}
+.manager-types > div {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+.manager-types label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    border: 1px solid #e1e6ef;
+    border-radius: 0.58rem;
+    background: #fafbfd;
+    font-size: 0.62rem;
+    font-weight: 750;
+}
+.manager-permissions {
+    margin-top: 0.7rem;
+    border: 1px solid #e1e7f0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+.manager-permissions > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 0.75rem;
+    background: #f5f8fe;
+}
+.manager-permissions > header > div {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.manager-permissions header svg {
+    width: 0.9rem;
+    color: #326cf0;
+}
+.manager-permissions header strong,
+.manager-permissions header small {
+    display: block;
+}
+.manager-permissions header strong {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+}
+.manager-permissions header small {
+    color: #8290a5;
+    font-size: 0.56rem;
+}
+.manager-permissions header b {
+    font-size: 0.6rem;
+}
+.manager-permission-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    padding: 0.55rem;
+}
+.manager-permission-grid label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid #e3e7ee;
+    border-radius: 0.55rem;
+    background: #fafbfc;
+}
+.manager-permission-grid span {
+    font-size: 0.62rem;
+    font-weight: 750;
+}
+.manager-permission-grid select {
+    width: 5rem;
+    padding: 0.3rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.4rem;
+    background: #fff;
+    font-size: 0.6rem;
+    font-weight: 750;
+}
+.manager-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+}
+.manager-actions button {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0 0.75rem;
+    border-radius: 0.55rem;
+    font-size: 0.64rem;
+    font-weight: 800;
+}
+.manager-actions svg {
+    width: 0.75rem;
+}
+.manager-delete {
+    margin-right: auto;
+    color: #dc3545;
+    background: #fff0f1;
+}
+.manager-save {
+    color: #fff;
+    background: #2863e7;
+}
+@media (max-width: 900px) {
+    .managers-page {
+        height: auto;
+        min-height: 100%;
+        overflow: visible;
+    }
+    .managers-workspace {
+        grid-template-columns: 1fr;
+    }
+    .manager-editor {
+        overflow: visible;
+    }
+    .manager-types > div,
+    .manager-permission-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 560px) {
+    .manager-fields,
+    .manager-types > div,
+    .manager-permission-grid {
+        grid-template-columns: 1fr;
+    }
+    .manager-field--wide {
+        grid-column: auto;
+    }
+}
