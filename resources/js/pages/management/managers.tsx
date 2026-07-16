@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/managers.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type Access = 'none' | 'view' | 'edit';
 type Manager = {
@@ -37,6 +38,7 @@ export default function Managers({
     managerTypes: string[];
     permissionModules: Record<string, string>;
 }) {
+    const { confirm } = useSystemModal();
     const blankPermissions = Object.fromEntries(
         Object.keys(permissionModules).map((key) => [key, 'none']),
     ) as Record<string, Access>;
@@ -53,6 +55,7 @@ export default function Managers({
     });
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
+
         return q
             ? managers.filter((manager) =>
                   [
@@ -111,21 +114,31 @@ export default function Managers({
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
         const options = { preserveScroll: true, onSuccess: reset };
-        selected
-            ? form.put(`/management/managers/${selected.manager_id}`, options)
-            : form.post('/management/managers', options);
+
+        if (selected) {
+            form.put(`/management/managers/${selected.manager_id}`, options);
+        } else {
+            form.post('/management/managers', options);
+        }
     };
-    const remove = () => {
-        if (
-            selected &&
-            window.confirm(
-                `Delete ${selected.manager_name} and their login account?`,
-            )
-        )
+    const remove = async () => {
+        if (!selected) {
+            return;
+        }
+
+        const confirmed = await confirm({
+            title: 'Delete manager account?',
+            message: `${selected.manager_name} and their login account will be permanently deleted.`,
+            confirmLabel: 'Delete manager',
+            tone: 'danger',
+        });
+
+        if (confirmed) {
             router.delete(`/management/managers/${selected.manager_id}`, {
                 preserveScroll: true,
                 onSuccess: reset,
             });
+        }
     };
     const visible = Object.values(form.data.permissions).filter(
         (value) => value !== 'none',

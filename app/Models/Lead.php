@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'customer_name', 'marital_status', 'primary_number', 'secondary_number',
@@ -49,6 +50,18 @@ class Lead extends Model
     public function notes(): HasMany
     {
         return $this->hasMany(LeadNote::class)->latest();
+    }
+
+    public function latestTelemarketerNote(): HasOne
+    {
+        return $this->hasOne(LeadNote::class)
+            ->where('note_type', 'telemarketer')
+            ->latestOfMany();
+    }
+
+    public function project(): HasOne
+    {
+        return $this->hasOne(Project::class);
     }
 
     protected function casts(): array

@@ -1,0 +1,307 @@
+.accounting-register-page {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1.5rem;
+    color: #172036;
+    background: #f2f5f8;
+}
+
+.accounting-register-heading {
+    display: flex;
+    flex: none;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.accounting-register-heading > div:first-child > span {
+    color: #2d65e5;
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}
+
+.accounting-register-heading h1 {
+    margin-top: 0.3rem;
+    color: #172036;
+    font-size: clamp(1.8rem, 3vw, 2.7rem);
+    font-weight: 850;
+    letter-spacing: -0.05em;
+}
+
+.accounting-register-heading p {
+    margin-top: 0.35rem;
+    color: #7a899f;
+    font-size: 0.8rem;
+}
+
+.accounting-register-summary {
+    display: flex;
+    min-width: 15rem;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid #dae3ef;
+    border-radius: 0.9rem;
+    background: #fff;
+}
+
+.accounting-register-summary > svg {
+    width: 1.2rem;
+    color: #2763df;
+}
+
+.accounting-register-summary strong,
+.accounting-register-summary span {
+    display: block;
+}
+
+.accounting-register-summary strong {
+    font-size: 0.9rem;
+}
+
+.accounting-register-summary span {
+    margin-top: 0.15rem;
+    color: #8794a7;
+    font-size: 0.62rem;
+}
+
+.accounting-register-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 10px 30px rgb(35 51 79 / 6%);
+}
+
+.accounting-register-panel > header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e6ecf4;
+}
+
+.accounting-register-panel h2 {
+    font-size: 0.9rem;
+    font-weight: 850;
+}
+
+.accounting-register-panel header span {
+    display: block;
+    margin-top: 0.15rem;
+    color: #8491a5;
+    font-size: 0.62rem;
+}
+
+.accounting-register-panel form {
+    display: flex;
+    width: min(34rem, 50vw);
+    min-height: 2.5rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding-inline: 0.75rem;
+    border: 1px solid #d7e1ee;
+    border-radius: 0.7rem;
+    background: #f9fbfd;
+}
+
+.accounting-register-panel form > svg {
+    width: 1rem;
+    color: #7d8ba0;
+}
+
+.accounting-register-panel form input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 0.72rem;
+}
+
+.accounting-register-panel form button svg {
+    width: 0.9rem;
+    color: #6d7b90;
+}
+
+.accounting-register-table-wrap {
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+}
+
+.accounting-register-table-wrap table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.68rem;
+}
+
+.accounting-register-table-wrap table.is-payable {
+    min-width: 100rem;
+}
+
+.accounting-register-table-wrap table.is-receivable {
+    min-width: 68rem;
+}
+
+.accounting-register-table-wrap th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.75rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #66748a;
+    background: #f6f8fb;
+    font-size: 0.56rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.accounting-register-table-wrap td {
+    max-width: 16rem;
+    padding: 0.8rem 0.75rem;
+    overflow: hidden;
+    border-bottom: 1px solid #e8edf4;
+    color: #536177;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.accounting-register-table-wrap tbody tr:hover td {
+    background: #f6f9ff;
+}
+
+.accounting-register-table-wrap td strong {
+    color: #27344b;
+}
+
+.accounting-register-table-wrap td a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #245bd9;
+    font-weight: 850;
+    text-decoration: none;
+}
+
+.accounting-register-table-wrap td a svg {
+    width: 0.8rem;
+}
+
+.accounting-register-status {
+    display: inline-flex;
+    padding: 0.25rem 0.45rem;
+    border-radius: 999px;
+    color: #9a6400;
+    background: #fff5dc;
+    font-size: 0.55rem;
+    font-weight: 850;
+}
+
+.accounting-register-status.is-ok_to_pay {
+    color: #245bd9;
+    background: #eaf1ff;
+}
+
+.accounting-register-status.is-paid {
+    color: #18794e;
+    background: #e9f8f0;
+}
+
+.accounting-register-empty {
+    height: 20rem;
+    color: #8995a7 !important;
+    text-align: center;
+}
+
+.accounting-register-empty svg,
+.accounting-register-empty strong,
+.accounting-register-empty span {
+    display: block;
+    margin: 0.35rem auto;
+}
+
+.accounting-register-empty svg {
+    width: 2rem;
+}
+
+.accounting-register-panel > footer {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 1rem;
+    border-top: 1px solid #e4eaf2;
+    color: #718096;
+    font-size: 0.65rem;
+}
+
+.accounting-register-panel > footer > div {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.accounting-register-panel > footer button {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    gap: 0.25rem;
+    padding-inline: 0.6rem;
+    border: 1px solid #d7e1ee;
+    border-radius: 0.55rem;
+    color: #245bd9;
+    background: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+
+.accounting-register-panel > footer button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.accounting-register-panel > footer svg {
+    width: 0.75rem;
+}
+
+@media (max-width: 700px) {
+    .accounting-register-page {
+        height: auto;
+        min-height: 100%;
+        overflow: visible;
+        padding: 1rem;
+    }
+
+    .accounting-register-heading,
+    .accounting-register-panel > header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .accounting-register-summary,
+    .accounting-register-panel form {
+        width: 100%;
+    }
+
+    .accounting-register-table-wrap {
+        min-height: 34rem;
+    }
+}

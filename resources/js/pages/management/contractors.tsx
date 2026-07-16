@@ -14,6 +14,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/contractors.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type Contractor = {
     con_id: number;
@@ -51,13 +52,17 @@ export default function Contractors({
 }: {
     contractors: Contractor[];
 }) {
+    const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Contractor | null>(null);
     const [search, setSearch] = useState('');
     const form = useForm<ContractorForm>(emptyForm);
 
     const filteredContractors = useMemo(() => {
         const query = search.trim().toLowerCase();
-        if (!query) return contractors;
+
+        if (!query) {
+return contractors;
+}
 
         return contractors.filter((contractor) =>
             [
@@ -102,15 +107,28 @@ export default function Contractors({
 
         if (selected) {
             form.put(`/management/contractors/${selected.con_id}`, options);
+
             return;
         }
 
         form.post('/management/contractors', options);
     };
 
-    const deleteContractor = () => {
-        if (!selected || !window.confirm(`Delete ${selected.contractor}?`))
+    const deleteContractor = async () => {
+        if (!selected) {
             return;
+        }
+
+        const confirmed = await confirm({
+            title: 'Delete contractor?',
+            message: `${selected.contractor} will be permanently removed from the contractor directory.`,
+            confirmLabel: 'Delete contractor',
+            tone: 'danger',
+        });
+
+        if (!confirmed) {
+            return;
+        }
 
         router.delete(`/management/contractors/${selected.con_id}`, {
             preserveScroll: true,

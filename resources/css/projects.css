@@ -1,0 +1,2904 @@
+.projects-page {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1.5rem;
+    color: #172036;
+    background: #f2f5f8;
+}
+
+.projects-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.projects-header > div:first-child > span {
+    color: #2d65e5;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.projects-header h1 {
+    margin-top: 0.2rem;
+    font-size: clamp(1.65rem, 3vw, 2.2rem);
+    font-weight: 850;
+    letter-spacing: -0.04em;
+}
+
+.projects-header p {
+    margin-top: 0.25rem;
+    color: #718096;
+    font-size: 0.86rem;
+}
+
+.projects-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid #dbe4ef;
+    border-radius: 0.85rem;
+    background: #fff;
+}
+
+.projects-summary > svg {
+    width: 1.4rem;
+    color: #2470eb;
+}
+
+.projects-summary strong,
+.projects-summary span {
+    display: block;
+}
+
+.projects-summary strong {
+    font-size: 0.85rem;
+}
+
+.projects-summary span {
+    margin-top: 0.1rem;
+    color: #8190a5;
+    font-size: 0.68rem;
+}
+
+.project-context-bar {
+    display: grid;
+    min-width: 0;
+    flex: none;
+    grid-template-columns: 1.05fr 0.82fr 0.92fr 1.35fr 0.9fr;
+    gap: 0;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+    border: 1px solid #d9e3f0;
+    border-radius: 0.85rem;
+    background: #fff;
+    box-shadow: 0 8px 26px rgb(35 51 79 / 5%);
+}
+
+.project-context-bar > div {
+    min-width: 0;
+    padding: 0.62rem 0.8rem;
+    border-right: 1px solid #edf1f6;
+}
+
+.project-context-bar > div:last-child {
+    border-right: 0;
+}
+
+.project-context-bar small,
+.project-context-bar strong,
+.project-context-bar span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-context-bar small {
+    color: #7e8ca1;
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.project-context-bar strong {
+    margin-top: 0.12rem;
+    color: #8a96a8;
+    font-size: 0.72rem;
+    font-weight: 850;
+}
+
+.project-context-bar.has-project strong {
+    color: #1768e7;
+}
+
+.project-context-bar span {
+    margin-top: 0.25rem;
+    color: #3e4b60;
+    font-size: 0.64rem;
+    font-weight: 750;
+}
+
+.projects-workspace {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: 4rem minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.projects-subtabs {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.35rem;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #f2f6ff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.projects-subtabs button {
+    display: grid;
+    width: 3rem;
+    height: 3rem;
+    flex: none;
+    place-items: center;
+    border-radius: 999px;
+    color: #172036;
+    background: #eaf1ff;
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+}
+
+.projects-subtabs button:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+.projects-subtabs button.is-active {
+    border-radius: 0.85rem;
+    color: #fff;
+    background: linear-gradient(135deg, #2474f5, #0962e8);
+    box-shadow: 0 8px 18px rgb(23 106 244 / 24%);
+}
+
+.projects-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.project-schedule-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.project-schedule-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e5ebf3;
+}
+
+.project-schedule-header > div:first-child {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.project-schedule-header > div:first-child > span {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.7rem;
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-schedule-header svg {
+    width: 0.9rem;
+}
+
+.project-schedule-header small {
+    color: #2d65e5;
+    font-size: 0.58rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.project-schedule-header h2 {
+    margin-top: 0.08rem;
+    font-size: 0.9rem;
+    font-weight: 850;
+}
+
+.project-schedule-header p {
+    margin-top: 0.12rem;
+    color: #8290a5;
+    font-size: 0.62rem;
+}
+
+.project-schedule-toolbar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.project-schedule-toolbar button {
+    display: inline-flex;
+    min-height: 2.1rem;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0.65rem;
+    border-radius: 0.55rem;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.62rem;
+    font-weight: 850;
+}
+
+.project-schedule-toolbar button.is-primary {
+    color: #fff;
+    background: #2763df;
+}
+
+.project-schedule-toolbar button.is-delete {
+    color: #d43d4f;
+    background: #fff0f2;
+}
+
+.project-schedule-toolbar button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+}
+
+.project-schedule-table-wrap {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+}
+
+.project-schedule-table {
+    width: 100%;
+    min-width: 68rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.7rem;
+}
+
+.project-schedule-table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #66748a;
+    background: #f7f9fc;
+    font-size: 0.58rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.project-schedule-table td {
+    padding: 0.75rem 0.8rem;
+    border-bottom: 1px solid #e7edf5;
+    color: #536177;
+    vertical-align: middle;
+}
+
+.project-schedule-table tbody tr:not(:has(.project-schedule-empty)) {
+    cursor: pointer;
+}
+
+.project-schedule-table tbody tr:hover td {
+    background: #f5f8ff;
+}
+
+.project-schedule-table tbody tr.is-selected td {
+    color: #1f4fae;
+    background: #eaf1ff;
+}
+
+.project-schedule-table tbody tr.is-selected td:first-child {
+    box-shadow: inset 3px 0 #326cf0;
+}
+
+.project-schedule-table td strong {
+    color: #27344b;
+}
+
+.project-schedule-flag {
+    display: inline-flex;
+    min-width: 2.2rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0.22rem 0.4rem;
+    border-radius: 999px;
+    color: #7b8799;
+    background: #edf0f5;
+    font-size: 0.55rem;
+    font-weight: 850;
+}
+
+.project-schedule-flag.is-complete {
+    color: #245bd9;
+    background: #eaf1ff;
+}
+
+.project-schedule-flag svg {
+    width: 0.7rem;
+}
+
+.project-schedule-notes {
+    max-width: 20rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-schedule-empty {
+    height: 15rem;
+    color: #8290a5 !important;
+    text-align: center;
+}
+
+.project-schedule-empty svg,
+.project-schedule-empty strong,
+.project-schedule-empty span {
+    display: block;
+    margin-inline: auto;
+}
+
+.project-schedule-empty svg {
+    width: 1.6rem;
+    margin-bottom: 0.5rem;
+    color: #aab7ca;
+}
+
+.project-schedule-empty span {
+    margin-top: 0.2rem;
+    font-size: 0.62rem;
+}
+
+.project-schedule-summary {
+    display: grid;
+    flex: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+    padding: 0.75rem;
+    border-top: 1px solid #e5ebf3;
+    background: #f8fafc;
+}
+
+.project-schedule-summary > div {
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.project-schedule-summary small,
+.project-schedule-summary strong {
+    display: block;
+}
+
+.project-schedule-summary small {
+    color: #8290a5;
+    font-size: 0.58rem;
+    font-weight: 750;
+}
+
+.project-schedule-summary strong {
+    margin-top: 0.12rem;
+    color: #27344b;
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.project-schedule-summary > div:last-child strong {
+    color: #245bd9;
+}
+
+.project-schedule-summary > div.is-complete {
+    border-color: #badbc9;
+    background: #f0faf5;
+}
+
+.project-schedule-summary > div.is-complete strong {
+    color: #188653;
+}
+
+.project-invoices-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.project-invoices-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e5ebf3;
+}
+
+.project-invoices-header > div:first-child {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.project-invoices-header > div:first-child > span {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.7rem;
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-invoices-header svg {
+    width: 0.9rem;
+}
+
+.project-invoices-header small {
+    color: #2d65e5;
+    font-size: 0.58rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.project-invoices-header h2 {
+    margin-top: 0.08rem;
+    font-size: 0.9rem;
+    font-weight: 850;
+}
+
+.project-invoices-header p {
+    margin-top: 0.12rem;
+    color: #8290a5;
+    font-size: 0.62rem;
+}
+
+.project-invoices-body {
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) minmax(19rem, 27%);
+}
+
+.project-invoices-list {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    border-right: 1px solid #e5ebf3;
+}
+
+.project-invoices-table-wrap {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+}
+
+.project-invoices-table {
+    width: 100%;
+    min-width: 64rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.68rem;
+}
+
+.project-invoices-table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.68rem 0.72rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #66748a;
+    background: #f7f9fc;
+    font-size: 0.56rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.project-invoices-table td {
+    max-width: 14rem;
+    padding: 0.7rem 0.72rem;
+    overflow: hidden;
+    border-bottom: 1px solid #e7edf5;
+    color: #536177;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-invoices-table tbody tr:not(:has(.project-invoice-empty)) {
+    cursor: pointer;
+}
+
+.project-invoices-table tbody tr:hover td {
+    background: #f5f8ff;
+}
+
+.project-invoices-table tbody tr.is-selected td {
+    color: #1f4fae;
+    background: #eaf1ff;
+}
+
+.project-invoices-table tbody tr.is-selected td:first-child {
+    box-shadow: inset 3px 0 #326cf0;
+}
+
+.project-invoices-table td strong {
+    color: #27344b;
+}
+
+.project-invoice-notes {
+    max-width: 14rem !important;
+}
+
+.project-invoice-status {
+    min-width: 6rem;
+    padding: 0.38rem 1.45rem 0.38rem 0.55rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.58rem;
+    font-weight: 850;
+    outline: none;
+}
+
+.project-invoice-status.is-pending {
+    color: #8a6517;
+    border-color: #f1d594;
+    background: #fff8df;
+}
+
+.project-invoice-status.is-ok_to_pay {
+    color: #245bd9;
+    border-color: #bfd1fa;
+    background: #edf3ff;
+}
+
+.project-invoice-status.is-paid {
+    color: #18794e;
+    border-color: #b9dfcc;
+    background: #effaf4;
+}
+
+.project-invoice-empty {
+    height: 15rem;
+    color: #8290a5 !important;
+    text-align: center;
+}
+
+.project-invoice-empty svg,
+.project-invoice-empty strong,
+.project-invoice-empty span {
+    display: block;
+    margin-inline: auto;
+}
+
+.project-invoice-empty svg {
+    width: 1.6rem;
+    margin-bottom: 0.5rem;
+    color: #aab7ca;
+}
+
+.project-invoice-empty span {
+    margin-top: 0.2rem;
+    font-size: 0.62rem;
+}
+
+.project-invoice-total {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e5ebf3;
+    color: #718096;
+    background: #f8fafc;
+    font-size: 0.62rem;
+    font-weight: 750;
+}
+
+.project-invoice-total strong {
+    min-width: 8rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.55rem;
+    color: #27344b;
+    background: #fff;
+    font-size: 0.76rem;
+    text-align: right;
+}
+
+.project-invoice-preview {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    padding: 0.8rem;
+    background: #fbfcfe;
+}
+
+.project-invoice-preview > header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-bottom: 0.65rem;
+}
+
+.project-invoice-preview > header > div {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #27344b;
+    font-size: 0.7rem;
+    font-weight: 850;
+}
+
+.project-invoice-preview > header svg {
+    width: 0.85rem;
+    color: #2d65e5;
+}
+
+.project-invoice-preview > header a {
+    color: #245bd9;
+    font-size: 0.58rem;
+    font-weight: 800;
+}
+
+.project-invoice-preview__file,
+.project-invoice-preview__empty {
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    border: 1px dashed #cfdaea;
+    border-radius: 0.75rem;
+    background: #fff;
+}
+
+.project-invoice-preview__file iframe,
+.project-invoice-preview__file img {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: contain;
+}
+
+.project-invoice-preview__empty {
+    display: grid;
+    place-content: center;
+    padding: 1.5rem;
+    color: #8794a8;
+    text-align: center;
+}
+
+.project-invoice-preview__empty svg,
+.project-invoice-preview__empty strong,
+.project-invoice-preview__empty span {
+    display: block;
+    margin-inline: auto;
+}
+
+.project-documents-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.project-documents-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e5ebf3;
+}
+
+.project-documents-header > div {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.project-documents-header > div > span {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.7rem;
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-documents-header svg {
+    width: 0.9rem;
+}
+
+.project-documents-header small {
+    color: #2d65e5;
+    font-size: 0.58rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.project-documents-header h2 {
+    margin-top: 0.08rem;
+    font-size: 0.9rem;
+    font-weight: 850;
+}
+
+.project-documents-header p {
+    margin-top: 0.12rem;
+    color: #8290a5;
+    font-size: 0.62rem;
+}
+
+.project-documents-header > strong {
+    flex: none;
+    padding: 0.45rem 0.65rem;
+    border-radius: 999px;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.62rem;
+}
+
+.project-documents-workspace {
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.38fr);
+}
+
+.project-documents-list {
+    min-width: 0;
+    min-height: 0;
+    padding: 0.8rem;
+    border-right: 1px solid #e5ebf3;
+}
+
+.project-documents-table-wrap {
+    height: 100%;
+    overflow: auto;
+    border: 1px solid #dce4ef;
+    border-radius: 0.75rem;
+}
+
+.project-documents-table-wrap table {
+    width: 100%;
+    min-width: 50rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.68rem;
+}
+
+.project-documents-table-wrap th,
+.project-documents-table-wrap td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e7edf5;
+    text-align: left;
+}
+
+.project-documents-table-wrap th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    color: #66748a;
+    background: #f5f8fc;
+    font-size: 0.56rem;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.project-documents-table-wrap tbody tr:not(:has(.project-documents-empty)) {
+    cursor: pointer;
+}
+
+.project-documents-table-wrap tbody tr:hover td,
+.project-documents-table-wrap tbody tr.is-selected td {
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-documents-table-wrap td > span {
+    display: inline-flex;
+    padding: 0.25rem 0.45rem;
+    border-radius: 999px;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.55rem;
+    font-weight: 850;
+}
+
+.project-documents-table-wrap td > span.is-receivable {
+    color: #18794e;
+    background: #eaf8f1;
+}
+
+.project-documents-table-wrap td > span.is-payable {
+    color: #a45d06;
+    background: #fff5dd;
+}
+
+.project-documents-empty {
+    height: 18rem;
+    color: #8794a8;
+    text-align: center !important;
+}
+
+.project-documents-empty svg,
+.project-documents-empty strong,
+.project-documents-empty span {
+    display: block;
+    margin: 0.35rem auto;
+}
+
+.project-document-preview {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.8rem;
+    background: #fbfcfe;
+}
+
+.project-document-preview > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: #27344b;
+    font-size: 0.68rem;
+    font-weight: 850;
+}
+
+.project-document-preview > header > div {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.project-document-preview > header svg {
+    width: 0.85rem;
+    color: #245bd9;
+}
+
+.project-document-preview > header a,
+.project-document-preview__canvas a {
+    color: #245bd9;
+    font-size: 0.58rem;
+    font-weight: 800;
+}
+
+.project-document-preview__canvas {
+    min-width: 0;
+    min-height: 16rem;
+    flex: 1;
+    overflow: hidden;
+    border: 1px dashed #cfdaea;
+    border-radius: 0.75rem;
+    background: #fff;
+}
+
+.project-document-preview__canvas iframe,
+.project-document-preview__canvas img {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: contain;
+}
+
+.project-document-preview__canvas > div {
+    display: grid;
+    height: 100%;
+    place-content: center;
+    gap: 0.45rem;
+    padding: 1rem;
+    color: #8794a8;
+    text-align: center;
+}
+
+.project-document-preview__canvas > div svg {
+    width: 2rem;
+    margin-inline: auto;
+}
+
+.project-document-preview dl {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.project-document-preview dl > div {
+    padding: 0.55rem 0.65rem;
+    border: 1px solid #e1e8f2;
+    border-radius: 0.6rem;
+    background: #fff;
+}
+
+.project-document-preview dt {
+    color: #7b899d;
+    font-size: 0.52rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.project-document-preview dd {
+    margin-top: 0.15rem;
+    color: #27344b;
+    font-size: 0.65rem;
+    font-weight: 750;
+}
+
+.project-accounting-panel {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.project-accounting-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #e5ebf3;
+}
+
+.project-accounting-header > div:first-child {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.project-accounting-header > div:first-child > span {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.7rem;
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-accounting-header svg {
+    width: 0.9rem;
+}
+
+.project-accounting-header small {
+    color: #2d65e5;
+    font-size: 0.58rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.project-accounting-header h2 {
+    margin-top: 0.08rem;
+    font-size: 0.9rem;
+    font-weight: 850;
+}
+
+.project-accounting-header p {
+    margin-top: 0.12rem;
+    color: #8290a5;
+    font-size: 0.62rem;
+}
+
+.project-accounting-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.project-accounting-actions > button,
+.project-accounting-modes button {
+    display: inline-flex;
+    min-height: 2.1rem;
+    align-items: center;
+    gap: 0.3rem;
+    padding-inline: 0.65rem;
+    border-radius: 0.55rem;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.62rem;
+    font-weight: 850;
+}
+
+.project-accounting-actions > button.is-primary {
+    color: #fff;
+    background: #2763df;
+}
+
+.project-accounting-actions > button.is-delete {
+    color: #d43d4f;
+    background: #fff0f2;
+}
+
+.project-accounting-actions > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+}
+
+.project-accounting-modes {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.2rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.65rem;
+    background: #f8fafc;
+}
+
+.project-accounting-modes button {
+    min-height: 1.75rem;
+    color: #67758a;
+    background: transparent;
+}
+
+.project-accounting-modes button.is-active {
+    color: #fff;
+    background: #2763df;
+}
+
+.project-accounting-table-wrap {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+}
+
+.project-accounting-table {
+    width: 100%;
+    min-width: 105rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.68rem;
+}
+
+.project-accounting-table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.7rem 0.75rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #66748a;
+    background: #f7f9fc;
+    font-size: 0.56rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.project-accounting-table td {
+    max-width: 15rem;
+    padding: 0.72rem 0.75rem;
+    overflow: hidden;
+    border-bottom: 1px solid #e7edf5;
+    color: #536177;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-accounting-table tbody tr:not(:has(.project-accounting-empty)) {
+    cursor: pointer;
+}
+
+.project-accounting-table tbody tr:hover td {
+    background: #f5f8ff;
+}
+
+.project-accounting-table tbody tr.is-selected td {
+    color: #1f4fae;
+    background: #eaf1ff;
+}
+
+.project-accounting-table tbody tr.is-selected td:first-child {
+    box-shadow: inset 3px 0 #326cf0;
+}
+
+.project-accounting-table td strong {
+    color: #27344b;
+}
+
+.project-accounting-type,
+.project-accounting-status {
+    display: inline-flex;
+    padding: 0.25rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.54rem;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.project-accounting-type.is-receivable {
+    color: #18794e;
+    background: #eaf8f1;
+}
+
+.project-accounting-type.is-payable {
+    color: #8a6517;
+    background: #fff7dc;
+}
+
+.project-accounting-status {
+    color: #536177;
+    background: #edf0f5;
+}
+
+.project-accounting-notes {
+    max-width: 16rem !important;
+}
+
+.project-accounting-empty {
+    height: 16rem;
+    color: #8290a5 !important;
+    text-align: center;
+}
+
+.project-accounting-empty svg,
+.project-accounting-empty strong,
+.project-accounting-empty span {
+    display: block;
+    margin-inline: auto;
+}
+
+.project-accounting-empty svg {
+    width: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: #aab7ca;
+}
+
+.project-accounting-empty span {
+    margin-top: 0.2rem;
+    font-size: 0.62rem;
+}
+
+.project-accounting-totals {
+    display: grid;
+    flex: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+    padding: 0.75rem;
+    border-top: 1px solid #e5ebf3;
+    background: #f8fafc;
+}
+
+.project-accounting-totals > div {
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.project-accounting-totals small,
+.project-accounting-totals strong {
+    display: block;
+}
+
+.project-accounting-totals small {
+    color: #8290a5;
+    font-size: 0.58rem;
+    font-weight: 750;
+}
+
+.project-accounting-totals strong {
+    margin-top: 0.12rem;
+    color: #245bd9;
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.project-invoice-preview__empty svg {
+    width: 2rem;
+    margin-bottom: 0.65rem;
+    color: #a7b5c9;
+}
+
+.project-invoice-preview__empty strong {
+    color: #536177;
+    font-size: 0.7rem;
+}
+
+.project-invoice-preview__empty span {
+    max-width: 15rem;
+    margin-top: 0.25rem;
+    font-size: 0.58rem;
+    line-height: 1.5;
+}
+
+.projects-table-wrap {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+}
+
+.projects-table {
+    width: 100%;
+    min-width: 108rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.76rem;
+}
+
+.projects-table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.8rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #29364c;
+    background: #f8fafc;
+    font-weight: 850;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.projects-table td {
+    padding: 0.85rem 0.8rem;
+    border-bottom: 1px solid #e4ebf4;
+    color: #46546a;
+    vertical-align: top;
+}
+
+.projects-table tbody tr:hover td {
+    background: #f4f8ff;
+}
+
+.projects-table tbody tr {
+    cursor: pointer;
+}
+
+.projects-table tbody tr.is-selected td {
+    color: #1f4fae;
+    background: #edf3ff;
+}
+
+.projects-table tbody tr.is-selected td:first-child {
+    box-shadow: inset 3px 0 #326cf0;
+}
+
+.projects-table td strong {
+    color: #26344b;
+}
+
+.projects-table td small {
+    display: block;
+    margin-top: 0.12rem;
+    color: #8995a7;
+    font-size: 0.65rem;
+}
+
+.projects-status {
+    display: inline-flex;
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.65rem;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.projects-number {
+    color: #245bd9 !important;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.projects-notes {
+    max-width: 20rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-details-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+}
+
+.project-details-header {
+    display: flex;
+    min-height: 4.4rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #e6ebf3;
+}
+
+.project-details-header > div:first-child {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.project-details-header > div:first-child > button {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.55rem;
+    color: #536177;
+    background: #f0f3f8;
+}
+
+.project-details-header > div:first-child > button:hover {
+    color: #245bd9;
+    background: #e9f0ff;
+}
+
+.project-details-header button svg {
+    width: 0.85rem;
+}
+
+.project-details-mark {
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.75rem;
+    color: #fff;
+    background: linear-gradient(135deg, #376ff0, #214dbb);
+    font-size: 0.85rem;
+    font-weight: 900;
+}
+
+.project-details-header h2 {
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-details-header small {
+    color: #8290a5;
+    font-size: 0.62rem;
+}
+
+.project-details-header__meta {
+    text-align: right;
+}
+
+.project-details-header__meta small {
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.project-details-grid {
+    display: grid;
+    height: calc(100% - 4.4rem);
+    grid-template-columns: minmax(18rem, 0.9fr) minmax(24rem, 1.35fr) minmax(
+            17rem,
+            0.75fr
+        );
+    grid-template-areas:
+        'customer overview sale'
+        'team notes sale';
+    grid-template-rows: auto minmax(13rem, 1fr);
+    gap: 0.7rem;
+    padding: 0.7rem;
+    overflow: auto;
+}
+
+.project-detail-card {
+    min-width: 0;
+    padding: 0.85rem;
+    border: 1px solid #e3e9f2;
+    border-radius: 0.8rem;
+    background: #fbfcfe;
+}
+
+.project-detail-card--customer {
+    grid-area: customer;
+}
+
+.project-detail-card--overview {
+    grid-area: overview;
+}
+
+.project-detail-card--sale {
+    grid-area: sale;
+}
+
+.project-detail-card--team {
+    grid-area: team;
+}
+
+.project-detail-card--notes {
+    grid-area: notes;
+}
+
+.project-detail-card > header {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.85rem;
+}
+
+.project-detail-card--sale > header > div:not(.project-sale-toolbar) {
+    min-width: 0;
+    flex: 1;
+}
+
+.project-detail-card--sale > header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.project-add-sale {
+    display: inline-flex;
+    min-height: 2rem;
+    flex: none;
+    align-items: center;
+    gap: 0.3rem;
+    padding-inline: 0.55rem;
+    border-radius: 0.5rem;
+    color: #fff;
+    background: #245bd9;
+    font-size: 0.58rem;
+    font-weight: 850;
+}
+
+.project-add-sale svg {
+    width: 0.7rem !important;
+}
+
+.project-detail-card--sale > header > .project-sale-toolbar {
+    display: grid;
+    width: 100%;
+    flex: 0 0 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.project-sale-toolbar > button {
+    display: inline-flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding-inline: 7px;
+    overflow: hidden;
+    border-radius: 8px;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 11px;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.project-sale-toolbar > button svg {
+    width: 12px;
+    flex: none;
+}
+
+.project-sale-toolbar > button.is-delete {
+    color: #c93648;
+    background: #fff0f2;
+}
+
+.project-sale-toolbar > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.project-sale-toolbar > button.project-add-sale {
+    color: #fff;
+    background: #245bd9;
+}
+
+.project-detail-card > header > span {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.58rem;
+    color: #2d65e5;
+    background: #edf3ff;
+}
+
+.project-detail-card > header svg {
+    width: 0.9rem;
+}
+
+.project-detail-card h3 {
+    color: #27344b;
+    font-size: 0.75rem;
+    font-weight: 850;
+}
+
+.project-detail-card > header p {
+    margin-top: 0.08rem;
+    color: #8995a7;
+    font-size: 0.58rem;
+}
+
+.project-detail-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+}
+
+.project-detail-fields > div {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 0.45rem;
+    padding: 0.65rem;
+    border: 1px solid #e6ebf3;
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.project-detail-fields > div.is-wide {
+    grid-column: 1 / -1;
+}
+
+.project-detail-fields > div > svg {
+    width: 0.8rem;
+    flex: none;
+    color: #718096;
+}
+
+.project-detail-fields span {
+    min-width: 0;
+}
+
+.project-detail-fields small,
+.project-overview-grid small,
+.project-team-list small,
+.project-notes-grid small,
+.project-sale-total small {
+    display: block;
+    color: #8a96a8;
+    font-size: 0.55rem;
+    font-weight: 750;
+    text-transform: uppercase;
+}
+
+.project-detail-fields strong,
+.project-detail-fields em {
+    display: block;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    color: #27344b;
+    font-size: 0.67rem;
+    font-style: normal;
+    text-overflow: ellipsis;
+}
+
+.project-detail-fields em {
+    color: #718096;
+    font-size: 0.6rem;
+}
+
+.project-overview-grid,
+.project-team-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.project-overview-grid > div,
+.project-team-list > div {
+    min-width: 0;
+    padding: 0.65rem;
+    border: 1px solid #e6ebf3;
+    border-radius: 0.62rem;
+    background: #fff;
+}
+
+.project-overview-grid strong,
+.project-team-list strong {
+    display: block;
+    margin-top: 0.2rem;
+    overflow: hidden;
+    color: #27344b;
+    font-size: 0.68rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-overview-grid strong.is-blue {
+    color: #245bd9;
+    text-transform: capitalize;
+}
+
+.project-sale-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem;
+    border-radius: 0.7rem;
+    color: #fff;
+    background: linear-gradient(135deg, #326cf0, #2458d5);
+}
+
+.project-sale-total small {
+    color: rgb(255 255 255 / 72%);
+}
+
+.project-sale-total strong {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 1rem;
+}
+
+.project-sale-total > svg {
+    width: 1.5rem;
+    opacity: 0.7;
+}
+
+.project-sales-table-wrap {
+    max-height: 18rem;
+    margin-top: 0.65rem;
+    overflow: auto;
+    border: 1px solid #e3e9f2;
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.project-sales-table {
+    width: 100%;
+    min-width: 30rem;
+    border-collapse: collapse;
+    font-size: 0.62rem;
+}
+
+.project-sales-table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.55rem;
+    color: #758297;
+    background: #f7f9fc;
+    font-size: 0.53rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.project-sales-table td {
+    padding: 0.55rem;
+    border-top: 1px solid #e8edf4;
+    color: #536177;
+    vertical-align: middle;
+}
+
+.project-sales-table tbody tr {
+    cursor: pointer;
+    transition: background 120ms ease;
+}
+
+.project-sales-table tbody tr:hover td {
+    background: #f5f8ff;
+}
+
+.project-sales-table tbody tr.is-selected td {
+    color: #1f4fae;
+    background: #eaf1ff;
+}
+
+.project-sales-table tbody tr.is-selected td:first-child {
+    box-shadow: inset 3px 0 #326cf0;
+}
+
+.project-sales-table td strong {
+    color: #27344b;
+}
+
+.project-sale-type {
+    display: inline-flex;
+    padding: 0.22rem 0.42rem;
+    border-radius: 999px;
+    color: #596579;
+    background: #edf0f5;
+    font-size: 0.52rem;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.project-sale-type--original {
+    color: #245bd9;
+    background: #eaf1ff;
+}
+
+.project-sale-type--referral {
+    color: #6b4bad;
+    background: #f0eaff;
+}
+
+.project-sale-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.15rem;
+    border-bottom: 1px solid #e8edf4;
+    color: #65738a;
+    font-size: 0.64rem;
+}
+
+.project-sale-row strong {
+    color: #27344b;
+}
+
+.project-sale-hint {
+    margin-top: 0.65rem;
+    color: #8290a5;
+    font-size: 0.6rem;
+    line-height: 1.45;
+}
+
+.project-sale-modal {
+    width: min(500px, calc(100vw - 32px));
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgb(7 17 38 / 28%);
+}
+
+.project-sale-modal form > div:first-child {
+    gap: 6px;
+    padding: 22px 22px 0;
+}
+
+.project-sale-modal [data-slot='dialog-title'] {
+    color: #1d2940;
+    font-size: 20px;
+    font-weight: 850;
+    line-height: 1.2;
+}
+
+.project-sale-modal [data-slot='dialog-description'] {
+    color: #718096;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.project-sale-modal > button {
+    top: 18px;
+    right: 18px;
+}
+
+.project-sale-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: 20px 22px 22px;
+}
+
+.project-sale-form label {
+    display: grid;
+    gap: 6px;
+}
+
+.project-sale-form label:last-child {
+    grid-column: 1 / -1;
+}
+
+.project-sale-form label > span {
+    color: #526076;
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.project-sale-form input,
+.project-sale-form select,
+.project-sale-amount-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding-inline: 12px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    color: #27344b;
+    background: #fff;
+    font-size: 13px;
+    outline: none;
+}
+
+.project-sale-form input:focus,
+.project-sale-form select:focus,
+.project-sale-amount-input:focus-within {
+    border-color: #4a7df0;
+    box-shadow: 0 0 0 3px rgb(55 111 240 / 10%);
+}
+
+.project-sale-amount-input {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.project-sale-amount-input strong {
+    color: #245bd9;
+}
+
+.project-sale-amount-input input {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.project-sale-form label > small {
+    color: #c93648;
+    font-size: 11px;
+}
+
+.project-sale-modal__footer {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 9px;
+    padding: 14px 22px;
+    border-top: 1px solid #e8edf4;
+    background: #f8fafc;
+}
+
+.project-sale-modal__footer button {
+    min-height: 40px;
+    padding-inline: 16px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    color: #536177;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.project-sale-modal__footer button[type='submit'] {
+    color: #fff;
+    border-color: #245bd9;
+    background: #245bd9;
+}
+
+.project-sale-modal__footer button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+.project-schedule-modal {
+    width: min(620px, calc(100vw - 32px));
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgb(7 17 38 / 28%);
+}
+
+.project-schedule-modal form > div:first-child {
+    gap: 6px;
+    padding: 22px 22px 0;
+}
+
+.project-schedule-modal [data-slot='dialog-title'] {
+    color: #1d2940;
+    font-size: 20px;
+    font-weight: 850;
+    line-height: 1.2;
+}
+
+.project-schedule-modal [data-slot='dialog-description'] {
+    color: #718096;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.project-schedule-modal > button {
+    top: 18px;
+    right: 18px;
+}
+
+.project-schedule-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    padding: 20px 22px 22px;
+}
+
+.project-schedule-form > label {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 6px;
+}
+
+.project-schedule-form > label.is-wide {
+    grid-column: 1 / -1;
+}
+
+.project-schedule-form label > span,
+.project-schedule-options legend {
+    color: #526076;
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.project-schedule-form input[type='date'],
+.project-schedule-form input[type='text'],
+.project-schedule-form textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    color: #27344b;
+    background: #fff;
+    font-size: 13px;
+    outline: none;
+}
+
+.project-schedule-form textarea {
+    min-height: 90px;
+    resize: vertical;
+}
+
+.project-schedule-form input:focus,
+.project-schedule-form textarea:focus {
+    border-color: #4a7df0;
+    box-shadow: 0 0 0 3px rgb(55 111 240 / 10%);
+}
+
+.project-schedule-form .project-sale-amount-input input {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.project-schedule-form label > small {
+    color: #c93648;
+    font-size: 11px;
+}
+
+.project-schedule-options {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.project-schedule-options legend {
+    padding-inline: 4px;
+}
+
+.project-schedule-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #536177;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.project-schedule-options input {
+    width: 16px;
+    height: 16px;
+    accent-color: #2763df;
+}
+
+.project-invoice-modal {
+    width: min(1320px, calc(100vw - 32px));
+    max-width: min(1320px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgb(7 17 38 / 28%);
+}
+
+.project-accounting-modal {
+    width: min(1280px, calc(100vw - 32px));
+    max-width: min(1280px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 70px rgb(7 17 38 / 28%);
+}
+
+.project-accounting-modal form {
+    display: flex;
+    max-height: calc(100vh - 32px);
+    flex-direction: column;
+}
+
+.project-accounting-modal form > div:first-child {
+    gap: 6px;
+    padding: 22px 22px 0;
+}
+
+.project-accounting-modal [data-slot='dialog-title'] {
+    color: #1d2940;
+    font-size: 20px;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.project-accounting-modal [data-slot='dialog-description'] {
+    color: #718096;
+    font-size: 13px;
+}
+
+.project-accounting-form-top {
+    display: grid;
+    flex: none;
+    grid-template-columns: 1fr 0.9fr 1fr 1.35fr 0.9fr 0.9fr;
+    gap: 12px;
+    padding: 18px 22px;
+}
+
+.project-accounting-form-top label,
+.project-accounting-payable-fields label,
+.project-accounting-notes-field {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 6px;
+}
+
+.project-accounting-form-top label > span,
+.project-accounting-payable-fields label > span,
+.project-accounting-notes-field > span {
+    color: #526076;
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.project-accounting-form-top input,
+.project-accounting-form-top select,
+.project-accounting-payable-fields input,
+.project-accounting-payable-fields select,
+.project-accounting-notes-field input,
+.project-accounting-notes-field textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    color: #27344b;
+    background: #fff;
+    font-size: 13px;
+    outline: none;
+}
+
+.project-accounting-form-top label > small {
+    color: #c93648;
+    font-size: 10px;
+}
+
+.project-accounting-notes-field > small {
+    color: #718096;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.project-accounting-notes-field input[readonly] {
+    color: #245bd9;
+    background: #f3f7ff;
+    font-weight: 800;
+    cursor: default;
+}
+
+.project-accounting-reference,
+.project-accounting-amount {
+    display: flex;
+    min-width: 0;
+    min-height: 42px;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.project-accounting-reference > strong,
+.project-accounting-amount > strong {
+    display: grid;
+    min-height: 42px;
+    flex: none;
+    place-items: center;
+    padding-inline: 11px;
+    border-right: 1px solid #dce4ef;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 13px;
+    font-weight: 900;
+    user-select: none;
+}
+
+.project-accounting-form-top .project-accounting-reference input,
+.project-accounting-form-top .project-accounting-amount input {
+    min-height: 40px;
+    padding-inline: 10px;
+    border: 0;
+    border-radius: 0;
+}
+
+.project-accounting-form-body {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+    gap: 14px;
+    padding: 0 22px 22px;
+    overflow: auto;
+}
+
+.project-accounting-form-body > section {
+    display: flex;
+    min-width: 0;
+    min-height: 19rem;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 12px;
+    background: #f9fbfd;
+}
+
+.project-accounting-form-body > section > header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e3e9f2;
+    background: #fff;
+}
+
+.project-accounting-form-body h3 {
+    color: #27344b;
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.project-accounting-form-body header p,
+.project-accounting-form-body header > span {
+    margin-top: 2px;
+    color: #8290a5;
+    font-size: 10px;
+}
+
+.project-accounting-link-list {
+    min-height: 0;
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.project-accounting-link-list > label {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px;
+    border-bottom: 1px solid #e5ebf3;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.project-accounting-link-list > label:hover,
+.project-accounting-link-list > label.is-selected {
+    background: #eaf2ff;
+}
+
+.project-accounting-link-list input {
+    width: 16px;
+    height: 16px;
+    accent-color: #2763df;
+}
+
+.project-accounting-link-list label > span {
+    min-width: 0;
+    flex: 1;
+}
+
+.project-accounting-link-list strong,
+.project-accounting-link-list small {
+    display: block;
+}
+
+.project-accounting-link-list strong {
+    color: #27344b;
+    font-size: 12px;
+}
+
+.project-accounting-link-list small {
+    margin-top: 2px;
+    color: #8290a5;
+    font-size: 10px;
+}
+
+.project-accounting-link-list b {
+    color: #245bd9;
+    font-size: 12px;
+}
+
+.project-accounting-link-empty {
+    display: grid;
+    min-height: 12rem;
+    place-content: center;
+    padding: 20px;
+    color: #8794a8;
+    font-size: 11px;
+    text-align: center;
+}
+
+.project-accounting-payable-fields,
+.project-accounting-notes-field {
+    padding: 14px;
+}
+
+.project-accounting-payable-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.project-accounting-invoice-picker {
+    display: grid;
+    gap: 10px;
+    padding: 0 14px 14px;
+}
+
+.project-accounting-invoice-picker > strong {
+    color: #27344b;
+    font-size: 12px;
+}
+
+.project-accounting-invoice-picker table {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 11px;
+}
+
+.project-accounting-invoice-picker th,
+.project-accounting-invoice-picker td {
+    padding: 10px;
+    border-bottom: 1px solid #e5ebf4;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.project-accounting-invoice-picker th {
+    color: #64748b;
+    background: #f4f7fb;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.project-accounting-invoice-picker tbody tr {
+    cursor: pointer;
+}
+
+.project-accounting-invoice-picker tbody tr:hover td,
+.project-accounting-invoice-picker tbody tr.is-selected td {
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-accounting-invoice-picker tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.project-accounting-invoice-picker input[type='radio'] {
+    accent-color: #2763df;
+}
+
+.project-accounting-invoice-picker__empty {
+    display: grid;
+    min-height: 9rem;
+    place-items: center;
+    padding: 20px;
+    border: 1px dashed #cfdaea;
+    border-radius: 10px;
+    color: #8290a5;
+    background: #fafcff;
+    font-size: 11px;
+    text-align: center;
+}
+
+.project-accounting-notes-field > a,
+.project-accounting-table td > a {
+    color: #245bd9;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.project-accounting-notes-field textarea {
+    min-height: 105px;
+    resize: vertical;
+}
+
+.project-invoice-modal form {
+    display: flex;
+    max-height: calc(100vh - 32px);
+    flex-direction: column;
+}
+
+.project-invoice-modal form > div:first-child {
+    gap: 6px;
+    padding: 22px 22px 0;
+}
+
+.project-invoice-modal [data-slot='dialog-title'] {
+    color: #1d2940;
+    font-size: 20px;
+    font-weight: 850;
+    line-height: 1.2;
+}
+
+.project-invoice-modal [data-slot='dialog-description'] {
+    color: #718096;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.project-invoice-modal > button {
+    top: 18px;
+    right: 18px;
+}
+
+.project-invoice-form-layout {
+    display: grid;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1.55fr) minmax(23rem, 0.8fr);
+    gap: 20px;
+    padding: 20px 22px 22px;
+    overflow: auto;
+}
+
+.project-invoice-form {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 14px;
+}
+
+.project-invoice-form > label {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 6px;
+}
+
+.project-invoice-form > label.is-wide {
+    grid-column: 1 / -1;
+}
+
+.project-invoice-form label > span {
+    color: #526076;
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.project-invoice-form input,
+.project-invoice-form select,
+.project-invoice-form textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    color: #27344b;
+    background: #fff;
+    font-size: 13px;
+    outline: none;
+}
+
+.project-invoice-number-input {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.project-invoice-number-input:focus-within {
+    border-color: #4a7df0;
+    box-shadow: 0 0 0 3px rgb(55 111 240 / 10%);
+}
+
+.project-invoice-number-input > strong {
+    display: grid;
+    min-height: 42px;
+    flex: none;
+    place-items: center;
+    padding-inline: 12px;
+    border-right: 1px solid #dce4ef;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 13px;
+    font-weight: 900;
+    user-select: none;
+}
+
+.project-invoice-form .project-invoice-number-input > input {
+    min-height: 40px;
+    padding-inline: 12px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.project-invoice-form input[readonly] {
+    color: #64748b;
+    background: #f7f9fc;
+}
+
+.project-invoice-form textarea {
+    min-height: 82px;
+    resize: vertical;
+}
+
+.project-invoice-form input:focus,
+.project-invoice-form select:focus,
+.project-invoice-form textarea:focus {
+    border-color: #4a7df0;
+    box-shadow: 0 0 0 3px rgb(55 111 240 / 10%);
+}
+
+.project-invoice-form .project-sale-amount-input input {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.project-invoice-form label > small,
+.project-invoice-upload > small {
+    color: #c93648;
+    font-size: 11px;
+}
+
+.project-invoice-form label > em {
+    color: #8290a5;
+    font-size: 10px;
+    font-style: normal;
+}
+
+.project-invoice-upload {
+    display: flex;
+    min-width: 0;
+    min-height: 25rem;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid #dce4ef;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.project-invoice-upload > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #27344b;
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.project-invoice-upload > div:first-child svg {
+    width: 17px;
+    color: #245bd9;
+}
+
+.project-invoice-file-picker {
+    display: grid;
+    flex: none;
+    place-items: center;
+    padding: 14px;
+    border: 1px dashed #aebfda;
+    border-radius: 10px;
+    color: #718096;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+}
+
+.project-invoice-file-picker input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+
+.project-invoice-file-picker svg {
+    width: 20px;
+    margin-bottom: 5px;
+    color: #2d65e5;
+}
+
+.project-invoice-file-picker strong {
+    max-width: 100%;
+    overflow: hidden;
+    color: #3c4b62;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-invoice-file-picker span {
+    margin-top: 2px;
+    font-size: 10px;
+}
+
+.project-invoice-upload-preview {
+    min-width: 0;
+    min-height: 12rem;
+    flex: 1;
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.project-invoice-upload-preview iframe,
+.project-invoice-upload-preview img {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: contain;
+}
+
+.project-invoice-upload-preview > div {
+    display: grid;
+    height: 100%;
+    place-content: center;
+    color: #96a2b4;
+    font-size: 11px;
+    text-align: center;
+}
+
+.project-invoice-upload-preview > div svg {
+    width: 26px;
+    margin: 0 auto 6px;
+}
+
+.project-notes-grid {
+    display: grid;
+    height: calc(100% - 2.85rem);
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+}
+
+.project-notes-grid > div {
+    min-height: 5rem;
+    padding: 0.65rem;
+    overflow: hidden;
+    border: 1px solid #e6ebf3;
+    border-radius: 0.62rem;
+    background: #fff;
+}
+
+.project-notes-grid p {
+    display: -webkit-box;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    color: #536177;
+    font-size: 0.64rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+}
+
+.projects-amount {
+    color: #176d48 !important;
+    font-weight: 850;
+}
+
+.projects-empty {
+    height: 20rem;
+    color: #8995a7 !important;
+    text-align: center;
+}
+
+.projects-empty svg,
+.projects-empty strong,
+.projects-empty span {
+    display: block;
+    margin-inline: auto;
+}
+
+.projects-empty svg {
+    width: 2rem;
+    margin-bottom: 0.7rem;
+}
+
+.projects-empty strong {
+    color: #526076;
+}
+
+.projects-empty span {
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+}
+
+@media (max-width: 1350px) {
+    .project-context-bar {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .project-context-bar > div {
+        border-bottom: 1px solid #edf1f6;
+    }
+
+    .project-details-grid {
+        grid-template-columns: repeat(2, minmax(20rem, 1fr));
+        grid-template-areas:
+            'customer overview'
+            'team overview'
+            'sale sale'
+            'notes notes';
+        grid-template-rows: auto;
+    }
+}
+
+@media (max-width: 700px) {
+    .projects-page {
+        height: auto;
+        min-height: 100%;
+        overflow: visible;
+        padding: 1rem;
+    }
+
+    .projects-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .project-context-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .project-context-bar > div {
+        border-right: 0;
+    }
+
+    .projects-panel {
+        min-height: 36rem;
+    }
+
+    .projects-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .projects-subtabs {
+        flex-direction: row;
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+
+    .project-details-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .project-details-header__meta {
+        text-align: left;
+    }
+
+    .project-details-grid {
+        height: auto;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            'customer'
+            'team'
+            'overview'
+            'sale'
+            'notes';
+    }
+
+    .project-overview-grid,
+    .project-team-list,
+    .project-notes-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .project-sale-form {
+        grid-template-columns: 1fr;
+    }
+
+    .project-sale-form label:last-child {
+        grid-column: auto;
+    }
+
+    .project-schedule-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .project-invoices-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .project-accounting-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .project-documents-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .project-documents-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .project-documents-list {
+        min-height: 24rem;
+        border-right: 0;
+        border-bottom: 1px solid #e5ebf3;
+    }
+
+    .project-document-preview {
+        min-height: 32rem;
+    }
+
+    .project-accounting-actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .project-invoices-body,
+    .project-invoice-form-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .project-invoice-preview {
+        min-height: 28rem;
+    }
+
+    .project-schedule-toolbar {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .project-schedule-summary,
+    .project-schedule-form {
+        grid-template-columns: 1fr;
+    }
+
+    .project-accounting-totals,
+    .project-accounting-form-top,
+    .project-accounting-form-body {
+        grid-template-columns: 1fr;
+    }
+
+    .project-schedule-form > label.is-wide {
+        grid-column: auto;
+    }
+
+    .project-invoice-form {
+        grid-template-columns: 1fr;
+    }
+
+    .project-invoice-form > label.is-wide {
+        grid-column: auto;
+    }
+}

@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/leads-shop.css';
+import { useSystemModal } from '@/components/system-modal-provider';
+import { zillowSearchUrl } from '@/lib/address-search';
 
 export type Lead = {
     id: number;
@@ -49,7 +51,7 @@ export type Lead = {
     status: string;
     confirmation_notes: string | null;
     created_at: string;
-    company: { com_id: number; company: string } | null;
+    company: { com_id: number; company: string; prefix: string } | null;
     product: { prod_id: number; product_name: string } | null;
     agent: { agent_id: number; agent_name: string } | null;
     second_agent: { agent_id: number; agent_name: string } | null;
@@ -119,6 +121,69 @@ const formatDate = (value: string) =>
         hour: 'numeric',
         minute: '2-digit',
     }).format(new Date(value));
+
+const leadAddress = (lead: Lead) =>
+    [lead.address, lead.city, lead.state, lead.zip_code]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(', ');
+
+const phoneHref = (phoneNumber: string) =>
+    `tel:${phoneNumber.replace(/[^\d+]/g, '')}`;
+
+const leadAddressLinks = (lead: Lead) => {
+    const address = encodeURIComponent(leadAddress(lead));
+
+    return {
+        googleMaps: `https://www.google.com/maps/search/?api=1&query=${address}`,
+        zillow: zillowSearchUrl([
+            lead.address,
+            lead.city,
+            lead.state,
+            lead.zip_code,
+        ]),
+    };
+};
+
+function ZillowIcon() {
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+                d="m4.1 9.4 7.7-6.1 8.1 6.2c-3-.8-6-.7-8.8.3-2.6.9-4.9 2.5-6.9 4.4l-.1-4.8Z"
+                fill="currentColor"
+            />
+            <path
+                d="M4.4 15.7c2.2-2.2 4.7-3.8 7.6-4.7 2.4-.8 4.9-.9 7.5-.4L4.7 21l-.3-5.3Z"
+                fill="currentColor"
+                opacity=".72"
+            />
+        </svg>
+    );
+}
+
+function GoogleMapsIcon() {
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+                d="M12 2a7.2 7.2 0 0 0-7.2 7.2c0 5.2 7.2 12.8 7.2 12.8s7.2-7.6 7.2-12.8A7.2 7.2 0 0 0 12 2Z"
+                fill="#4285f4"
+            />
+            <path
+                d="M12 2a7.2 7.2 0 0 1 6.2 3.5l-5.1 5.1-4.5-4.5L12 2Z"
+                fill="#34a853"
+            />
+            <path
+                d="m8.6 6.1-3.1 6.2c-1-2.5-.9-4.9.4-7L8.6 6Z"
+                fill="#fbbc04"
+            />
+            <path
+                d="m5.5 12.3 6.5 9.6V12a3.2 3.2 0 0 1-3.4-5.9l-2.7-.8a7.2 7.2 0 0 0-.4 7Z"
+                fill="#ea4335"
+            />
+            <circle cx="12" cy="9.2" r="2.8" fill="#fff" />
+        </svg>
+    );
+}
 
 function BlankLeadDetail({ queueStatus }: { queueStatus?: string }) {
     const showsDispatchNotes = [
@@ -270,6 +335,7 @@ export default function LeadsShop({
     salesmen = [],
     queue,
 }: LeadsShopProps) {
+    const { notify } = useSystemModal();
     const [search, setSearch] = useState('');
     const [selectedDate, setSelectedDate] = useState<string>('all');
     const [selectedStatus, setSelectedStatus] = useState(
@@ -281,6 +347,7 @@ export default function LeadsShop({
     const [productFilter, setProductFilter] = useState('all');
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [saleModalOpen, setSaleModalOpen] = useState(false);
     const [historyType, setHistoryType] = useState<
         | 'telemarketer'
         | 'confirmation'
@@ -305,6 +372,9 @@ export default function LeadsShop({
     const appointmentResultNoteForm = useForm({
         note_type: 'appointment_result',
         body: '',
+    });
+    const saleForm = useForm<{ amount: string; salesman?: string }>({
+        amount: '',
     });
 
     const lastThirtyDays = useMemo(() => {
@@ -367,17 +437,21 @@ export default function LeadsShop({
         [leads],
     );
 
-    const statusFilters = queue?.statusFilters
-        ? queue.statusFilters
-        : queue
-          ? ([[queue.status, queue.listTitle]] as const)
-          : ([
-                ['fresh', 'Freshly In'],
-                ['raw', 'Raw'],
-                ['cb', 'CB'],
-                ['naov', 'NAOV'],
-                ['toss', 'TOSS'],
-            ] as const);
+    const statusFilters = useMemo(
+        () =>
+            queue?.statusFilters
+                ? queue.statusFilters
+                : queue
+                  ? ([[queue.status, queue.listTitle]] as const)
+                  : ([
+                        ['fresh', 'Freshly In'],
+                        ['raw', 'Raw'],
+                        ['cb', 'CB'],
+                        ['naov', 'NAOV'],
+                        ['toss', 'TOSS'],
+                    ] as const),
+        [queue],
+    );
 
     const statusCounts = useMemo(
         () =>
@@ -388,7 +462,7 @@ export default function LeadsShop({
                         .length,
                 ]),
             ),
-        [leads],
+        [leads, statusFilters],
     );
 
     const filteredLeads = useMemo(() => {
@@ -495,7 +569,9 @@ export default function LeadsShop({
     };
 
     const saveLead = () => {
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
 
         form.put(`/lead-workflow/leads-shop/${selected.id}`, {
             preserveScroll: true,
@@ -504,7 +580,9 @@ export default function LeadsShop({
     };
 
     const saveTelemarketerNote = () => {
-        if (!selected || !telemarketerNoteForm.data.body.trim()) return;
+        if (!selected || !telemarketerNoteForm.data.body.trim()) {
+            return;
+        }
 
         telemarketerNoteForm.post(
             `/lead-workflow/leads-shop/${selected.id}/notes`,
@@ -516,7 +594,9 @@ export default function LeadsShop({
     };
 
     const saveConfirmationNote = () => {
-        if (!selected || !confirmationNoteForm.data.body.trim()) return;
+        if (!selected || !confirmationNoteForm.data.body.trim()) {
+            return;
+        }
 
         confirmationNoteForm.post(
             `/lead-workflow/leads-shop/${selected.id}/notes`,
@@ -528,7 +608,10 @@ export default function LeadsShop({
     };
 
     const saveDispatchNote = () => {
-        if (!selected || !dispatchNoteForm.data.body.trim()) return;
+        if (!selected || !dispatchNoteForm.data.body.trim()) {
+            return;
+        }
+
         dispatchNoteForm.post(
             `/lead-workflow/leads-shop/${selected.id}/notes`,
             {
@@ -539,7 +622,10 @@ export default function LeadsShop({
     };
 
     const saveAppointmentResultNote = () => {
-        if (!selected || !appointmentResultNoteForm.data.body.trim()) return;
+        if (!selected || !appointmentResultNoteForm.data.body.trim()) {
+            return;
+        }
+
         appointmentResultNoteForm.post(
             `/lead-workflow/leads-shop/${selected.id}/notes`,
             {
@@ -550,7 +636,9 @@ export default function LeadsShop({
     };
 
     const updateLeadStatus = (status: string) => {
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
 
         router.patch(
             `/lead-workflow/leads-shop/${selected.id}/status`,
@@ -562,11 +650,52 @@ export default function LeadsShop({
         );
     };
 
+    const openSaleModal = () => {
+        if (!selected) {
+            return;
+        }
+
+        if (!selected.salesman_one && !selected.salesman_two) {
+            notify({
+                title: 'Salesman required',
+                message:
+                    'Assign at least one salesman before accepting a sale.',
+                tone: 'warning',
+            });
+
+            return;
+        }
+
+        saleForm.reset();
+        saleForm.clearErrors();
+        setSaleModalOpen(true);
+    };
+
+    const acceptSale = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        if (!selected) {
+            return;
+        }
+
+        saleForm.post(`/lead-workflow/leads-shop/${selected.id}/sale`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setSaleModalOpen(false);
+                saleForm.reset();
+                setSelectedId(null);
+                router.flushAll();
+            },
+        });
+    };
+
     const assignSalesman = (
         field: 'salesman_1_id' | 'salesman_2_id',
         value: string,
     ) => {
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
 
         router.patch(
             `/lead-workflow/leads-shop/${selected.id}/salesmen`,
@@ -588,7 +717,9 @@ export default function LeadsShop({
     };
 
     const updateAppointmentResult = (appointmentResult: string) => {
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
 
         router.patch(
             `/lead-workflow/leads-shop/${selected.id}/appointment-result`,
@@ -601,7 +732,10 @@ export default function LeadsShop({
     };
 
     const assignSecondAgent = (agentId: string) => {
-        if (!selected) return;
+        if (!selected) {
+            return;
+        }
+
         router.patch(
             `/lead-workflow/leads-shop/${selected.id}/second-agent`,
             { agent_2_id: agentId || null },
@@ -707,21 +841,48 @@ export default function LeadsShop({
                       : queue?.status === 'kit'
                         ? keepInTouchWorkflowActions
                         : defaultWorkflowActions;
+    const headerIcon =
+        queue?.status === 'confirmed' ? (
+            <CheckCircle2 />
+        ) : queue?.status === 'dispatched' ? (
+            <Truck />
+        ) : queue?.status === 'reschedule' ? (
+            <CalendarClock />
+        ) : queue?.status === 'rehash' ? (
+            <RotateCcw />
+        ) : queue?.status === '555' ? (
+            <PhoneCall />
+        ) : queue?.status === 'la' ? (
+            <MapPin />
+        ) : queue?.status === 'his' ? (
+            <Building2 />
+        ) : queue?.status === 'kit' ? (
+            <Clock3 />
+        ) : (
+            <ShoppingBag />
+        );
 
     return (
         <>
             <Head title={queue?.title ?? 'Leads Shop'} />
             <main
-                className={`leads-shop-page ${queue?.status === 'his' ? 'leads-shop-page--his' : ''}`}
+                className={`leads-shop-page leads-shop-page--${queue?.status ?? 'shop'} ${queue?.status === 'his' ? 'leads-shop-page--his' : ''}`}
             >
                 <header className="leads-shop-header">
-                    <div>
-                        <span>Lead workflow</span>
-                        <h1>{queue?.title ?? 'Leads Shop'}</h1>
-                        <p>
-                            {queue?.description ??
-                                'Review every lead created from Lead Card.'}
-                        </p>
+                    <div className="leads-shop-header__identity">
+                        <span className="leads-shop-header__icon">
+                            {headerIcon}
+                        </span>
+                        <div>
+                            <div className="leads-shop-header__title">
+                                <h1>{queue?.title ?? 'Leads Shop'}</h1>
+                                <strong>{leads.length}</strong>
+                            </div>
+                            <p>
+                                {queue?.description ??
+                                    'Browse and manage freshly imported leads.'}
+                            </p>
+                        </div>
                     </div>
                     <label className="leads-shop-search">
                         <Search />
@@ -740,13 +901,6 @@ export default function LeadsShop({
                             </button>
                         )}
                     </label>
-                    <div className="leads-shop-total">
-                        <ShoppingBag />
-                        <span>
-                            <strong>{leads.length}</strong>
-                            <small>Total leads</small>
-                        </span>
-                    </div>
                 </header>
 
                 <div className="leads-shop-workspace">
@@ -977,6 +1131,36 @@ export default function LeadsShop({
                                         </div>
                                     </div>
                                     <div className="lead-detail__controls">
+                                        <div className="lead-address-actions">
+                                            <a
+                                                className="lead-address-action lead-address-action--zillow"
+                                                href={
+                                                    leadAddressLinks(selected)
+                                                        .zillow
+                                                }
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label={`Search ${leadAddress(selected)} on Zillow`}
+                                                title="Search this address on Zillow"
+                                            >
+                                                <ZillowIcon />
+                                                <span>Zillow</span>
+                                            </a>
+                                            <a
+                                                className="lead-address-action lead-address-action--maps"
+                                                href={
+                                                    leadAddressLinks(selected)
+                                                        .googleMaps
+                                                }
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label={`Open ${leadAddress(selected)} in Google Maps`}
+                                                title="Open this address in Google Maps"
+                                            >
+                                                <GoogleMapsIcon />
+                                                <span>Maps</span>
+                                            </a>
+                                        </div>
                                         <div>
                                             <span className="lead-status">
                                                 {selected.status || 'fresh'}
@@ -1059,15 +1243,31 @@ export default function LeadsShop({
                                         </label>
                                         <label>
                                             <span>Primary phone</span>
-                                            <input
-                                                value={form.data.primary_number}
-                                                onChange={(event) =>
-                                                    form.setData(
-                                                        'primary_number',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <div className="lead-edit-phone">
+                                                <input
+                                                    value={
+                                                        form.data.primary_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'primary_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.data.primary_number.trim() && (
+                                                    <a
+                                                        href={phoneHref(
+                                                            form.data
+                                                                .primary_number,
+                                                        )}
+                                                        aria-label="Call primary phone"
+                                                        title="Call primary phone"
+                                                    >
+                                                        <PhoneCall />
+                                                    </a>
+                                                )}
+                                            </div>
                                             {form.errors.primary_number && (
                                                 <em>
                                                     {form.errors.primary_number}
@@ -1076,29 +1276,60 @@ export default function LeadsShop({
                                         </label>
                                         <label>
                                             <span>Secondary phone</span>
-                                            <input
-                                                value={
-                                                    form.data.secondary_number
-                                                }
-                                                onChange={(event) =>
-                                                    form.setData(
-                                                        'secondary_number',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <div className="lead-edit-phone">
+                                                <input
+                                                    value={
+                                                        form.data
+                                                            .secondary_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'secondary_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.data.secondary_number.trim() && (
+                                                    <a
+                                                        href={phoneHref(
+                                                            form.data
+                                                                .secondary_number,
+                                                        )}
+                                                        aria-label="Call secondary phone"
+                                                        title="Call secondary phone"
+                                                    >
+                                                        <PhoneCall />
+                                                    </a>
+                                                )}
+                                            </div>
                                         </label>
                                         <label>
                                             <span>Mobile number</span>
-                                            <input
-                                                value={form.data.mobile_number}
-                                                onChange={(event) =>
-                                                    form.setData(
-                                                        'mobile_number',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <div className="lead-edit-phone">
+                                                <input
+                                                    value={
+                                                        form.data.mobile_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'mobile_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.data.mobile_number.trim() && (
+                                                    <a
+                                                        href={phoneHref(
+                                                            form.data
+                                                                .mobile_number,
+                                                        )}
+                                                        aria-label="Call mobile number"
+                                                        title="Call mobile number"
+                                                    >
+                                                        <PhoneCall />
+                                                    </a>
+                                                )}
+                                            </div>
                                         </label>
                                         <label>
                                             <span>Email</span>
@@ -1456,26 +1687,65 @@ export default function LeadsShop({
                                                 </div>
                                                 <div>
                                                     <span>Primary phone</span>
-                                                    <strong>
-                                                        <Phone />
-                                                        {
-                                                            selected.primary_number
-                                                        }
-                                                    </strong>
+                                                    <div className="lead-phone-value">
+                                                        <strong>
+                                                            <Phone />
+                                                            {
+                                                                selected.primary_number
+                                                            }
+                                                        </strong>
+                                                        {selected.primary_number.trim() && (
+                                                            <a
+                                                                href={phoneHref(
+                                                                    selected.primary_number,
+                                                                )}
+                                                                aria-label="Call primary phone"
+                                                                title="Call primary phone"
+                                                            >
+                                                                <PhoneCall />
+                                                            </a>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <span>Secondary phone</span>
-                                                    <strong>
-                                                        {selected.secondary_number ||
-                                                            '—'}
-                                                    </strong>
+                                                    <div className="lead-phone-value">
+                                                        <strong>
+                                                            {selected.secondary_number ||
+                                                                '—'}
+                                                        </strong>
+                                                        {selected.secondary_number?.trim() && (
+                                                            <a
+                                                                href={phoneHref(
+                                                                    selected.secondary_number,
+                                                                )}
+                                                                aria-label="Call secondary phone"
+                                                                title="Call secondary phone"
+                                                            >
+                                                                <PhoneCall />
+                                                            </a>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <span>Mobile number</span>
-                                                    <strong>
-                                                        {selected.mobile_number ||
-                                                            '—'}
-                                                    </strong>
+                                                    <div className="lead-phone-value">
+                                                        <strong>
+                                                            {selected.mobile_number ||
+                                                                '—'}
+                                                        </strong>
+                                                        {selected.mobile_number?.trim() && (
+                                                            <a
+                                                                href={phoneHref(
+                                                                    selected.mobile_number,
+                                                                )}
+                                                                aria-label="Call mobile number"
+                                                                title="Call mobile number"
+                                                            >
+                                                                <PhoneCall />
+                                                            </a>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="lead-detail-field--wide">
                                                     <span>Email</span>
@@ -1523,8 +1793,7 @@ export default function LeadsShop({
                                                         <small>Company</small>
                                                         <strong>
                                                             {selected.company
-                                                                ?.company ??
-                                                                '—'}
+                                                                ?.prefix ?? '—'}
                                                         </strong>
                                                     </span>
                                                 </div>
@@ -2048,7 +2317,9 @@ export default function LeadsShop({
                                         onClick={() =>
                                             status === 'history'
                                                 ? setHistoryType('all')
-                                                : updateLeadStatus(status)
+                                                : status === 'sale'
+                                                  ? openSaleModal()
+                                                  : updateLeadStatus(status)
                                         }
                                     >
                                         <Icon /> {label}
@@ -2059,6 +2330,117 @@ export default function LeadsShop({
                     </section>
                 </div>
 
+                {saleModalOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-sale-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setSaleModalOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-sale-modal__card">
+                            <header>
+                                <div>
+                                    <span>
+                                        <CircleDollarSign />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-sale-title">
+                                            Accept sale
+                                        </h2>
+                                        <p>
+                                            Create a project for{' '}
+                                            {selected.customer_name}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSaleModalOpen(false)}
+                                    aria-label="Close sale modal"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+
+                            <form
+                                className="lead-sale-modal__form"
+                                onSubmit={acceptSale}
+                            >
+                                <div className="lead-sale-modal__summary">
+                                    <span>Assigned salesman</span>
+                                    <strong>
+                                        {[
+                                            selected.salesman_one
+                                                ?.salesman_name,
+                                            selected.salesman_two
+                                                ?.salesman_name,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' & ')}
+                                    </strong>
+                                </div>
+
+                                <label>
+                                    <span>Sale amount</span>
+                                    <div className="lead-sale-modal__amount">
+                                        <strong>$</strong>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            max="9999999999.99"
+                                            step="0.01"
+                                            inputMode="decimal"
+                                            value={saleForm.data.amount}
+                                            onChange={(event) =>
+                                                saleForm.setData(
+                                                    'amount',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="0.00"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    {saleForm.errors.amount && (
+                                        <small>{saleForm.errors.amount}</small>
+                                    )}
+                                    {saleForm.errors.salesman && (
+                                        <small>
+                                            {saleForm.errors.salesman}
+                                        </small>
+                                    )}
+                                </label>
+
+                                <div className="lead-sale-modal__actions">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSaleModalOpen(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={
+                                            saleForm.processing ||
+                                            !saleForm.data.amount
+                                        }
+                                    >
+                                        <CircleDollarSign />
+                                        {saleForm.processing
+                                            ? 'Creating project…'
+                                            : 'Accept sale'}
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+                    </div>
+                )}
+
                 {historyType && selected && (
                     <div
                         className="lead-note-modal"
@@ -2066,8 +2448,9 @@ export default function LeadsShop({
                         aria-modal="true"
                         aria-labelledby="lead-note-history-title"
                         onMouseDown={(event) => {
-                            if (event.target === event.currentTarget)
+                            if (event.target === event.currentTarget) {
                                 setHistoryType(null);
+                            }
                         }}
                     >
                         <section className="lead-note-modal__card">

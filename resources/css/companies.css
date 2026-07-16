@@ -40,7 +40,9 @@
 }
 
 .companies-primary-button,
-.companies-delete-button {
+.companies-delete-button,
+.companies-archive-button,
+.companies-restore-button {
     display: inline-flex;
     min-height: 2.75rem;
     align-items: center;
@@ -70,7 +72,9 @@
 }
 
 .companies-primary-button svg,
-.companies-delete-button svg {
+.companies-delete-button svg,
+.companies-archive-button svg,
+.companies-restore-button svg {
     width: 1rem;
 }
 
@@ -146,6 +150,45 @@
 
 .companies-directory-title {
     margin-top: 1rem;
+}
+
+.companies-directory-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3rem;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem;
+    border-radius: 0.75rem;
+    background: #eef1f6;
+}
+
+.companies-directory-toggle button {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.35rem;
+    border-radius: 0.55rem;
+    color: #6d7b90;
+    font-size: 0.72rem;
+    font-weight: 750;
+    transition: 150ms ease;
+}
+
+.companies-directory-toggle button.is-active {
+    color: #2458d5;
+    background: #fff;
+    box-shadow: 0 2px 8px rgb(35 51 79 / 8%);
+}
+
+.companies-directory-toggle span {
+    min-width: 1.25rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 999px;
+    color: inherit;
+    background: rgb(113 128 150 / 12%);
+    font-size: 0.65rem;
 }
 
 .companies-panel-title h2 {
@@ -329,6 +372,44 @@
     color: #a3adbd;
 }
 
+.company-input:has(input:disabled) {
+    background: #f6f7f9;
+}
+
+.company-input input:disabled {
+    cursor: default;
+    color: #667085;
+}
+
+.companies-archive-placeholder {
+    display: flex;
+    min-height: 18rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: #8793a5;
+    text-align: center;
+}
+
+.companies-archive-placeholder svg {
+    width: 2.25rem;
+    margin-bottom: 0.9rem;
+    color: #9aabc1;
+}
+
+.companies-archive-placeholder strong {
+    color: #526076;
+    font-size: 0.9rem;
+}
+
+.companies-archive-placeholder span {
+    max-width: 24rem;
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
 .companies-form-actions {
     display: flex;
     grid-column: 1 / -1;
@@ -349,6 +430,26 @@
     background: #ffe3e7;
 }
 
+.companies-archive-button {
+    color: #93621f;
+    background: #fff6df;
+}
+
+.companies-archive-button:hover {
+    background: #ffedbd;
+}
+
+.companies-restore-button {
+    color: #fff;
+    background: linear-gradient(105deg, #326cf0, #2458d5);
+    box-shadow: 0 10px 24px rgb(41 96 224 / 20%);
+}
+
+.companies-restore-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgb(41 96 224 / 28%);
+}
+
 @media (max-width: 900px) {
     .companies-page {
         height: auto;
@@ -364,7 +465,6 @@
     .companies-list {
         max-height: 18rem;
     }
-
 }
 
 @media (max-width: 560px) {

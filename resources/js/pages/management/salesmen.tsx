@@ -3,6 +3,7 @@ import { Phone, Save, Search, Trash2, UserRound, Users, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/salesmen.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type Salesman = {
     salesman_id: number;
@@ -11,12 +12,14 @@ type Salesman = {
 };
 
 export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
+    const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Salesman | null>(null);
     const [search, setSearch] = useState('');
     const form = useForm({ salesman_name: '', phone: '' });
 
     const filteredSalesmen = useMemo(() => {
         const query = search.trim().toLowerCase();
+
         return query
             ? salesmen.filter((salesman) =>
                   [salesman.salesman_name, salesman.phone]
@@ -45,14 +48,30 @@ export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const options = { preserveScroll: true, onSuccess: resetForm };
-        selected
-            ? form.put(`/management/salesmen/${selected.salesman_id}`, options)
-            : form.post('/management/salesmen', options);
+
+        if (selected) {
+            form.put(`/management/salesmen/${selected.salesman_id}`, options);
+        } else {
+            form.post('/management/salesmen', options);
+        }
     };
 
-    const deleteSalesman = () => {
-        if (!selected || !window.confirm(`Delete ${selected.salesman_name}?`))
+    const deleteSalesman = async () => {
+        if (!selected) {
             return;
+        }
+
+        const confirmed = await confirm({
+            title: 'Delete salesman?',
+            message: `${selected.salesman_name} will be permanently removed from the salesman directory.`,
+            confirmLabel: 'Delete salesman',
+            tone: 'danger',
+        });
+
+        if (!confirmed) {
+            return;
+        }
+
         router.delete(`/management/salesmen/${selected.salesman_id}`, {
             preserveScroll: true,
             onSuccess: resetForm,

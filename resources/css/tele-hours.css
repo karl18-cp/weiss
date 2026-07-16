@@ -1,0 +1,329 @@
+.tele-hours-page {
+    display: flex;
+    min-height: 100%;
+    flex-direction: column;
+    gap: 1.15rem;
+    padding: 1.25rem 1.5rem 1.5rem;
+    color: #172036;
+    background: linear-gradient(145deg, #fffaff, #fdf1ff);
+}
+
+.tele-hours-hero {
+    position: relative;
+    display: flex;
+    min-height: 7.25rem;
+    align-items: center;
+    gap: 1rem;
+    overflow: hidden;
+    padding: 1.3rem 1.7rem;
+    border-radius: 1rem;
+    color: #fff;
+    background: linear-gradient(115deg, #791583, #b322c3 55%, #da69eb);
+    box-shadow: 0 1rem 2.5rem rgb(121 21 131 / 12%);
+}
+
+.tele-hours-hero::after {
+    position: absolute;
+    right: 4rem;
+    bottom: -6rem;
+    width: 9rem;
+    height: 9rem;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 7%);
+    content: '';
+}
+
+.tele-hours-hero > span {
+    display: grid;
+    width: 3.65rem;
+    height: 3.65rem;
+    flex: none;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 25%);
+    border-radius: 0.85rem;
+    background: rgb(255 255 255 / 15%);
+}
+
+.tele-hours-hero > span svg {
+    width: 1.35rem;
+}
+
+.tele-hours-hero h1 {
+    font-size: clamp(1.55rem, 2.5vw, 2rem);
+    font-weight: 850;
+    letter-spacing: -0.035em;
+}
+
+.tele-hours-hero p {
+    margin-top: 0.18rem;
+    color: rgb(255 255 255 / 76%);
+    font-size: 0.78rem;
+}
+
+.tele-hours-hero nav {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 0.45rem;
+    margin-left: auto;
+}
+
+.tele-hours-hero nav button {
+    display: inline-flex;
+    min-height: 2.45rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding-inline: 0.8rem;
+    border: 1px solid rgb(255 255 255 / 24%);
+    border-radius: 0.6rem;
+    color: rgb(255 255 255 / 78%);
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+.tele-hours-hero nav button.is-active {
+    color: #fff;
+    background: rgb(255 255 255 / 16%);
+}
+
+.tele-hours-hero nav svg {
+    width: 0.8rem;
+}
+
+.tele-hours-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+
+.tele-hours-metrics article {
+    padding: 1.05rem 1.15rem;
+    border: 1px solid #e9a7f1;
+    border-radius: 0.85rem;
+    background: #fff;
+    box-shadow: 0 0.6rem 1.5rem rgb(121 21 131 / 4%);
+}
+
+.tele-hours-metrics span {
+    display: block;
+    color: #8d98ac;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+.tele-hours-metrics strong {
+    display: block;
+    margin-top: 0.55rem;
+    color: #ce38df;
+    font-size: 1.35rem;
+    font-weight: 850;
+}
+
+.tele-hours-metrics article:nth-child(2) strong {
+    color: #12b981;
+}
+
+.tele-hours-metrics article:nth-child(3) strong {
+    color: #7c3aed;
+}
+
+.tele-hours-metrics article:nth-child(4) strong {
+    color: #f97316;
+}
+
+.tele-hours-table-card {
+    overflow: hidden;
+    border: 1px solid #e7a4ef;
+    border-radius: 0.9rem;
+    background: #fff;
+}
+
+.tele-hours-table {
+    display: grid;
+    grid-template-columns: minmax(11rem, 1.1fr) repeat(
+            6,
+            minmax(7rem, 1fr)
+        ) 5rem 5rem;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.tele-hours-table--head {
+    padding: 0.75rem 1rem;
+    color: #bd2ccc;
+    background: #fff4ff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.tele-hours-table-body {
+    overflow-x: auto;
+}
+
+.tele-hours-row {
+    min-width: 75rem;
+    padding: 0.8rem 1rem;
+    border-top: 1px solid #f1edf3;
+    font-size: 0.66rem;
+}
+
+.tele-hours-agent {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.tele-hours-agent > span,
+.tele-hours-summary article > span {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    place-items: center;
+    border-radius: 50%;
+    color: #fff;
+    background: linear-gradient(135deg, #7d1688, #d62ee6);
+    font-size: 0.58rem;
+    font-weight: 800;
+}
+
+.tele-hours-agent strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tele-hours-day {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.tele-hours-day i {
+    display: block;
+    height: 0.35rem;
+    min-width: 3rem;
+    flex: 1;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #f0f2f7;
+}
+
+.tele-hours-day b {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #12b981, #d43ee3);
+}
+
+.tele-hours-day span {
+    width: 2rem;
+    color: #738198;
+    text-align: right;
+}
+
+.tele-hours-leads {
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.5rem;
+    color: #bd2ccc;
+    background: #fcf0ff;
+    text-align: center;
+}
+
+.tele-hours-empty {
+    display: flex;
+    min-height: 15rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #8c98ab;
+    text-align: center;
+}
+
+.tele-hours-empty svg {
+    width: 2rem;
+    margin-bottom: 0.65rem;
+    color: #d1a8d6;
+}
+
+.tele-hours-empty span {
+    margin-top: 0.25rem;
+    font-size: 0.65rem;
+}
+
+.tele-hours-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.tele-hours-summary article {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 1rem;
+    border: 1px solid #e7a4ef;
+    border-radius: 0.8rem;
+    background: #fff;
+}
+
+.tele-hours-summary h2 {
+    font-size: 0.75rem;
+    font-weight: 800;
+}
+
+.tele-hours-summary p {
+    margin-top: 0.1rem;
+    color: #8c98ab;
+    font-size: 0.6rem;
+}
+
+.tele-hours-summary article > strong {
+    margin-left: auto;
+    color: #bd2ccc;
+    font-size: 0.8rem;
+}
+
+.tele-hours-notice {
+    color: #8995a7;
+    font-size: 0.62rem;
+    text-align: center;
+}
+
+@media (max-width: 950px) {
+    .tele-hours-metrics,
+    .tele-hours-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .tele-hours-page {
+        padding: 0.8rem;
+    }
+
+    .tele-hours-hero {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        padding: 1rem;
+    }
+
+    .tele-hours-hero nav {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .tele-hours-hero nav button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .tele-hours-metrics,
+    .tele-hours-summary {
+        grid-template-columns: 1fr;
+    }
+}

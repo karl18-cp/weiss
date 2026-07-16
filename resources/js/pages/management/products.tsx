@@ -3,6 +3,7 @@ import { Package, Save, Search, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/products.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type Product = {
     prod_id: number;
@@ -10,6 +11,7 @@ type Product = {
 };
 
 export default function Products({ products }: { products: Product[] }) {
+    const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Product | null>(null);
     const [search, setSearch] = useState('');
     const form = useForm({ product_name: '' });
@@ -46,15 +48,28 @@ export default function Products({ products }: { products: Product[] }) {
 
         if (selected) {
             form.put(`/management/products/${selected.prod_id}`, options);
+
             return;
         }
 
         form.post('/management/products', options);
     };
 
-    const deleteProduct = () => {
-        if (!selected || !window.confirm(`Delete ${selected.product_name}?`))
+    const deleteProduct = async () => {
+        if (!selected) {
             return;
+        }
+
+        const confirmed = await confirm({
+            title: 'Delete product?',
+            message: `${selected.product_name} will be permanently removed from the product directory.`,
+            confirmLabel: 'Delete product',
+            tone: 'danger',
+        });
+
+        if (!confirmed) {
+            return;
+        }
 
         router.delete(`/management/products/${selected.prod_id}`, {
             preserveScroll: true,

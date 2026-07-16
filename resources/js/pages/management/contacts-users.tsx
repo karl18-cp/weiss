@@ -1,9 +1,11 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
+    Archive,
     Building2,
     FolderKanban,
     Hash,
     MapPin,
+    RotateCcw,
     Save,
     Search,
     Trash2,
@@ -12,6 +14,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/companies.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type Company = {
     com_id: number;
@@ -19,9 +22,10 @@ type Company = {
     address: string;
     prefix: string;
     project_code: string;
+    archived_at: string | null;
 };
 
-type CompanyForm = Omit<Company, 'com_id'>;
+type CompanyForm = Omit<Company, 'com_id' | 'archived_at'>;
 
 const emptyForm: CompanyForm = {
     company: '',
@@ -30,23 +34,34 @@ const emptyForm: CompanyForm = {
     project_code: '',
 };
 
-export default function ContactsUsers({ companies }: { companies: Company[] }) {
+export default function ContactsUsers({
+    companies,
+    archivedCompanies,
+}: {
+    companies: Company[];
+    archivedCompanies: Company[];
+}) {
+    const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Company | null>(null);
     const [search, setSearch] = useState('');
+    const [showArchived, setShowArchived] = useState(false);
     const form = useForm<CompanyForm>(emptyForm);
 
     const filteredCompanies = useMemo(() => {
         const query = search.trim().toLowerCase();
+        const directory = showArchived ? archivedCompanies : companies;
 
-        if (!query) return companies;
+        if (!query) {
+            return directory;
+        }
 
-        return companies.filter((company) =>
+        return directory.filter((company) =>
             [company.company, company.address, company.project_code]
                 .join(' ')
                 .toLowerCase()
                 .includes(query),
         );
-    }, [companies, search]);
+    }, [archivedCompanies, companies, search, showArchived]);
 
     const selectCompany = (company: Company) => {
         setSelected(company);
@@ -65,6 +80,12 @@ export default function ContactsUsers({ companies }: { companies: Company[] }) {
         form.clearErrors();
     };
 
+    const changeDirectory = (archived: boolean) => {
+        setShowArchived(archived);
+        setSearch('');
+        startNewCompany();
+    };
+
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
@@ -75,19 +96,80 @@ export default function ContactsUsers({ companies }: { companies: Company[] }) {
 
         if (selected) {
             form.put(`/management/contacts-users/${selected.com_id}`, options);
+
             return;
         }
 
         form.post('/management/contacts-users', options);
     };
 
-    const deleteCompany = () => {
-        if (!selected || !window.confirm(`Delete ${selected.company}?`)) return;
+    const deleteCompany = async () => {
+        if (!selected) {
+            return;
+        }
+
+        const confirmed = await confirm({
+            title: showArchived
+                ? 'Permanently delete company?'
+                : 'Delete company?',
+            message: showArchived
+                ? `${selected.company} will be permanently deleted. This action cannot be undone.`
+                : `${selected.company} will be deleted from the company directory.`,
+            confirmLabel: showArchived
+                ? 'Delete permanently'
+                : 'Delete company',
+            tone: 'danger',
+        });
+
+        if (!confirmed) {
+            return;
+        }
 
         router.delete(`/management/contacts-users/${selected.com_id}`, {
             preserveScroll: true,
             onSuccess: startNewCompany,
         });
+    };
+
+    const archiveCompany = async () => {
+        if (!selected) {
+            return;
+        }
+
+        const confirmed = await confirm({
+            title: 'Archive company?',
+            message: `${selected.company} will be removed from active company selections and moved to the archive.`,
+            confirmLabel: 'Archive company',
+            tone: 'warning',
+        });
+
+        if (!confirmed) {
+            return;
+        }
+
+        router.patch(
+            `/management/contacts-users/${selected.com_id}/archive`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: startNewCompany,
+            },
+        );
+    };
+
+    const restoreCompany = () => {
+        if (!selected) {
+            return;
+        }
+
+        router.patch(
+            `/management/contacts-users/${selected.com_id}/restore`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: startNewCompany,
+            },
+        );
     };
 
     return (
@@ -119,9 +201,34 @@ export default function ContactsUsers({ companies }: { companies: Company[] }) {
                     <DirectoryNavigation active="Companies">
                         <div className="companies-panel-title companies-directory-title">
                             <div>
-                                <h2>Company directory</h2>
-                                <p>Select a company to edit</p>
+                                <h2>
+                                    {showArchived
+                                        ? 'Archived companies'
+                                        : 'Company directory'}
+                                </h2>
+                                <p>
+                                    {showArchived
+                                        ? 'Select a company to restore'
+                                        : 'Select a company to edit'}
+                                </p>
                             </div>
+                        </div>
+
+                        <div className="companies-directory-toggle">
+                            <button
+                                type="button"
+                                className={!showArchived ? 'is-active' : ''}
+                                onClick={() => changeDirectory(false)}
+                            >
+                                Active <span>{companies.length}</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={showArchived ? 'is-active' : ''}
+                                onClick={() => changeDirectory(true)}
+                            >
+                                Archived <span>{archivedCompanies.length}</span>
+                            </button>
                         </div>
 
                         <label className="companies-search">
@@ -175,7 +282,9 @@ export default function ContactsUsers({ companies }: { companies: Company[] }) {
                                     <span>
                                         {search
                                             ? 'Try another search.'
-                                            : 'Create your first company.'}
+                                            : showArchived
+                                              ? 'Archived companies will appear here.'
+                                              : 'Create your first company.'}
                                     </span>
                                 </div>
                             )}
@@ -186,125 +295,171 @@ export default function ContactsUsers({ companies }: { companies: Company[] }) {
                         <div className="companies-panel-title">
                             <div>
                                 <h2>
-                                    {selected
-                                        ? 'Edit company'
-                                        : 'Create company'}
+                                    {showArchived
+                                        ? selected
+                                            ? 'Archived company'
+                                            : 'Company archive'
+                                        : selected
+                                          ? 'Edit company'
+                                          : 'Create company'}
                                 </h2>
                                 <p>
-                                    {selected
-                                        ? `Updating company #${selected.com_id}`
-                                        : 'Add a company to your directory'}
+                                    {showArchived
+                                        ? selected
+                                            ? `Archived company #${selected.com_id}`
+                                            : 'Select a company from the archive'
+                                        : selected
+                                          ? `Updating company #${selected.com_id}`
+                                          : 'Add a company to your directory'}
                                 </p>
                             </div>
                         </div>
 
-                        <form onSubmit={submit} className="companies-form">
-                            <label className="company-field company-field--wide">
-                                <span>Company name</span>
-                                <div className="company-input">
-                                    <Building2 />
-                                    <input
-                                        value={form.data.company}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'company',
-                                                event.target.value,
-                                            )
-                                        }
-                                        placeholder="e.g. Bright Horizon"
-                                        autoFocus
-                                    />
-                                </div>
-                                {form.errors.company && (
-                                    <small>{form.errors.company}</small>
-                                )}
-                            </label>
-
-                            <label className="company-field company-field--wide">
-                                <span>Address (optional)</span>
-                                <div className="company-input">
-                                    <MapPin />
-                                    <input
-                                        value={form.data.address}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'address',
-                                                event.target.value,
-                                            )
-                                        }
-                                        placeholder="Add an address later"
-                                    />
-                                </div>
-                                {form.errors.address && (
-                                    <small>{form.errors.address}</small>
-                                )}
-                            </label>
-
-                            <label className="company-field">
-                                <span>Prefix</span>
-                                <div className="company-input">
-                                    <Hash />
-                                    <input
-                                        value={form.data.prefix}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'prefix',
-                                                event.target.value,
-                                            )
-                                        }
-                                        placeholder="e.g. BH"
-                                    />
-                                </div>
-                                {form.errors.prefix && (
-                                    <small>{form.errors.prefix}</small>
-                                )}
-                            </label>
-
-                            <label className="company-field">
-                                <span>Project code</span>
-                                <div className="company-input">
-                                    <FolderKanban />
-                                    <input
-                                        value={form.data.project_code}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'project_code',
-                                                event.target.value,
-                                            )
-                                        }
-                                        placeholder="e.g. BH-001"
-                                    />
-                                </div>
-                                {form.errors.project_code && (
-                                    <small>{form.errors.project_code}</small>
-                                )}
-                            </label>
-
-                            <div className="companies-form-actions">
-                                {selected && (
-                                    <button
-                                        type="button"
-                                        className="companies-delete-button"
-                                        onClick={deleteCompany}
-                                    >
-                                        <Trash2 />
-                                        Delete
-                                    </button>
-                                )}
-                                <button
-                                    type="submit"
-                                    className="companies-primary-button"
-                                    disabled={form.processing}
-                                >
-                                    <Save />
-                                    {form.processing
-                                        ? 'Saving…'
-                                        : selected
-                                          ? 'Save changes'
-                                          : 'Create company'}
-                                </button>
+                        {showArchived && !selected ? (
+                            <div className="companies-archive-placeholder">
+                                <Archive />
+                                <strong>No archived company selected</strong>
+                                <span>
+                                    Choose one from the directory to view,
+                                    restore, or permanently delete it.
+                                </span>
                             </div>
-                        </form>
+                        ) : (
+                            <form onSubmit={submit} className="companies-form">
+                                <label className="company-field company-field--wide">
+                                    <span>Company name</span>
+                                    <div className="company-input">
+                                        <Building2 />
+                                        <input
+                                            value={form.data.company}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'company',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="e.g. Bright Horizon"
+                                            autoFocus
+                                            disabled={showArchived}
+                                        />
+                                    </div>
+                                    {form.errors.company && (
+                                        <small>{form.errors.company}</small>
+                                    )}
+                                </label>
+
+                                <label className="company-field company-field--wide">
+                                    <span>Address (optional)</span>
+                                    <div className="company-input">
+                                        <MapPin />
+                                        <input
+                                            value={form.data.address}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'address',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="Add an address later"
+                                            disabled={showArchived}
+                                        />
+                                    </div>
+                                    {form.errors.address && (
+                                        <small>{form.errors.address}</small>
+                                    )}
+                                </label>
+
+                                <label className="company-field">
+                                    <span>Prefix</span>
+                                    <div className="company-input">
+                                        <Hash />
+                                        <input
+                                            value={form.data.prefix}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'prefix',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="e.g. BH"
+                                            disabled={showArchived}
+                                        />
+                                    </div>
+                                    {form.errors.prefix && (
+                                        <small>{form.errors.prefix}</small>
+                                    )}
+                                </label>
+
+                                <label className="company-field">
+                                    <span>Project code</span>
+                                    <div className="company-input">
+                                        <FolderKanban />
+                                        <input
+                                            value={form.data.project_code}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'project_code',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="e.g. BH-001"
+                                            disabled={showArchived}
+                                        />
+                                    </div>
+                                    {form.errors.project_code && (
+                                        <small>
+                                            {form.errors.project_code}
+                                        </small>
+                                    )}
+                                </label>
+
+                                <div className="companies-form-actions">
+                                    {selected && (
+                                        <button
+                                            type="button"
+                                            className="companies-delete-button"
+                                            onClick={deleteCompany}
+                                        >
+                                            <Trash2 />
+                                            Delete
+                                        </button>
+                                    )}
+                                    {selected && !showArchived && (
+                                        <button
+                                            type="button"
+                                            className="companies-archive-button"
+                                            onClick={archiveCompany}
+                                        >
+                                            <Archive />
+                                            Archive
+                                        </button>
+                                    )}
+                                    {selected && showArchived ? (
+                                        <button
+                                            type="button"
+                                            className="companies-restore-button"
+                                            onClick={restoreCompany}
+                                        >
+                                            <RotateCcw />
+                                            Restore
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="submit"
+                                            className="companies-primary-button"
+                                            disabled={form.processing}
+                                        >
+                                            <Save />
+                                            {form.processing
+                                                ? 'Saving…'
+                                                : selected
+                                                  ? 'Save changes'
+                                                  : 'Create company'}
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+                        )}
                     </section>
                 </div>
             </main>

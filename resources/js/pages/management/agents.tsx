@@ -3,6 +3,7 @@ import { Save, Search, Trash2, UserRound, Users, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/agents.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type Agent = {
     agent_id: number;
@@ -10,12 +11,14 @@ type Agent = {
 };
 
 export default function Agents({ agents }: { agents: Agent[] }) {
+    const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Agent | null>(null);
     const [search, setSearch] = useState('');
     const form = useForm({ agent_name: '' });
 
     const filteredAgents = useMemo(() => {
         const query = search.trim().toLowerCase();
+
         return query
             ? agents.filter((agent) =>
                   agent.agent_name.toLowerCase().includes(query),
@@ -41,15 +44,28 @@ export default function Agents({ agents }: { agents: Agent[] }) {
 
         if (selected) {
             form.put(`/management/agents/${selected.agent_id}`, options);
+
             return;
         }
 
         form.post('/management/agents', options);
     };
 
-    const deleteAgent = () => {
-        if (!selected || !window.confirm(`Delete ${selected.agent_name}?`))
+    const deleteAgent = async () => {
+        if (!selected) {
             return;
+        }
+
+        const confirmed = await confirm({
+            title: 'Delete agent?',
+            message: `${selected.agent_name} will be permanently removed from the agent directory.`,
+            confirmLabel: 'Delete agent',
+            tone: 'danger',
+        });
+
+        if (!confirmed) {
+            return;
+        }
 
         router.delete(`/management/agents/${selected.agent_id}`, {
             preserveScroll: true,

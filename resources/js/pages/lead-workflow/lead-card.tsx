@@ -4,13 +4,17 @@ import {
     CalendarClock,
     CheckCircle2,
     ClipboardPlus,
+    House,
     Mail,
     MapPin,
     Phone,
     RotateCcw,
+    Search,
     UserRound,
 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import '@/../css/lead-card.css';
+import { zillowSearchUrl } from '@/lib/address-search';
 
 type Company = { com_id: number; company: string };
 type Product = { prod_id: number; product_name: string };
@@ -37,6 +41,28 @@ const emptyLead = {
     agent_id: '',
 };
 
+type GeoapifyAddress = {
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    county?: string;
+    district?: string;
+    formatted: string;
+    housenumber?: string;
+    municipality?: string;
+    place_id: string;
+    postcode?: string;
+    state_code?: string;
+    street?: string;
+    suburb?: string;
+    town?: string;
+    village?: string;
+};
+
+const geoapifyApiKey = import.meta.env.VITE_GEOAPIFY_API_KEY?.trim();
+const californiaBounds = '-124.482003,32.528832,-114.131211,42.009518';
+const californiaSearchCenter = '-119.4179,36.7783';
+
 export default function LeadCard({
     companies,
     products,
@@ -47,13 +73,175 @@ export default function LeadCard({
     agents: Agent[];
 }) {
     const form = useForm(emptyLead);
+    const [addressSuggestions, setAddressSuggestions] = useState<
+        GeoapifyAddress[]
+    >([]);
+    const [addressMenuOpen, setAddressMenuOpen] = useState(false);
+    const [addressLoading, setAddressLoading] = useState(false);
+    const [addressLookupFailed, setAddressLookupFailed] = useState(false);
+    const [unitNumber, setUnitNumber] = useState('');
+    const addressRequestId = useRef(0);
+
+    useEffect(() => {
+        const query = form.data.address.trim();
+
+        if (!geoapifyApiKey || !addressMenuOpen || query.length < 2) {
+            setAddressSuggestions([]);
+            setAddressLoading(false);
+
+            return;
+        }
+
+        const requestId = ++addressRequestId.current;
+        const controller = new AbortController();
+        setAddressLoading(true);
+        setAddressLookupFailed(false);
+        const timer = window.setTimeout(() => {
+            void (async () => {
+                try {
+                    const parameters = new URLSearchParams({
+                        text: query,
+                        filter: `rect:${californiaBounds}`,
+                        bias: `proximity:${californiaSearchCenter}`,
+                        format: 'json',
+                        lang: 'en',
+                        limit: '20',
+                        apiKey: geoapifyApiKey,
+                    });
+                    const response = await fetch(
+                        `https://api.geoapify.com/v1/geocode/autocomplete?${parameters.toString()}`,
+                        { signal: controller.signal },
+                    );
+
+                    if (!response.ok) {
+                        throw new Error('Address autocomplete request failed.');
+                    }
+
+                    const data = (await response.json()) as {
+                        results?: GeoapifyAddress[];
+                    };
+
+                    if (requestId !== addressRequestId.current) {
+                        return;
+                    }
+
+                    setAddressSuggestions(
+                        (data.results ?? [])
+                            .filter(
+                                (suggestion) =>
+                                    suggestion.state_code?.toUpperCase() ===
+                                        'CA' &&
+                                    Boolean(
+                                        suggestion.street ||
+                                        suggestion.housenumber,
+                                    ),
+                            )
+                            .slice(0, 5),
+                    );
+                } catch (error) {
+                    if (
+                        error instanceof DOMException &&
+                        error.name === 'AbortError'
+                    ) {
+                        return;
+                    }
+
+                    if (requestId === addressRequestId.current) {
+                        setAddressSuggestions([]);
+                        setAddressLookupFailed(true);
+                    }
+                } finally {
+                    if (requestId === addressRequestId.current) {
+                        setAddressLoading(false);
+                    }
+                }
+            })();
+        }, 120);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [addressMenuOpen, form.data.address]);
+
+    const selectAddress = (suggestion: GeoapifyAddress) => {
+        setAddressLookupFailed(false);
+        form.setData({
+            ...form.data,
+            address:
+                suggestion.address_line1 ||
+                [suggestion.housenumber, suggestion.street]
+                    .filter(Boolean)
+                    .join(' ') ||
+                suggestion.formatted,
+            city:
+                suggestion.city ??
+                suggestion.town ??
+                suggestion.village ??
+                suggestion.municipality ??
+                suggestion.suburb ??
+                suggestion.district ??
+                '',
+            county: suggestion.county ?? '',
+            state: 'CA',
+            zip_code: suggestion.postcode ?? '',
+        });
+
+        setAddressSuggestions([]);
+        setAddressMenuOpen(false);
+        setAddressLoading(false);
+    };
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        const unit = unitNumber.trim();
+        const formattedUnit =
+            unit && /^(apt|apartment|unit|suite|#)/i.test(unit)
+                ? unit
+                : unit
+                  ? `Unit ${unit}`
+                  : '';
+
+        form.transform((data) => ({
+            ...data,
+            address: [data.address.trim(), formattedUnit]
+                .filter(Boolean)
+                .join(', '),
+        }));
         form.post('/lead-workflow/lead-card', {
             preserveScroll: true,
-            onSuccess: () => form.reset(),
+            onSuccess: () => {
+                form.reset();
+                setUnitNumber('');
+            },
         });
+    };
+
+    const clearForm = () => {
+        form.reset();
+        setUnitNumber('');
+        setAddressSuggestions([]);
+        setAddressMenuOpen(false);
+    };
+
+    const openZillow = () => {
+        const addressParts = [
+            form.data.address.trim(),
+            unitNumber.trim(),
+            form.data.city.trim(),
+            form.data.state.trim(),
+            form.data.zip_code.trim(),
+        ];
+
+        if (!addressParts.some(Boolean)) {
+            return;
+        }
+
+        window.open(
+            zillowSearchUrl(addressParts),
+            '_blank',
+            'noopener,noreferrer',
+        );
     };
 
     const input = (
@@ -86,33 +274,31 @@ export default function LeadCard({
         <>
             <Head title="Lead Card" />
             <main className="lead-card-page">
-                <header className="lead-card-header">
+                <header className="lead-card-hero">
+                    <span className="lead-card-hero__icon">
+                        <ClipboardPlus />
+                    </span>
                     <div>
-                        <span>Lead workflow</span>
-                        <h1>New Lead Card</h1>
+                        <h1>Lead Card</h1>
                         <p>
-                            Capture customer details and schedule the next
+                            Create a new lead with customer details and an
                             appointment.
                         </p>
-                    </div>
-                    <div className="lead-card-header__status">
-                        <CheckCircle2 />
-                        <span>
-                            <strong>Ready to create</strong>
-                            <small>Required fields are marked</small>
-                        </span>
                     </div>
                 </header>
 
                 <form onSubmit={submit} className="lead-card-workspace">
                     <section className="lead-card-main">
-                        <div className="lead-section-heading">
+                        <div className="lead-section-heading lead-section-heading--customer">
                             <span>
                                 <UserRound />
                             </span>
                             <div>
                                 <h2>Customer information</h2>
-                                <p>Contact and property details</p>
+                                <p>
+                                    Contact numbers, service address, email, and
+                                    customer profile.
+                                </p>
                             </div>
                         </div>
                         <div className="lead-grid lead-grid--customer">
@@ -169,26 +355,166 @@ export default function LeadCard({
                                 'tel',
                                 true,
                             )}
-                            {input(
-                                'email',
-                                'Email',
-                                'customer@email.com',
-                                <Mail />,
-                                'email',
-                                true,
-                            )}
-                            <div className="lead-field lead-field--full">
-                                {input(
-                                    'address',
-                                    'Service address',
-                                    'Street address',
-                                    <MapPin />,
+                            <div className="lead-field lead-field--full lead-address-field">
+                                <span>Service address</span>
+                                <div className="lead-input">
+                                    <MapPin />
+                                    <input
+                                        type="text"
+                                        value={form.data.address}
+                                        onChange={(event) => {
+                                            form.setData(
+                                                'address',
+                                                event.target.value,
+                                            );
+                                            setAddressMenuOpen(true);
+                                        }}
+                                        onFocus={() => setAddressMenuOpen(true)}
+                                        onBlur={(event) => {
+                                            if (
+                                                !event.currentTarget.parentElement?.parentElement?.contains(
+                                                    event.relatedTarget,
+                                                )
+                                            ) {
+                                                setAddressMenuOpen(false);
+                                            }
+                                        }}
+                                        placeholder="Start typing a California address, e.g. 2666 Ventura…"
+                                        autoComplete="off"
+                                        role="combobox"
+                                        aria-autocomplete="list"
+                                        aria-expanded={
+                                            addressMenuOpen &&
+                                            form.data.address.trim().length >= 2
+                                        }
+                                        aria-controls="lead-address-suggestions"
+                                    />
+                                    {addressLoading && (
+                                        <span
+                                            className="lead-address-loading"
+                                            aria-label="Loading address suggestions"
+                                        />
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="lead-zillow-button"
+                                        disabled={!form.data.address.trim()}
+                                        onClick={openZillow}
+                                        title="Search this address on Zillow"
+                                        aria-label="Search this address on Zillow"
+                                    >
+                                        <House />
+                                        <span>Zillow</span>
+                                    </button>
+                                </div>
+                                {addressMenuOpen &&
+                                    form.data.address.trim().length >= 2 && (
+                                        <div
+                                            id="lead-address-suggestions"
+                                            className="lead-address-suggestions"
+                                            role="listbox"
+                                            aria-live="polite"
+                                        >
+                                            {addressLoading &&
+                                                addressSuggestions.length ===
+                                                    0 && (
+                                                    <div className="lead-address-suggestions__status">
+                                                        Searching California
+                                                        streets…
+                                                    </div>
+                                                )}
+                                            {addressSuggestions.map(
+                                                (suggestion) => (
+                                                    <button
+                                                        key={
+                                                            suggestion.place_id
+                                                        }
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected="false"
+                                                        onMouseDown={(event) =>
+                                                            event.preventDefault()
+                                                        }
+                                                        onClick={() =>
+                                                            selectAddress(
+                                                                suggestion,
+                                                            )
+                                                        }
+                                                    >
+                                                        <Search />
+                                                        <span>
+                                                            <strong>
+                                                                {suggestion.address_line1 ??
+                                                                    suggestion.formatted}
+                                                            </strong>
+                                                            {suggestion.address_line2 && (
+                                                                <small>
+                                                                    {
+                                                                        suggestion.address_line2
+                                                                    }
+                                                                </small>
+                                                            )}
+                                                        </span>
+                                                    </button>
+                                                ),
+                                            )}
+                                            {!addressLoading &&
+                                                addressSuggestions.length ===
+                                                    0 &&
+                                                !addressLookupFailed && (
+                                                    <div className="lead-address-suggestions__status">
+                                                        Keep typing the house
+                                                        number or street name.
+                                                    </div>
+                                                )}
+                                            <small className="lead-address-attribution">
+                                                Powered by Geoapify
+                                            </small>
+                                        </div>
+                                    )}
+                                {addressLookupFailed && (
+                                    <small className="lead-address-message">
+                                        Address suggestions are temporarily
+                                        unavailable. You can still enter the
+                                        address manually.
+                                    </small>
                                 )}
+                                {!geoapifyApiKey && (
+                                    <small className="lead-address-message">
+                                        Address suggestions require a Geoapify
+                                        API key.
+                                    </small>
+                                )}
+                                {form.errors.address && (
+                                    <em>{form.errors.address}</em>
+                                )}
+                                <small className="lead-address-helper">
+                                    Select a suggestion to auto-fill the city,
+                                    county, state, and ZIP code.
+                                </small>
                             </div>
+                            {input('zip_code', 'ZIP code', '00000')}
                             {input('city', 'City', 'City')}
                             {input('county', 'County', 'County')}
                             {input('state', 'State', 'CA')}
-                            {input('zip_code', 'ZIP code', '00000')}
+                            <label className="lead-field">
+                                <span>
+                                    Apartment / Unit
+                                    <small>Optional</small>
+                                </span>
+                                <div className="lead-input">
+                                    <Building2 />
+                                    <input
+                                        type="text"
+                                        value={unitNumber}
+                                        onChange={(event) =>
+                                            setUnitNumber(event.target.value)
+                                        }
+                                        placeholder="Apt 4B, Unit 12, Suite 3"
+                                        autoComplete="address-line2"
+                                    />
+                                </div>
+                            </label>
                             {input(
                                 'years_in_house',
                                 'Years in house',
@@ -196,18 +522,14 @@ export default function LeadCard({
                                 undefined,
                                 'number',
                             )}
-                        </div>
-
-                        <div className="lead-section-heading lead-section-heading--spaced">
-                            <span>
-                                <CalendarClock />
-                            </span>
-                            <div>
-                                <h2>Project &amp; appointment</h2>
-                                <p>Service request and scheduling</p>
-                            </div>
-                        </div>
-                        <div className="lead-grid lead-grid--project">
+                            {input(
+                                'email',
+                                'Email',
+                                'Customer email (optional)',
+                                <Mail />,
+                                'email',
+                                true,
+                            )}
                             <label className="lead-field">
                                 <span>Product</span>
                                 <div className="lead-input">
@@ -262,109 +584,165 @@ export default function LeadCard({
                     </section>
 
                     <aside className="lead-card-side">
-                        <div className="lead-section-heading">
-                            <span>
-                                <ClipboardPlus />
-                            </span>
+                        <section className="lead-side-card lead-side-card--create">
                             <div>
-                                <h2>Lead assignment</h2>
-                                <p>Source and ownership</p>
+                                <h2>Create Lead</h2>
+                                <p>
+                                    Review the important fields, then save this
+                                    as a fresh lead.
+                                </p>
                             </div>
-                        </div>
-                        <div className="lead-side-fields">
-                            <label className="lead-field">
-                                <span>Company</span>
-                                <div className="lead-input">
+                            <div className="lead-card-actions">
+                                <button
+                                    type="submit"
+                                    disabled={form.processing}
+                                    className="lead-create-button"
+                                >
+                                    <CheckCircle2 />
+                                    {form.processing
+                                        ? 'Creating…'
+                                        : 'Create lead'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={clearForm}
+                                    className="lead-clear-button"
+                                >
+                                    <RotateCcw />
+                                    Clear fields
+                                </button>
+                            </div>
+                        </section>
+
+                        <section className="lead-side-card">
+                            <div className="lead-side-card__heading">
+                                <span>
                                     <Building2 />
-                                    <select
-                                        value={form.data.company_id}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'company_id',
-                                                event.target.value,
-                                            )
-                                        }
-                                    >
-                                        <option value="">Select company</option>
-                                        {companies.map((company) => (
-                                            <option
-                                                key={company.com_id}
-                                                value={company.com_id}
-                                            >
-                                                {company.company}
+                                </span>
+                                <div>
+                                    <h2>Lead Source</h2>
+                                    <p>Company, source, and assigned agent.</p>
+                                </div>
+                            </div>
+                            <div className="lead-side-fields">
+                                <label className="lead-field">
+                                    <span>Company</span>
+                                    <div className="lead-input">
+                                        <Building2 />
+                                        <select
+                                            value={form.data.company_id}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'company_id',
+                                                    event.target.value,
+                                                )
+                                            }
+                                        >
+                                            <option value="">
+                                                Select company
                                             </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                {form.errors.company_id && (
-                                    <em>{form.errors.company_id}</em>
-                                )}
-                            </label>
-                            <label className="lead-field">
-                                <span>Lead source</span>
-                                <div className="lead-input">
-                                    <Phone />
-                                    <input
-                                        value={form.data.source}
-                                        readOnly
-                                        aria-readonly="true"
-                                    />
-                                </div>
-                                {form.errors.source && (
-                                    <em>{form.errors.source}</em>
-                                )}
-                            </label>
-                            <label className="lead-field">
-                                <span>Assigned agent</span>
-                                <div className="lead-input">
-                                    <UserRound />
-                                    <select
-                                        value={form.data.agent_id}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'agent_id',
-                                                event.target.value,
-                                            )
-                                        }
-                                    >
-                                        <option value="">Select agent</option>
-                                        {agents.map((agent) => (
-                                            <option
-                                                key={agent.agent_id}
-                                                value={agent.agent_id}
-                                            >
-                                                {agent.agent_name}
+                                            {companies.map((company) => (
+                                                <option
+                                                    key={company.com_id}
+                                                    value={company.com_id}
+                                                >
+                                                    {company.company}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {form.errors.company_id && (
+                                        <em>{form.errors.company_id}</em>
+                                    )}
+                                </label>
+                                <label className="lead-field">
+                                    <span>Lead source</span>
+                                    <div className="lead-input">
+                                        <Phone />
+                                        <input
+                                            value={form.data.source}
+                                            readOnly
+                                            aria-readonly="true"
+                                        />
+                                    </div>
+                                    {form.errors.source && (
+                                        <em>{form.errors.source}</em>
+                                    )}
+                                </label>
+                                <label className="lead-field">
+                                    <span>Assigned agent</span>
+                                    <div className="lead-input">
+                                        <UserRound />
+                                        <select
+                                            value={form.data.agent_id}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'agent_id',
+                                                    event.target.value,
+                                                )
+                                            }
+                                        >
+                                            <option value="">
+                                                Select agent
                                             </option>
-                                        ))}
-                                    </select>
+                                            {agents.map((agent) => (
+                                                <option
+                                                    key={agent.agent_id}
+                                                    value={agent.agent_id}
+                                                >
+                                                    {agent.agent_name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {form.errors.agent_id && (
+                                        <em>{form.errors.agent_id}</em>
+                                    )}
+                                </label>
+                            </div>
+                        </section>
+
+                        <section className="lead-side-card lead-appointment-card">
+                            <div className="lead-side-card__heading">
+                                <span>
+                                    <CalendarClock />
+                                </span>
+                                <div>
+                                    <h2>Appointment</h2>
+                                    <p>
+                                        Scheduled date and time for this lead.
+                                    </p>
                                 </div>
-                                {form.errors.agent_id && (
-                                    <em>{form.errors.agent_id}</em>
-                                )}
-                            </label>
-                        </div>
-                        <div className="lead-card-actions">
+                            </div>
                             <button
                                 type="button"
-                                onClick={() => form.reset()}
-                                className="lead-clear-button"
+                                className="lead-appointment-summary"
+                                onClick={() =>
+                                    document
+                                        .querySelector<HTMLInputElement>(
+                                            'input[type="datetime-local"]',
+                                        )
+                                        ?.focus()
+                                }
                             >
-                                <RotateCcw />
-                                Clear form
+                                <CalendarClock />
+                                <span>
+                                    {form.data.appointment_at
+                                        ? new Date(
+                                              form.data.appointment_at,
+                                          ).toLocaleString([], {
+                                              dateStyle: 'medium',
+                                              timeStyle: 'short',
+                                          })
+                                        : 'Select appointment'}
+                                </span>
                             </button>
-                            <button
-                                type="submit"
-                                disabled={form.processing}
-                                className="lead-create-button"
-                            >
-                                <ClipboardPlus />
-                                {form.processing ? 'Creating…' : 'Create lead'}
-                            </button>
-                            <p>
-                                Secondary number, mobile number, and email are
-                                optional.
-                            </p>
-                        </div>
+                        </section>
+
+                        <p className="lead-required-note">
+                            All fields are required except apartment/unit,
+                            secondary number, mobile number, and email.
+                        </p>
                     </aside>
                 </form>
             </main>

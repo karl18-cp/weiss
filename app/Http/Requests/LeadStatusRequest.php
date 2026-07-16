@@ -16,7 +16,7 @@ class LeadStatusRequest extends FormRequest
         return [
             'status' => [
                 'required',
-                'in:confirmed,dispatched,reschedule,555,kit,raw,cb,naov,toss,rehash,sale,ng,la,his,rehash_ng,rehash_toss,rehash_cb,kit_ng,kit_toss,kit_cb',
+                'in:confirmed,dispatched,reschedule,555,kit,raw,cb,naov,toss,rehash,ng,la,his,rehash_ng,rehash_toss,rehash_cb,kit_ng,kit_toss,kit_cb',
             ],
         ];
     }

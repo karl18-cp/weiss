@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable(['com_id', 'company', 'address', 'prefix', 'project_code'])]
+#[Fillable(['com_id', 'company', 'address', 'prefix', 'project_code', 'archived_at'])]
 class Company extends Model
 {
     protected $table = 'companies';
@@ -17,4 +17,11 @@ class Company extends Model
     public $timestamps = false;
 
     protected $keyType = 'int';
+
+    protected function casts(): array
+    {
+        return [
+            'archived_at' => 'datetime',
+        ];
+    }
 }

@@ -12,6 +12,26 @@ use Inertia\Response;
 
 class LeadQueueController extends Controller
 {
+    public function bookingBoard(): Response
+    {
+        return Inertia::render('lead-workflow/booking-board', [
+            'leads' => Lead::query()
+                ->whereIn('status', ['confirmed', 'dispatched'])
+                ->with([
+                    'company:com_id,company,prefix',
+                    'product:prod_id,product_name',
+                    'agent:agent_id,agent_name',
+                    'secondAgent:agent_id,agent_name',
+                    'salesmanOne:salesman_id,salesman_name',
+                    'salesmanTwo:salesman_id,salesman_name',
+                    'notes:id,lead_id,note_type,body,created_at',
+                ])
+                ->orderBy('appointment_at')
+                ->orderBy('id')
+                ->get(),
+        ]);
+    }
+
     public function confirm(): Response
     {
         return $this->renderQueue('lead-workflow/confirm-leads', 'confirmed');
@@ -58,7 +78,7 @@ class LeadQueueController extends Controller
             'leads' => Lead::query()
                 ->whereIn('status', (array) $status)
                 ->with([
-                    'company:com_id,company',
+                    'company:com_id,company,prefix',
                     'product:prod_id,product_name',
                     'agent:agent_id,agent_name',
                     'secondAgent:agent_id,agent_name',

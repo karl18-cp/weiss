@@ -15,6 +15,11 @@ class CompanyController extends Controller
     {
         return Inertia::render('management/contacts-users', [
             'companies' => Company::query()
+                ->whereNull('archived_at')
+                ->orderBy('company')
+                ->get(),
+            'archivedCompanies' => Company::query()
+                ->whereNotNull('archived_at')
                 ->orderBy('company')
                 ->get(),
         ]);
@@ -66,6 +71,34 @@ class CompanyController extends Controller
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => 'Company deleted.',
+        ]);
+
+        return back();
+    }
+
+    public function archive(Company $company): RedirectResponse
+    {
+        abort_unless(request()->user()?->role === 'admin', 403);
+
+        $company->update(['archived_at' => now()]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Company archived.',
+        ]);
+
+        return back();
+    }
+
+    public function restore(Company $company): RedirectResponse
+    {
+        abort_unless(request()->user()?->role === 'admin', 403);
+
+        $company->update(['archived_at' => null]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Company restored.',
         ]);
 
         return back();

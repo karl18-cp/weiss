@@ -16,7 +16,6 @@ import {
     Search,
     Send,
     Settings,
-    ShieldCheck,
     Store,
     Table2,
     UserRoundPlus,
@@ -141,11 +140,6 @@ const managementItems: SidebarItem[] = [
         icon: Users,
         href: '/management/contacts-users',
         permission: 'contacts_users',
-    },
-    {
-        title: 'Roles Permission',
-        icon: ShieldCheck,
-        href: '/management/roles-permission',
     },
 ];
 

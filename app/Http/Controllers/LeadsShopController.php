@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\LeadAppointmentResultRequest;
 use App\Http\Requests\LeadNoteRequest;
 use App\Http\Requests\LeadRequest;
+use App\Http\Requests\LeadSaleRequest;
 use App\Http\Requests\LeadSalesmenRequest;
 use App\Http\Requests\LeadSecondAgentRequest;
 use App\Http\Requests\LeadStatusRequest;
@@ -13,8 +14,11 @@ use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadNote;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\Salesman;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,7 +29,7 @@ class LeadsShopController extends Controller
         return Inertia::render('lead-workflow/leads-shop', [
             'leads' => Lead::query()
                 ->with([
-                    'company:com_id,company',
+                    'company:com_id,company,prefix',
                     'product:prod_id,product_name',
                     'agent:agent_id,agent_name',
                     'secondAgent:agent_id,agent_name',
@@ -90,6 +94,43 @@ class LeadsShopController extends Controller
         $lead->update($request->validated());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Appointment result saved.']);
+
+        return back();
+    }
+
+    public function sell(LeadSaleRequest $request, Lead $lead): RedirectResponse
+    {
+        if (! $lead->salesman_1_id && ! $lead->salesman_2_id) {
+            throw ValidationException::withMessages([
+                'salesman' => 'Assign at least one salesman before accepting a sale.',
+            ]);
+        }
+
+        DB::transaction(function () use ($request, $lead): void {
+            $project = Project::query()->updateOrCreate(
+                ['lead_id' => $lead->id],
+                [
+                    'amount' => $request->validated('amount'),
+                    'created_by' => $request->user()->getAuthIdentifier(),
+                ],
+            );
+
+            $project->sales()->updateOrCreate(
+                ['type' => 'original'],
+                [
+                    'amount' => $request->validated('amount'),
+                    'sale_date' => now()->toDateString(),
+                    'product_id' => $lead->product_id,
+                ],
+            );
+
+            $lead->update([
+                'status' => 'project',
+                'appointment_result' => 'Sold',
+            ]);
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Sale accepted and project created.']);
 
         return back();
     }

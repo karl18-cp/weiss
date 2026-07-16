@@ -1,0 +1,540 @@
+.booking-board-page {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.8rem;
+    overflow: hidden;
+    padding: 1.5rem;
+    color: #172036;
+    background: #f2f5f8;
+}
+
+.booking-board-heading {
+    display: flex;
+    flex: none;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.booking-board-heading > div:first-child > span {
+    color: #2d65e5;
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}
+
+.booking-board-heading h1 {
+    margin-top: 0.25rem;
+    font-size: clamp(1.8rem, 3vw, 2.7rem);
+    font-weight: 850;
+    letter-spacing: -0.05em;
+}
+
+.booking-board-heading p {
+    margin-top: 0.3rem;
+    color: #7b899e;
+    font-size: 0.78rem;
+}
+
+.booking-board-stats {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.booking-board-stats > div {
+    display: flex;
+    min-width: 7rem;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #dae3ef;
+    border-radius: 0.75rem;
+    background: #fff;
+}
+
+.booking-board-stats svg {
+    width: 1rem;
+    color: #2763df;
+}
+
+.booking-board-stats span,
+.booking-board-stats strong {
+    display: block;
+}
+
+.booking-board-stats span {
+    color: #8390a3;
+    font-size: 0.56rem;
+    font-weight: 700;
+}
+
+.booking-board-stats strong {
+    margin-bottom: 0.05rem;
+    color: #24314a;
+    font-size: 0.8rem;
+}
+
+.booking-board-toolbar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.65rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.85rem;
+    background: #fff;
+}
+
+.booking-board-toolbar label {
+    display: flex;
+    width: min(38rem, 55vw);
+    min-height: 2.4rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding-inline: 0.7rem;
+    border: 1px solid #d9e2ee;
+    border-radius: 0.65rem;
+    background: #f9fbfd;
+}
+
+.booking-board-toolbar label svg {
+    width: 0.9rem;
+    color: #7d8ba0;
+}
+
+.booking-board-toolbar input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 0.68rem;
+}
+
+.booking-board-toolbar > div {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.booking-board-toolbar button {
+    min-height: 2.35rem;
+    padding-inline: 0.75rem;
+    border-radius: 0.6rem;
+    color: #68768b;
+    background: #f3f6fa;
+    font-size: 0.62rem;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.booking-board-toolbar button.is-active {
+    color: #fff;
+    background: #2763df;
+}
+
+.booking-board-dates {
+    display: flex;
+    flex: none;
+    gap: 0.45rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+}
+
+.booking-board-dates button {
+    min-width: 8.5rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid #dce4ef;
+    border-radius: 0.7rem;
+    color: #526076;
+    background: #fff;
+    text-align: left;
+}
+
+.booking-board-dates strong,
+.booking-board-dates span {
+    display: block;
+}
+
+.booking-board-dates strong {
+    font-size: 0.68rem;
+}
+
+.booking-board-dates span {
+    margin-top: 0.15rem;
+    color: #8a96a8;
+    font-size: 0.55rem;
+}
+
+.booking-board-dates button.is-active {
+    border-color: #2763df;
+    color: #fff;
+    background: #2763df;
+}
+
+.booking-board-dates button.is-active span {
+    color: #dce8ff;
+}
+
+.booking-board-workspace {
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(36rem, 1.2fr) minmax(22rem, 0.8fr);
+    overflow: hidden;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 10px 30px rgb(35 51 79 / 6%);
+}
+
+.booking-board-agenda {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    border-right: 1px solid #e3e9f1;
+}
+
+.booking-board-agenda > header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #e7ecf3;
+}
+
+.booking-board-agenda h2 {
+    font-size: 0.85rem;
+    font-weight: 850;
+}
+
+.booking-board-agenda header span {
+    color: #8592a5;
+    font-size: 0.58rem;
+}
+
+.booking-board-agenda__list {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.booking-board-agenda__list > button {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 6rem 5.5rem minmax(10rem, 1.2fr) minmax(
+            8rem,
+            0.9fr
+        ) minmax(8rem, 0.8fr);
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e8edf4;
+    color: #536177;
+    text-align: left;
+}
+
+.booking-board-agenda__list > button:hover,
+.booking-board-agenda__list > button.is-selected {
+    background: #f2f6ff;
+}
+
+.booking-board-agenda__list > button.is-selected {
+    box-shadow: inset 3px 0 #2763df;
+}
+
+.booking-board-agenda time strong,
+.booking-board-agenda time span,
+.booking-board-agenda__list > button > div strong,
+.booking-board-agenda__list > button > div span {
+    display: block;
+}
+
+.booking-board-agenda time strong,
+.booking-board-agenda__list > button > div strong {
+    overflow: hidden;
+    color: #27344b;
+    font-size: 0.65rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.booking-board-agenda time span,
+.booking-board-agenda__list > button > div span {
+    margin-top: 0.16rem;
+    overflow: hidden;
+    color: #8794a7;
+    font-size: 0.54rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.booking-board-agenda__list > button > div span svg {
+    display: inline;
+    width: 0.65rem;
+}
+
+.booking-board-status {
+    display: inline-flex;
+    width: fit-content;
+    padding: 0.28rem 0.48rem;
+    border-radius: 999px;
+    color: #245bd9;
+    background: #eaf1ff;
+    font-size: 0.54rem;
+    font-weight: 850;
+    text-transform: capitalize;
+}
+
+.booking-board-status.is-dispatched {
+    color: #8a5a00;
+    background: #fff3d6;
+}
+
+.booking-board-empty,
+.booking-board-detail__empty {
+    display: grid;
+    height: 100%;
+    place-content: center;
+    gap: 0.4rem;
+    padding: 2rem;
+    color: #8794a8;
+    text-align: center;
+}
+
+.booking-board-empty svg,
+.booking-board-detail__empty svg {
+    width: 2rem;
+    margin-inline: auto;
+}
+
+.booking-board-empty span,
+.booking-board-detail__empty span {
+    font-size: 0.62rem;
+}
+
+.booking-board-detail {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.8rem;
+    overflow-y: auto;
+    padding: 1rem;
+    background: #fbfcfe;
+}
+
+.booking-board-detail > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+.booking-board-detail h2 {
+    margin-top: 0.45rem;
+    font-size: 1.15rem;
+    font-weight: 850;
+}
+
+.booking-board-detail header p {
+    margin-top: 0.2rem;
+    color: #8491a5;
+    font-size: 0.6rem;
+}
+
+.booking-board-detail header > a {
+    flex: none;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.6rem;
+    color: #fff;
+    background: #2763df;
+    font-size: 0.6rem;
+    font-weight: 850;
+    text-decoration: none;
+}
+
+.booking-board-appointment {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.8rem;
+    border-radius: 0.75rem;
+    color: #fff;
+    background: linear-gradient(120deg, #2763df, #3f7bf2);
+}
+
+.booking-board-appointment > svg {
+    width: 1.3rem;
+}
+
+.booking-board-appointment span,
+.booking-board-appointment strong,
+.booking-board-appointment small {
+    display: block;
+}
+
+.booking-board-appointment span,
+.booking-board-appointment small {
+    color: #dce8ff;
+    font-size: 0.55rem;
+}
+
+.booking-board-appointment strong {
+    margin-block: 0.12rem;
+    font-size: 0.72rem;
+}
+
+.booking-board-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.booking-board-info-grid > div {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 1rem 1fr;
+    padding: 0.65rem;
+    border: 1px solid #e0e7f0;
+    border-radius: 0.65rem;
+    background: #fff;
+}
+
+.booking-board-info-grid svg {
+    width: 0.8rem;
+    color: #4375e8;
+    grid-row: 1 / 3;
+}
+
+.booking-board-info-grid span {
+    color: #8794a7;
+    font-size: 0.52rem;
+    text-transform: uppercase;
+}
+
+.booking-board-info-grid strong {
+    margin-top: 0.15rem;
+    overflow: hidden;
+    color: #334057;
+    font-size: 0.62rem;
+    text-overflow: ellipsis;
+}
+
+.booking-board-note {
+    padding: 0.75rem;
+    border: 1px solid #e0e7f0;
+    border-radius: 0.7rem;
+    background: #fff;
+}
+
+.booking-board-note > span {
+    color: #6f7d91;
+    font-size: 0.55rem;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.booking-board-note p {
+    margin-top: 0.4rem;
+    color: #536177;
+    font-size: 0.64rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.booking-board-detail > footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: auto;
+}
+
+.booking-board-detail > footer a {
+    display: flex;
+    min-height: 2.4rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border: 1px solid #b9cdf5;
+    border-radius: 0.65rem;
+    color: #245bd9;
+    background: #fff;
+    font-size: 0.62rem;
+    font-weight: 850;
+    text-decoration: none;
+}
+
+.booking-board-detail > footer svg {
+    width: 0.8rem;
+}
+
+@media (max-width: 1050px) {
+    .booking-board-page {
+        height: auto;
+        min-height: 100%;
+        overflow: visible;
+    }
+
+    .booking-board-workspace {
+        grid-template-columns: 1fr;
+        overflow: visible;
+    }
+
+    .booking-board-agenda {
+        min-height: 32rem;
+        border-right: 0;
+        border-bottom: 1px solid #e3e9f1;
+    }
+
+    .booking-board-detail {
+        min-height: 34rem;
+    }
+}
+
+@media (max-width: 700px) {
+    .booking-board-page {
+        padding: 1rem;
+    }
+
+    .booking-board-heading,
+    .booking-board-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .booking-board-stats {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .booking-board-toolbar label {
+        width: 100%;
+    }
+
+    .booking-board-toolbar > div {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .booking-board-agenda__list > button {
+        grid-template-columns: 5rem 5rem minmax(10rem, 1fr);
+    }
+
+    .booking-board-agenda__list > button > div:nth-last-child(-n + 2) {
+        display: none;
+    }
+
+    .booking-board-info-grid,
+    .booking-board-detail > footer {
+        grid-template-columns: 1fr;
+    }
+}
