@@ -35,4 +35,17 @@ return [
         ],
     ],
 
+    'ringcentral' => [
+        'server_url' => env('RINGCENTRAL_SERVER_URL', 'https://platform.ringcentral.com'),
+        'embeddable_client_id' => env(
+            'RINGCENTRAL_EMBEDDABLE_CLIENT_ID',
+            env('RINGCENTRAL_CLIENT_ID'),
+        ),
+        'client_id' => env('RINGCENTRAL_CLIENT_ID'),
+        'client_secret' => env('RINGCENTRAL_CLIENT_SECRET'),
+        'jwt' => env('RINGCENTRAL_JWT'),
+        'from_number' => env('RINGCENTRAL_FROM_NUMBER'),
+        'default_country_code' => env('RINGCENTRAL_DEFAULT_COUNTRY_CODE', '1'),
+    ],
+
 ];

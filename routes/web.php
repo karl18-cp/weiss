@@ -12,6 +12,8 @@ use App\Http\Controllers\ManagerController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QualityControlController;
+use App\Http\Controllers\RingCentralCallController;
+use App\Http\Controllers\RingCentralCallStatusController;
 use App\Http\Controllers\SalesmanController;
 use App\Http\Controllers\TeleHoursController;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +22,13 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified', 'manager.permission'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::post('integrations/ringcentral/calls', RingCentralCallController::class)
+        ->middleware('throttle:10,1')
+        ->name('integrations.ringcentral.calls.store');
+    Route::get('integrations/ringcentral/calls/{callId}', RingCentralCallStatusController::class)
+        ->where('callId', '[A-Za-z0-9_-]+')
+        ->middleware('throttle:60,1')
+        ->name('integrations.ringcentral.calls.show');
 
     Route::prefix('lead-workflow')->name('lead-workflow.')->group(function () {
         Route::get('lead-card', [LeadCardController::class, 'index'])->name('lead-card');

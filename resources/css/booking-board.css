@@ -458,7 +458,8 @@
     margin-top: auto;
 }
 
-.booking-board-detail > footer a {
+.booking-board-detail > footer a,
+.booking-board-detail > footer button {
     display: flex;
     min-height: 2.4rem;
     align-items: center;
@@ -475,6 +476,11 @@
 
 .booking-board-detail > footer svg {
     width: 0.8rem;
+}
+
+.booking-board-detail > footer button:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 
 @media (max-width: 1050px) {

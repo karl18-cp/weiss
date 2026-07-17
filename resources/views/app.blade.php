@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="csrf-token" content="{{ csrf_token() }}">
 
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
@@ -44,5 +45,14 @@
     </head>
     <body class="font-sans antialiased">
         <x-inertia::app />
+
+        @auth
+            @if (config('services.ringcentral.embeddable_client_id'))
+                <script
+                    src="https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/adapter.js?clientId={{ urlencode(config('services.ringcentral.embeddable_client_id')) }}"
+                    async
+                ></script>
+            @endif
+        @endauth
     </body>
 </html>

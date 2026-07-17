@@ -1780,7 +1780,9 @@
 }
 
 .lead-edit-phone > a,
-.lead-phone-value > a {
+.lead-edit-phone > button,
+.lead-phone-value > a,
+.lead-phone-value > button {
     display: grid;
     width: 2.25rem;
     height: 2.25rem;
@@ -1796,21 +1798,26 @@
         transform 140ms ease;
 }
 
-.lead-phone-value > a {
+.lead-phone-value > a,
+.lead-phone-value > button {
     width: 1.85rem;
     height: 1.85rem;
     border-radius: 0.5rem;
 }
 
 .lead-edit-phone > a:hover,
-.lead-phone-value > a:hover {
+.lead-edit-phone > button:hover,
+.lead-phone-value > a:hover,
+.lead-phone-value > button:hover {
     color: #fff;
     background: var(--shop-purple);
     transform: translateY(-1px);
 }
 
 .lead-edit-phone > a:focus-visible,
-.lead-phone-value > a:focus-visible {
+.lead-edit-phone > button:focus-visible,
+.lead-phone-value > a:focus-visible,
+.lead-phone-value > button:focus-visible {
     outline: 2px solid var(--shop-purple);
     outline-offset: 2px;
 }
@@ -1818,6 +1825,13 @@
 .lead-edit-phone svg,
 .lead-phone-value svg {
     width: 0.85rem;
+}
+
+.lead-edit-phone button:disabled,
+.lead-phone-value button:disabled,
+.booking-board-detail > footer button:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 
 .lead-note-heading button {

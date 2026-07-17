@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/leads-shop.css';
+import { RingCentralCallButton } from '@/components/ringcentral-call-button';
 import { useSystemModal } from '@/components/system-modal-provider';
 import { zillowSearchUrl } from '@/lib/address-search';
 
@@ -127,9 +128,6 @@ const leadAddress = (lead: Lead) =>
         .map((part) => part?.trim())
         .filter(Boolean)
         .join(', ');
-
-const phoneHref = (phoneNumber: string) =>
-    `tel:${phoneNumber.replace(/[^\d+]/g, '')}`;
 
 const leadAddressLinks = (lead: Lead) => {
     const address = encodeURIComponent(leadAddress(lead));
@@ -1256,16 +1254,15 @@ export default function LeadsShop({
                                                     }
                                                 />
                                                 {form.data.primary_number.trim() && (
-                                                    <a
-                                                        href={phoneHref(
+                                                    <RingCentralCallButton
+                                                        phone={
                                                             form.data
-                                                                .primary_number,
-                                                        )}
-                                                        aria-label="Call primary phone"
-                                                        title="Call primary phone"
+                                                                .primary_number
+                                                        }
+                                                        title="Call primary phone with RingCentral"
                                                     >
                                                         <PhoneCall />
-                                                    </a>
+                                                    </RingCentralCallButton>
                                                 )}
                                             </div>
                                             {form.errors.primary_number && (
@@ -1290,16 +1287,15 @@ export default function LeadsShop({
                                                     }
                                                 />
                                                 {form.data.secondary_number.trim() && (
-                                                    <a
-                                                        href={phoneHref(
+                                                    <RingCentralCallButton
+                                                        phone={
                                                             form.data
-                                                                .secondary_number,
-                                                        )}
-                                                        aria-label="Call secondary phone"
-                                                        title="Call secondary phone"
+                                                                .secondary_number
+                                                        }
+                                                        title="Call secondary phone with RingCentral"
                                                     >
                                                         <PhoneCall />
-                                                    </a>
+                                                    </RingCentralCallButton>
                                                 )}
                                             </div>
                                         </label>
@@ -1318,16 +1314,15 @@ export default function LeadsShop({
                                                     }
                                                 />
                                                 {form.data.mobile_number.trim() && (
-                                                    <a
-                                                        href={phoneHref(
+                                                    <RingCentralCallButton
+                                                        phone={
                                                             form.data
-                                                                .mobile_number,
-                                                        )}
-                                                        aria-label="Call mobile number"
-                                                        title="Call mobile number"
+                                                                .mobile_number
+                                                        }
+                                                        title="Call mobile number with RingCentral"
                                                     >
                                                         <PhoneCall />
-                                                    </a>
+                                                    </RingCentralCallButton>
                                                 )}
                                             </div>
                                         </label>
@@ -1695,15 +1690,14 @@ export default function LeadsShop({
                                                             }
                                                         </strong>
                                                         {selected.primary_number.trim() && (
-                                                            <a
-                                                                href={phoneHref(
-                                                                    selected.primary_number,
-                                                                )}
-                                                                aria-label="Call primary phone"
-                                                                title="Call primary phone"
+                                                            <RingCentralCallButton
+                                                                phone={
+                                                                    selected.primary_number
+                                                                }
+                                                                title="Call primary phone with RingCentral"
                                                             >
                                                                 <PhoneCall />
-                                                            </a>
+                                                            </RingCentralCallButton>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1715,15 +1709,14 @@ export default function LeadsShop({
                                                                 '—'}
                                                         </strong>
                                                         {selected.secondary_number?.trim() && (
-                                                            <a
-                                                                href={phoneHref(
-                                                                    selected.secondary_number,
-                                                                )}
-                                                                aria-label="Call secondary phone"
-                                                                title="Call secondary phone"
+                                                            <RingCentralCallButton
+                                                                phone={
+                                                                    selected.secondary_number
+                                                                }
+                                                                title="Call secondary phone with RingCentral"
                                                             >
                                                                 <PhoneCall />
-                                                            </a>
+                                                            </RingCentralCallButton>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1735,15 +1728,14 @@ export default function LeadsShop({
                                                                 '—'}
                                                         </strong>
                                                         {selected.mobile_number?.trim() && (
-                                                            <a
-                                                                href={phoneHref(
-                                                                    selected.mobile_number,
-                                                                )}
-                                                                aria-label="Call mobile number"
-                                                                title="Call mobile number"
+                                                            <RingCentralCallButton
+                                                                phone={
+                                                                    selected.mobile_number
+                                                                }
+                                                                title="Call mobile number with RingCentral"
                                                             >
                                                                 <PhoneCall />
-                                                            </a>
+                                                            </RingCentralCallButton>
                                                         )}
                                                     </div>
                                                 </div>

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/booking-board.css';
+import { RingCentralCallButton } from '@/components/ringcentral-call-button';
 
 type BookingLead = {
     id: number;
@@ -424,9 +425,11 @@ export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
                                 </section>
 
                                 <footer>
-                                    <a href={`tel:${selected.primary_number}`}>
+                                    <RingCentralCallButton
+                                        phone={selected.primary_number}
+                                    >
                                         <Phone /> Call customer
-                                    </a>
+                                    </RingCentralCallButton>
                                     <a
                                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress(selected))}`}
                                         target="_blank"

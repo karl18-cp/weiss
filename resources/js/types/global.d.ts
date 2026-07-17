@@ -1,5 +1,13 @@
 import type { Auth } from '@/types/auth';
 
+declare global {
+    interface Window {
+        RCAdapter?: {
+            clickToCall?: (phoneNumber: string, toCall?: boolean) => void;
+        };
+    }
+}
+
 declare module 'react' {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     interface InputHTMLAttributes<T> {
