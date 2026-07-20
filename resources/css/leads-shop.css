@@ -52,8 +52,15 @@
     width: 100%;
     min-width: 0;
     background: transparent;
+    color: #172033;
+    caret-color: #172033;
+    -webkit-text-fill-color: #172033;
     font-size: 0.75rem;
     outline: none;
+}
+.leads-shop-search input::placeholder {
+    color: #8997aa;
+    opacity: 1;
 }
 .leads-shop-search button {
     display: grid;

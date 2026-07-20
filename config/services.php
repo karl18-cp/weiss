@@ -48,4 +48,12 @@ return [
         'default_country_code' => env('RINGCENTRAL_DEFAULT_COUNTRY_CODE', '1'),
     ],
 
+    'calltools' => [
+        'webhook_secret' => env('CALLTOOLS_WEBHOOK_SECRET'),
+        'default_company_id' => env('CALLTOOLS_DEFAULT_COMPANY_ID'),
+        'default_product_id' => env('CALLTOOLS_DEFAULT_PRODUCT_ID'),
+        'default_agent_id' => env('CALLTOOLS_DEFAULT_AGENT_ID'),
+        'created_by' => env('CALLTOOLS_CREATED_BY_ACCOUNT_ID'),
+    ],
+
 ];

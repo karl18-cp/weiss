@@ -388,6 +388,23 @@ test('project accounting supports standalone receivables optional schedules and 
     ])->assertRedirect();
     expect($transaction->refresh()->scheduledPayments)->toHaveCount(1);
 
+    $this->put(route('management.projects.accounting-transactions.update', [$project, $transaction]), [
+        ...$receivable,
+        'payment_method' => 'zelle',
+        'reference_number' => 'ZELLEabc123',
+        'status' => 'ok_to_pay',
+        'scheduled_payment_ids' => [$scheduledPayment->id],
+    ])->assertRedirect();
+    expect($transaction->refresh()->status)->toBe('ok_to_pay');
+
+    $this->post(route('management.projects.accounting-transactions.store', $project), [
+        ...$receivable,
+        'reference_number' => 'CH#OVER-SCHEDULE',
+        'amount' => 1501,
+        'status' => 'paid',
+        'scheduled_payment_ids' => [$scheduledPayment->id],
+    ])->assertSessionHasErrors('amount');
+
     $this->post(route('management.projects.accounting-transactions.store', $project), [
         ...$receivable,
         'payment_method' => 'credit_card',

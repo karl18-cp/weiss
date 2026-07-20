@@ -64,8 +64,15 @@
     width: 100%;
     min-width: 0;
     background: transparent;
+    color: #172033;
+    caret-color: #172033;
+    -webkit-text-fill-color: #172033;
     font-size: 0.68rem;
     outline: none;
+}
+.managers-search input::placeholder {
+    color: #8290a5;
+    opacity: 1;
 }
 .managers-list {
     margin-top: 0.55rem;

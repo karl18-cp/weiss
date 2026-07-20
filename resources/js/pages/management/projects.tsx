@@ -427,6 +427,47 @@ export default function Projects({
     const scheduleBalance = (project: Project) =>
         Math.max(0, projectSaleTotal(project) - scheduledPaymentTotal(project));
 
+    const scheduledPaymentBalances = (project: Project) => {
+        const balances = new Map(
+            project.scheduled_payments.map((payment) => [
+                payment.id,
+                Number(payment.amount),
+            ]),
+        );
+
+        [...project.accounting_transactions]
+            .filter(
+                (transaction) =>
+                    transaction.type === 'receivable' &&
+                    ['ok_to_pay', 'paid'].includes(transaction.status),
+            )
+            .sort((first, second) => first.id - second.id)
+            .forEach((transaction) => {
+                let remaining = Number(transaction.amount);
+                const linkedIds = new Set(
+                    transaction.scheduled_payments.map((payment) => payment.id),
+                );
+
+                project.scheduled_payments.forEach((payment) => {
+                    if (remaining <= 0 || !linkedIds.has(payment.id)) {
+                        return;
+                    }
+
+                    const currentBalance = balances.get(payment.id) ?? 0;
+                    const applied = Math.min(remaining, currentBalance);
+                    balances.set(payment.id, currentBalance - applied);
+                    remaining -= applied;
+                });
+            });
+
+        return balances;
+    };
+
+    const scheduledPaymentBalance = (
+        project: Project,
+        payment: ScheduledPayment,
+    ) => scheduledPaymentBalances(project).get(payment.id) ?? Number(payment.amount);
+
     const projectInvoiceTotal = (project: Project) =>
         project.invoices.reduce(
             (sum, invoice) => sum + Number(invoice.amount),
@@ -465,10 +506,29 @@ export default function Projects({
         selected?.scheduled_payments.find(
             (payment) => payment.id === selectedScheduledPaymentId,
         ) ?? null;
+    const selectedScheduledReceivables =
+        selected && selectedScheduledPayment
+            ? selected.accounting_transactions.filter(
+                  (transaction) =>
+                      transaction.type === 'receivable' &&
+                      transaction.scheduled_payments.some(
+                          (payment) =>
+                              payment.id === selectedScheduledPayment.id,
+                      ),
+              )
+            : [];
     const selectedInvoice =
         selected?.invoices.find(
             (invoice) => invoice.id === selectedInvoiceId,
         ) ?? null;
+    const selectedInvoicePayables =
+        selected && selectedInvoice
+            ? selected.accounting_transactions.filter(
+                  (transaction) =>
+                      transaction.type === 'payable' &&
+                      transaction.invoice?.id === selectedInvoice.id,
+              )
+            : [];
     const selectedAccountingTransaction =
         selected?.accounting_transactions.find(
             (transaction) => transaction.id === selectedAccountingId,
@@ -1801,6 +1861,122 @@ export default function Projects({
                                             </tbody>
                                         </table>
                                     </div>
+                                    <section className="project-invoice-linked">
+                                        <header>
+                                            <div>
+                                                <small>Linked payables</small>
+                                                <strong>
+                                                    {selectedInvoice
+                                                        ? selectedInvoice.invoice_number
+                                                        : 'Select an invoice'}
+                                                </strong>
+                                            </div>
+                                            <span>
+                                                {selectedInvoicePayables.length}{' '}
+                                                {selectedInvoicePayables.length ===
+                                                1
+                                                    ? 'payable'
+                                                    : 'payables'}
+                                            </span>
+                                        </header>
+                                        <div>
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>Reference #</th>
+                                                        <th>Pay to</th>
+                                                        <th>Requested by</th>
+                                                        <th>Status</th>
+                                                        <th>Amount</th>
+                                                        <th>Notes</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {selectedInvoicePayables.map(
+                                                        (payable) => (
+                                                            <tr
+                                                                key={
+                                                                    payable.id
+                                                                }
+                                                            >
+                                                                <td>
+                                                                    {dateFormatter.format(
+                                                                        new Date(
+                                                                            payable.transaction_date,
+                                                                        ),
+                                                                    )}
+                                                                </td>
+                                                                <td>
+                                                                    <strong>
+                                                                        {
+                                                                            payable.reference_number
+                                                                        }
+                                                                    </strong>
+                                                                </td>
+                                                                <td>
+                                                                    {payable
+                                                                        .contractor
+                                                                        ?.contractor ||
+                                                                        selectedInvoice
+                                                                            ?.contractor
+                                                                            .contractor ||
+                                                                        '—'}
+                                                                </td>
+                                                                <td>
+                                                                    {payable.requested_by ||
+                                                                        '—'}
+                                                                </td>
+                                                                <td>
+                                                                    <span
+                                                                        className={`project-invoice-linked-status is-${payable.status}`}
+                                                                    >
+                                                                        {
+                                                                            invoiceStatusLabels[
+                                                                                payable
+                                                                                    .status
+                                                                            ]
+                                                                        }
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    <strong>
+                                                                        {currencyFormatter.format(
+                                                                            Number(
+                                                                                payable.amount,
+                                                                            ),
+                                                                        )}
+                                                                    </strong>
+                                                                </td>
+                                                                <td
+                                                                    title={
+                                                                        payable.notes ??
+                                                                        ''
+                                                                    }
+                                                                >
+                                                                    {payable.notes ||
+                                                                        '—'}
+                                                                </td>
+                                                            </tr>
+                                                        ),
+                                                    )}
+                                                    {selectedInvoicePayables.length ===
+                                                        0 && (
+                                                        <tr>
+                                                            <td
+                                                                colSpan={7}
+                                                                className="project-invoice-linked-empty"
+                                                            >
+                                                                {selectedInvoice
+                                                                    ? 'No payables are connected to this invoice.'
+                                                                    : 'Select an invoice above to view its payables.'}
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </section>
                                     <footer className="project-invoice-total">
                                         <span>Total invoices</span>
                                         <strong>
@@ -1990,8 +2166,9 @@ export default function Projects({
                                                     </td>
                                                     <td>
                                                         {currencyFormatter.format(
-                                                            Number(
-                                                                payment.amount,
+                                                            scheduledPaymentBalance(
+                                                                selected,
+                                                                payment,
                                                             ),
                                                         )}
                                                     </td>
@@ -2043,6 +2220,110 @@ export default function Projects({
                                     </tbody>
                                 </table>
                             </div>
+
+                            <section className="project-schedule-linked">
+                                <header>
+                                    <div>
+                                        <small>Linked receivables</small>
+                                        <strong>
+                                            {selectedScheduledPayment
+                                                ? selectedScheduledPayment.payment_stage
+                                                : 'Select a scheduled payment'}
+                                        </strong>
+                                    </div>
+                                    <span>
+                                        {selectedScheduledReceivables.length}{' '}
+                                        {selectedScheduledReceivables.length ===
+                                        1
+                                            ? 'receivable'
+                                            : 'receivables'}
+                                    </span>
+                                </header>
+                                <div>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Reference #</th>
+                                                <th>Received from</th>
+                                                <th>Status</th>
+                                                <th>Amount</th>
+                                                <th>Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {selectedScheduledReceivables.map(
+                                                (receivable) => (
+                                                    <tr key={receivable.id}>
+                                                        <td>
+                                                            {dateFormatter.format(
+                                                                new Date(
+                                                                    receivable.transaction_date,
+                                                                ),
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            <strong>
+                                                                {
+                                                                    receivable.reference_number
+                                                                }
+                                                            </strong>
+                                                        </td>
+                                                        <td>
+                                                            {receivable.counterparty ||
+                                                                selected.lead
+                                                                    .customer_name}
+                                                        </td>
+                                                        <td>
+                                                            <span
+                                                                className={`project-schedule-linked-status is-${receivable.status}`}
+                                                            >
+                                                                {
+                                                                    invoiceStatusLabels[
+                                                                        receivable
+                                                                            .status
+                                                                    ]
+                                                                }
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            <strong>
+                                                                {currencyFormatter.format(
+                                                                    Number(
+                                                                        receivable.amount,
+                                                                    ),
+                                                                )}
+                                                            </strong>
+                                                        </td>
+                                                        <td
+                                                            title={
+                                                                receivable.notes ??
+                                                                ''
+                                                            }
+                                                        >
+                                                            {receivable.notes ||
+                                                                '—'}
+                                                        </td>
+                                                    </tr>
+                                                ),
+                                            )}
+                                            {selectedScheduledReceivables.length ===
+                                                0 && (
+                                                <tr>
+                                                    <td
+                                                        colSpan={6}
+                                                        className="project-schedule-linked-empty"
+                                                    >
+                                                        {selectedScheduledPayment
+                                                            ? 'No receivables are connected to this scheduled payment.'
+                                                            : 'Select a scheduled payment above to view its receivables.'}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
 
                             <footer className="project-schedule-summary">
                                 <div>
@@ -2834,30 +3115,6 @@ export default function Projects({
                                             </small>
                                         )}
                                     </label>
-                                    <label>
-                                        <span>Status</span>
-                                        <select
-                                            value={accountingForm.data.status}
-                                            onChange={(event) =>
-                                                accountingForm.setData(
-                                                    'status',
-                                                    event.target
-                                                        .value as AccountingTransaction['status'],
-                                                )
-                                            }
-                                        >
-                                            {Object.entries(
-                                                invoiceStatusLabels,
-                                            ).map(([value, label]) => (
-                                                <option
-                                                    key={value}
-                                                    value={value}
-                                                >
-                                                    {label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
                                     <fieldset className="project-schedule-options">
                                         <legend>Processing status</legend>
                                         <label>
@@ -3135,6 +3392,35 @@ export default function Projects({
                                         {accountingForm.errors.amount && (
                                             <small>
                                                 {accountingForm.errors.amount}
+                                            </small>
+                                        )}
+                                    </label>
+                                    <label>
+                                        <span>Status</span>
+                                        <select
+                                            value={accountingForm.data.status}
+                                            onChange={(event) =>
+                                                accountingForm.setData(
+                                                    'status',
+                                                    event.target
+                                                        .value as AccountingTransaction['status'],
+                                                )
+                                            }
+                                        >
+                                            {Object.entries(
+                                                invoiceStatusLabels,
+                                            ).map(([value, label]) => (
+                                                <option
+                                                    key={value}
+                                                    value={value}
+                                                >
+                                                    {label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {accountingForm.errors.status && (
+                                            <small>
+                                                {accountingForm.errors.status}
                                             </small>
                                         )}
                                     </label>

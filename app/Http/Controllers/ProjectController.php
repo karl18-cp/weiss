@@ -256,6 +256,7 @@ class ProjectController extends Controller
         $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id']);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
+        $this->ensureReceivableFitsScheduledPayments($project, $data, $scheduledPaymentIds);
         $this->ensurePayableFitsInvoice($data);
         $data = $this->withAccountingFile($request, $project, $data);
 
@@ -283,6 +284,7 @@ class ProjectController extends Controller
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: $accountingTransaction->requested_by ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         $oldFilePath = $accountingTransaction->file_path;
         $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
+        $this->ensureReceivableFitsScheduledPayments($project, $data, $scheduledPaymentIds, $accountingTransaction->id);
         $this->ensurePayableFitsInvoice($data, $accountingTransaction->id);
         $data = $this->withAccountingFile($request, $project, $data);
 
@@ -383,6 +385,61 @@ class ProjectController extends Controller
         if (round((float) $data['amount'], 2) > round($remaining, 2)) {
             throw ValidationException::withMessages([
                 'amount' => 'This payment exceeds the invoice balance of $'.number_format($remaining, 2).'.',
+            ]);
+        }
+    }
+
+    private function ensureReceivableFitsScheduledPayments(
+        Project $project,
+        array $data,
+        array $scheduledPaymentIds,
+        ?int $excludingTransactionId = null,
+    ): void {
+        if (
+            $data['type'] !== 'receivable'
+            || ! in_array($data['status'], ['ok_to_pay', 'paid'], true)
+            || $scheduledPaymentIds === []
+        ) {
+            return;
+        }
+
+        $schedules = $project->scheduledPayments()->get(['id', 'amount']);
+        $balances = $schedules->mapWithKeys(
+            fn (ScheduledPayment $payment): array => [$payment->id => (float) $payment->amount],
+        )->all();
+        $scheduleOrder = $schedules->pluck('id')->all();
+
+        $approvedReceivables = $project->accountingTransactions()
+            ->where('type', 'receivable')
+            ->whereIn('status', ['ok_to_pay', 'paid'])
+            ->when(
+                $excludingTransactionId !== null,
+                fn ($query) => $query->where('id', '!=', $excludingTransactionId),
+            )
+            ->with('scheduledPayments:id')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($approvedReceivables as $receivable) {
+            $remaining = (float) $receivable->amount;
+            $linkedIds = $receivable->scheduledPayments->pluck('id')->all();
+
+            foreach ($scheduleOrder as $scheduleId) {
+                if ($remaining <= 0 || ! in_array($scheduleId, $linkedIds, true)) {
+                    continue;
+                }
+
+                $applied = min($remaining, $balances[$scheduleId] ?? 0);
+                $balances[$scheduleId] = max(0, ($balances[$scheduleId] ?? 0) - $applied);
+                $remaining -= $applied;
+            }
+        }
+
+        $available = array_sum(array_intersect_key($balances, array_flip($scheduledPaymentIds)));
+
+        if (round((float) $data['amount'], 2) > round($available, 2)) {
+            throw ValidationException::withMessages([
+                'amount' => 'This receipt exceeds the selected scheduled payment balance of $'.number_format($available, 2).'.',
             ]);
         }
     }

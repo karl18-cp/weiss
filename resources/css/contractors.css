@@ -121,8 +121,15 @@
     width: 100%;
     min-width: 0;
     background: transparent;
+    color: #172033;
+    caret-color: #172033;
+    -webkit-text-fill-color: #172033;
     font-size: 0.8rem;
     outline: none;
+}
+.contractors-search input::placeholder {
+    color: #8290a5;
+    opacity: 1;
 }
 .contractors-search button {
     display: grid;

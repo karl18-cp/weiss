@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'years_in_house', 'product_id', 'appointment_at', 'appointment_result', 'telemarketer_notes',
     'company_id', 'source', 'agent_id', 'agent_2_id', 'salesman_1_id', 'salesman_2_id',
     'created_by', 'status', 'confirmation_notes',
+    'calltools_contact_id', 'calltools_campaign_name',
 ])]
 class Lead extends Model
 {

@@ -119,8 +119,15 @@
     width: 100%;
     min-width: 0;
     background: transparent;
+    color: #172033;
+    caret-color: #172033;
+    -webkit-text-fill-color: #172033;
     font-size: 0.76rem;
     outline: none;
+}
+.vendor-data-search input::placeholder {
+    color: #8794a8;
+    opacity: 1;
 }
 
 .vendor-data-search button {

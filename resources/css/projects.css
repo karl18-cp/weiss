@@ -339,6 +339,122 @@
     color: #27344b;
 }
 
+.project-schedule-linked {
+    min-height: 10rem;
+    flex: none;
+    border-top: 1px solid #dce4ef;
+    background: #fff;
+}
+
+.project-schedule-linked > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid #e5ebf3;
+    background: #f8fafc;
+}
+
+.project-schedule-linked > header small,
+.project-schedule-linked > header strong {
+    display: block;
+}
+
+.project-schedule-linked > header small {
+    color: #2d65e5;
+    font-size: 0.56rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.project-schedule-linked > header strong {
+    margin-top: 0.1rem;
+    color: #27344b;
+    font-size: 0.76rem;
+}
+
+.project-schedule-linked > header > span {
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    color: #245bd9;
+    background: #eaf1ff;
+    font-size: 0.56rem;
+    font-weight: 850;
+}
+
+.project-schedule-linked > div {
+    max-height: 12rem;
+    overflow: auto;
+}
+
+.project-schedule-linked table {
+    width: 100%;
+    min-width: 52rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.66rem;
+}
+
+.project-schedule-linked th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #66748a;
+    background: #f7f9fc;
+    font-size: 0.54rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.project-schedule-linked td {
+    max-width: 18rem;
+    padding: 0.6rem 0.7rem;
+    overflow: hidden;
+    border-bottom: 1px solid #e7edf5;
+    color: #536177;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-schedule-linked td strong {
+    color: #27344b;
+}
+
+.project-schedule-linked-status {
+    display: inline-flex;
+    padding: 0.22rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.54rem;
+    font-weight: 850;
+}
+
+.project-schedule-linked-status.is-pending {
+    color: #8a6517;
+    background: #fff8df;
+}
+
+.project-schedule-linked-status.is-ok_to_pay {
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-schedule-linked-status.is-paid {
+    color: #18794e;
+    background: #effaf4;
+}
+
+.project-schedule-linked-empty {
+    height: 4.5rem;
+    color: #8290a5 !important;
+    text-align: center;
+}
+
 .project-schedule-flag {
     display: inline-flex;
     min-width: 2.2rem;
@@ -578,6 +694,122 @@
 
 .project-invoices-table td strong {
     color: #27344b;
+}
+
+.project-invoice-linked {
+    min-height: 10rem;
+    flex: none;
+    border-top: 1px solid #dce4ef;
+    background: #fff;
+}
+
+.project-invoice-linked > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid #e5ebf3;
+    background: #f8fafc;
+}
+
+.project-invoice-linked > header small,
+.project-invoice-linked > header strong {
+    display: block;
+}
+
+.project-invoice-linked > header small {
+    color: #a45d06;
+    font-size: 0.56rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.project-invoice-linked > header strong {
+    margin-top: 0.1rem;
+    color: #27344b;
+    font-size: 0.76rem;
+}
+
+.project-invoice-linked > header > span {
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    color: #a45d06;
+    background: #fff5dd;
+    font-size: 0.56rem;
+    font-weight: 850;
+}
+
+.project-invoice-linked > div {
+    max-height: 12rem;
+    overflow: auto;
+}
+
+.project-invoice-linked table {
+    width: 100%;
+    min-width: 58rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.66rem;
+}
+
+.project-invoice-linked th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #66748a;
+    background: #f7f9fc;
+    font-size: 0.54rem;
+    font-weight: 850;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.project-invoice-linked td {
+    max-width: 18rem;
+    padding: 0.6rem 0.7rem;
+    overflow: hidden;
+    border-bottom: 1px solid #e7edf5;
+    color: #536177;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-invoice-linked td strong {
+    color: #27344b;
+}
+
+.project-invoice-linked-status {
+    display: inline-flex;
+    padding: 0.22rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.54rem;
+    font-weight: 850;
+}
+
+.project-invoice-linked-status.is-pending {
+    color: #8a6517;
+    background: #fff8df;
+}
+
+.project-invoice-linked-status.is-ok_to_pay {
+    color: #245bd9;
+    background: #edf3ff;
+}
+
+.project-invoice-linked-status.is-paid {
+    color: #18794e;
+    background: #effaf4;
+}
+
+.project-invoice-linked-empty {
+    height: 4.5rem;
+    color: #8290a5 !important;
+    text-align: center;
 }
 
 .project-invoice-notes {

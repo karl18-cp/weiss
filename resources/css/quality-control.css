@@ -58,8 +58,15 @@
 .quality-control-search input {
     width: 100%;
     background: transparent;
+    color: #172033;
+    caret-color: #172033;
+    -webkit-text-fill-color: #172033;
     font-size: 0.78rem;
     outline: none;
+}
+.quality-control-search input::placeholder {
+    color: #8b98aa;
+    opacity: 1;
 }
 
 .quality-control-total {
