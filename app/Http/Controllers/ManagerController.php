@@ -17,7 +17,7 @@ class ManagerController extends Controller
     public function index(): Response
     {
         return Inertia::render('management/managers', [
-            'managers' => Manager::query()->with(['account:acc_id,username', 'company:com_id,company', 'permissions'])->orderBy('manager_name')->get(),
+            'managers' => Manager::query()->with(['account:acc_id,username', 'company:com_id,company', 'companies:com_id,company', 'permissions'])->orderBy('manager_name')->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'managerTypes' => ManagerAccess::TYPES,
             'permissionModules' => ManagerAccess::MODULES,
@@ -29,7 +29,8 @@ class ManagerController extends Controller
         DB::transaction(function () use ($request) {
             $data = $request->validated();
             $account = Account::query()->create(['username' => $data['username'], 'password' => $data['password'], 'role' => 'manager']);
-            $manager = Manager::query()->create(['account_id' => $account->acc_id, 'manager_name' => $data['manager_name'], 'phone' => $data['phone'], 'company_id' => $data['company_id'], 'manager_types' => $data['manager_types']]);
+            $manager = Manager::query()->create(['account_id' => $account->acc_id, 'manager_name' => $data['manager_name'], 'phone' => $data['phone'], 'company_id' => $data['company_ids'][0], 'manager_types' => $data['manager_types']]);
+            $manager->companies()->sync($data['company_ids']);
             $this->syncPermissions($manager, $data['permissions']);
         });
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Manager created.']);
@@ -46,7 +47,8 @@ class ManagerController extends Controller
                 $accountData['password'] = $data['password'];
             }
             $manager->account->update($accountData);
-            $manager->update(['manager_name' => $data['manager_name'], 'phone' => $data['phone'], 'company_id' => $data['company_id'], 'manager_types' => $data['manager_types']]);
+            $manager->update(['manager_name' => $data['manager_name'], 'phone' => $data['phone'], 'company_id' => $data['company_ids'][0], 'manager_types' => $data['manager_types']]);
+            $manager->companies()->sync($data['company_ids']);
             $this->syncPermissions($manager, $data['permissions']);
         });
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Manager updated.']);

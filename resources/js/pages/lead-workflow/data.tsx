@@ -1,8 +1,9 @@
-import { Head, router } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Search, Users, X } from 'lucide-react';
+import { Head, router, useForm } from '@inertiajs/react';
+import { ChevronLeft, ChevronRight, FileSpreadsheet, Search, Upload, Users, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import '@/../css/lead-data.css';
 import DataSectionTabs from '@/components/data-section-tabs';
+import { formatAppointmentDate } from '@/lib/appointment-date';
 
 type LeadRow = {
     id: number;
@@ -16,6 +17,7 @@ type LeadRow = {
     zip: string;
     appointment_at: string | null;
     lead_result: string;
+    rep: string;
     appointment_result: string;
     mobile: string;
     phone: string;
@@ -46,6 +48,14 @@ type DataPageProps = {
         agent: number | null;
     };
     totalLeads: number;
+    importResult: {
+        imported: number;
+        notes_updated: number;
+        duplicates: number;
+        skipped: number;
+        total: number;
+        errors: string[];
+    } | null;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -65,10 +75,27 @@ export default function Data({
     agents,
     filters,
     totalLeads,
+    importResult,
 }: DataPageProps) {
     const [search, setSearch] = useState(filters.search);
     const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
     const searchInput = useRef<HTMLInputElement>(null);
+    const [importOpen, setImportOpen] = useState(false);
+    const importForm = useForm<{
+        file: File | null;
+    }>({ file: null });
+
+    const submitImport = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        importForm.post('/lead-workflow/data/import', {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                setImportOpen(false);
+                importForm.reset();
+            },
+        });
+    };
 
     const visit = (parameters: { search?: string; agent?: number | null }) => {
         router.get(
@@ -124,10 +151,34 @@ export default function Data({
                             Review every lead and its current workflow result.
                         </p>
                     </div>
-                    <span className="lead-data-total">
-                        {totalLeads.toLocaleString()} Leads
-                    </span>
+                    <div className="lead-data-header-actions">
+                        <button type="button" onClick={() => setImportOpen(true)}>
+                            <Upload /> Import leads
+                        </button>
+                        <span className="lead-data-total">
+                            {totalLeads.toLocaleString()} Leads
+                        </span>
+                    </div>
                 </header>
+
+                {importResult && (
+                    <section className="lead-import-result">
+                        <FileSpreadsheet />
+                        <div>
+                            <strong>Last import: {importResult.imported} added, {importResult.notes_updated} telemarketer notes updated</strong>
+                            <span>
+                                {importResult.duplicates} existing leads matched and {importResult.skipped} invalid rows skipped
+                                out of {importResult.total} rows.
+                            </span>
+                            {importResult.errors.length > 0 && (
+                                <details>
+                                    <summary>View skipped-row details</summary>
+                                    <ul>{importResult.errors.map((error) => <li key={error}>{error}</li>)}</ul>
+                                </details>
+                            )}
+                        </div>
+                    </section>
+                )}
 
                 <DataSectionTabs
                     active="Tele Leads"
@@ -271,6 +322,7 @@ export default function Data({
                                         <th>Zip</th>
                                         <th>App. Date</th>
                                         <th>Lead Results</th>
+                                        <th>Rep</th>
                                         <th>App. Result</th>
                                         <th>Mobile</th>
                                         <th>Phone</th>
@@ -310,15 +362,16 @@ export default function Data({
                                                 <td>{lead.state}</td>
                                                 <td>{lead.zip}</td>
                                                 <td>
-                                                    {formatDate(
-                                                        lead.appointment_at,
-                                                    )}
+                                                    {lead.appointment_at
+                                                        ? formatAppointmentDate(lead.appointment_at)
+                                                        : 'N/A'}
                                                 </td>
                                                 <td>
                                                     <span className="lead-data-result">
                                                         {lead.lead_result}
                                                     </span>
                                                 </td>
+                                                <td>{lead.rep}</td>
                                                 <td>
                                                     {lead.appointment_result}
                                                 </td>
@@ -359,7 +412,7 @@ export default function Data({
                                     {leads.data.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={14}
+                                                colSpan={15}
                                                 className="lead-data-empty"
                                             >
                                                 <Users />
@@ -375,6 +428,29 @@ export default function Data({
                         </div>
                     </section>
                 </div>
+
+                {importOpen && (
+                    <div className="lead-import-backdrop" role="presentation" onMouseDown={() => setImportOpen(false)}>
+                        <section className="lead-import-modal" role="dialog" aria-modal="true" aria-labelledby="lead-import-title" onMouseDown={(event) => event.stopPropagation()}>
+                            <header>
+                                <div><FileSpreadsheet /><span><strong id="lead-import-title">Import leads</strong><small>WEISS Excel template (.xlsx)</small></span></div>
+                                <button type="button" onClick={() => setImportOpen(false)} aria-label="Close import"><X /></button>
+                            </header>
+                            <form onSubmit={submitImport}>
+                                <p>The file's Agent and Lead Results determine ownership and workflow placement. Company and product are left blank, while Rep is always saved as N/A. Duplicate phone numbers or customer/address records are skipped.</p>
+                                <label>
+                                    Excel workbook
+                                    <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => importForm.setData('file', event.target.files?.[0] ?? null)} required />
+                                    {importForm.errors.file && <span className="lead-import-error">{importForm.errors.file}</span>}
+                                </label>
+                                <footer>
+                                    <button type="button" className="is-secondary" onClick={() => setImportOpen(false)}>Cancel</button>
+                                    <button type="submit" disabled={importForm.processing}>{importForm.processing ? 'Importing…' : 'Import leads'}</button>
+                                </footer>
+                            </form>
+                        </section>
+                    </div>
+                )}
             </main>
         </>
     );

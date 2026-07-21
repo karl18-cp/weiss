@@ -1,0 +1,132 @@
+.rc-dialer {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 100;
+    width: min(23rem, calc(100vw - 2rem));
+    overflow: hidden;
+    border: 1px solid rgb(148 163 184 / 28%);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 24px 70px rgb(15 23 42 / 24%);
+    color: #172033;
+}
+
+.rc-dialer > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 0.9rem;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: #fff;
+}
+
+.rc-dialer__brand {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.rc-dialer > header button {
+    display: grid;
+    width: 1.8rem;
+    height: 1.8rem;
+    place-items: center;
+    border: 0;
+    border-radius: 0.5rem;
+    background: rgb(255 255 255 / 14%);
+    color: inherit;
+}
+
+.rc-dialer svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.rc-dialer__status {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 1rem;
+}
+
+.rc-dialer__status-icon {
+    display: grid;
+    width: 2.8rem;
+    height: 2.8rem;
+    place-items: center;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #4f46e5;
+}
+
+.rc-dialer__status--active .rc-dialer__status-icon {
+    animation: rc-dialer-pulse 1.2s ease-in-out infinite;
+}
+
+.rc-dialer__status--success .rc-dialer__status-icon {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.rc-dialer__status--error .rc-dialer__status-icon {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.rc-dialer__status-icon svg {
+    width: 1.3rem;
+    height: 1.3rem;
+}
+
+.rc-dialer__status strong {
+    display: block;
+    font-size: 0.88rem;
+}
+
+.rc-dialer__status p {
+    margin-top: 0.18rem;
+    color: #64748b;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.rc-dialer > footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 0.7rem;
+}
+
+.rc-dialer > footer span {
+    color: #64748b;
+}
+
+.rc-dialer > footer strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes rc-dialer-pulse {
+    50% {
+        box-shadow: 0 0 0 0.45rem rgb(79 70 229 / 12%);
+        transform: scale(1.04);
+    }
+}
+
+@media (max-width: 640px) {
+    .rc-dialer {
+        right: 1rem;
+        bottom: 1rem;
+        left: 1rem;
+        width: auto;
+    }
+}

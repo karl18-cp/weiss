@@ -6,11 +6,15 @@ use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Company;
 use App\Models\Lead;
+use App\Models\LeadAgentAssignment;
 use App\Models\LeadNote;
 use App\Models\Product;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class CallToolsWebhookController extends Controller
 {
@@ -70,6 +74,20 @@ class CallToolsWebhookController extends Controller
             'phone',
         ]);
         $contactId = $this->firstFilled($request, ['contact_id', 'id']);
+        $telemarketerNotes = $this->firstFilled($request, [
+            'notes',
+            'last_note_text',
+            'note',
+            'telemarketer_notes',
+        ]);
+        $appointmentValue = $this->firstFilled($request, [
+            'appointment_at',
+            'appoint_time',
+            'appointment_time',
+            'appointment_date',
+            'appointment_datetime',
+        ]);
+        $appointmentAt = $this->normalizeAppointment($appointmentValue);
 
         if ($contactId === null && $phoneNumber !== null) {
             $contactId = 'phone-'.hash('sha256', preg_replace('/\D+/', '', $phoneNumber) ?: $phoneNumber);
@@ -78,6 +96,8 @@ class CallToolsWebhookController extends Controller
         $request->merge([
             'contact_id' => $contactId,
             'phone_number' => $phoneNumber,
+            'notes' => $telemarketerNotes,
+            'appointment_at' => $appointmentAt ?? $appointmentValue,
         ]);
 
         $validator = Validator::make($request->all(), [
@@ -96,7 +116,16 @@ class CallToolsWebhookController extends Controller
             'agent_name' => ['nullable', 'string', 'max:255'],
             'campaign_name' => ['nullable', 'string', 'max:255'],
             'product' => ['nullable', 'string', 'max:255'],
-            'appointment_at' => ['nullable', 'date'],
+            'appointment_at' => [
+                'nullable',
+                'string',
+                'max:100',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($this->normalizeAppointment(is_scalar($value) ? (string) $value : null) === null) {
+                        $fail('The appointment date and time format is not recognized.');
+                    }
+                },
+            ],
         ]);
 
         if ($validator->fails()) {
@@ -107,6 +136,7 @@ class CallToolsWebhookController extends Controller
         }
 
         $data = $validator->validated();
+        $data['appointment_at'] = $this->normalizeAppointment($data['appointment_at'] ?? null);
         $relationships = $this->resolveRelationships(
             $data['agent_name'] ?? null,
             $data['product'] ?? null,
@@ -146,11 +176,47 @@ class CallToolsWebhookController extends Controller
                 'company_id' => $relationships['company_id'],
                 'source' => 'CallTools',
                 'calltools_campaign_name' => $data['campaign_name'] ?? null,
-                'agent_id' => $relationships['agent_id'],
+                'agent_id' => $existingLead?->agent_id ?? $relationships['agent_id'],
                 'created_by' => $relationships['created_by'],
                 'status' => 'fresh',
             ],
         );
+
+        if ($existingLead && (int) $relationships['agent_id'] !== (int) $lead->agent_id) {
+            $hasAssignmentHistory = class_exists(LeadAgentAssignment::class)
+                && Schema::hasTable('lead_agent_assignments');
+            $latestAgentId = $hasAssignmentHistory
+                ? (int) (LeadAgentAssignment::query()
+                    ->where('lead_id', $lead->id)
+                    ->latest('id')
+                    ->value('agent_id') ?? $lead->agent_id)
+                : (int) ($lead->agent_2_id ?: $lead->agent_id);
+
+            if ($latestAgentId !== (int) $relationships['agent_id']) {
+                if ($hasAssignmentHistory) {
+                    LeadAgentAssignment::query()->create([
+                        'lead_id' => $lead->id,
+                        'agent_id' => $relationships['agent_id'],
+                        'assigned_by' => $relationships['created_by'],
+                        'is_original' => false,
+                    ]);
+                }
+
+                if (! $lead->agent_2_id) {
+                    $lead->update(['agent_2_id' => $relationships['agent_id']]);
+                }
+
+                $agentName = Agent::query()
+                    ->whereKey($relationships['agent_id'])
+                    ->value('agent_name') ?? 'Unknown agent';
+                LeadNote::query()->create([
+                    'lead_id' => $lead->id,
+                    'note_type' => 'agent_reassigned',
+                    'body' => "Agent reassigned to {$agentName} by CallTools.",
+                    'created_by' => $relationships['created_by'],
+                ]);
+            }
+        }
 
         if ($telemarketerNotes !== '') {
             $latestNote = $lead->notes()
@@ -250,6 +316,57 @@ class CallToolsWebhookController extends Controller
             ' ',
             preg_replace('/[^a-z0-9]+/i', ' ', mb_strtolower($value)),
         ));
+    }
+
+    private function normalizeAppointment(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $value = trim($value);
+
+        if (preg_match('/^\d{10,13}$/', $value) === 1) {
+            $timestamp = (int) $value;
+
+            if (strlen($value) === 13) {
+                $timestamp = (int) floor($timestamp / 1000);
+            }
+
+            return CarbonImmutable::createFromTimestamp($timestamp)
+                ->format('Y-m-d H:i:s');
+        }
+
+        $candidates = array_unique([
+            $value,
+            preg_replace('/\s+at\s+/i', ' ', $value) ?? $value,
+            preg_replace('/(\d)(st|nd|rd|th)\b/i', '$1', $value) ?? $value,
+        ]);
+
+        foreach ($candidates as $candidate) {
+            try {
+                return CarbonImmutable::parse($candidate)->format('Y-m-d H:i:s');
+            } catch (Throwable) {
+                // Try extracting the first date/time from a displayed range.
+            }
+        }
+
+        if (preg_match(
+            '/(?:[A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?[,]?\s+\d{4}|\d{1,4}[\/-]\d{1,2}[\/-]\d{1,4})[,]?\s+(?:at\s+)?\d{1,2}:\d{2}(?:\s*[AP]M)?/i',
+            $value,
+            $match,
+        ) === 1) {
+            try {
+                $candidate = preg_replace('/\s+at\s+/i', ' ', $match[0]) ?? $match[0];
+                $candidate = preg_replace('/(\d)(st|nd|rd|th)\b/i', '$1', $candidate) ?? $candidate;
+
+                return CarbonImmutable::parse($candidate)->format('Y-m-d H:i:s');
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /** @param list<string> $keys */

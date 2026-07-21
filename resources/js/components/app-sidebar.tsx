@@ -13,7 +13,6 @@ import {
     PhoneCall,
     RefreshCw,
     RotateCcw,
-    Search,
     Send,
     Settings,
     Store,
@@ -21,7 +20,7 @@ import {
     UserRoundPlus,
     Users,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import '@/../css/app-sidebar.css';
 import {
     Sidebar,
@@ -37,12 +36,14 @@ import { dashboard, logout } from '@/routes';
 import { edit as profile } from '@/routes/profile';
 import type { LucideIcon } from 'lucide-react';
 import type { Auth } from '@/types';
+import LeadGlobalSearch from '@/components/lead-global-search';
 
 type SidebarItem = {
     title: string;
     icon: LucideIcon;
     href: NonNullable<InertiaLinkProps['href']>;
     permission?: string;
+    countKey?: string;
 };
 
 const workflowItems: SidebarItem[] = [
@@ -58,49 +59,57 @@ const workflowItems: SidebarItem[] = [
         icon: Store,
         href: '/lead-workflow/leads-shop',
         permission: 'leads_shop',
+        countKey: 'leads_shop',
     },
     {
         title: 'Confirm Leads',
         icon: BadgeCheck,
         href: '/lead-workflow/confirm-leads',
         permission: 'confirm_leads',
+        countKey: 'confirm_leads',
     },
     {
         title: 'Dispatch Leads',
         icon: Send,
         href: '/lead-workflow/dispatch-leads',
         permission: 'dispatch_leads',
+        countKey: 'dispatch_leads',
     },
     {
         title: 'Reschedule',
         icon: RefreshCw,
         href: '/lead-workflow/reschedule',
         permission: 'reschedule',
+        countKey: 'reschedule',
     },
     {
         title: 'Rehash',
         icon: RotateCcw,
         href: '/lead-workflow/rehash',
         permission: 'rehash',
+        countKey: 'rehash',
     },
     {
         title: '555',
         icon: PhoneCall,
         href: '/lead-workflow/555',
         permission: '555',
+        countKey: '555',
     },
-    { title: 'LA', icon: MapPin, href: '/lead-workflow/la', permission: 'la' },
+    { title: 'LA', icon: MapPin, href: '/lead-workflow/la', permission: 'la', countKey: 'la' },
     {
         title: 'HIS',
         icon: Clock3,
         href: '/lead-workflow/his',
         permission: 'his',
+        countKey: 'his',
     },
     {
         title: 'Keep in Touch',
         icon: MessageCircle,
         href: '/lead-workflow/keep-in-touch',
         permission: 'keep_in_touch',
+        countKey: 'keep_in_touch',
     },
     {
         title: 'Data',
@@ -146,9 +155,11 @@ const managementItems: SidebarItem[] = [
 function NavigationSection({
     label,
     items,
+    counts = {},
 }: {
     label: string;
     items: SidebarItem[];
+    counts?: Record<string, number>;
 }) {
     const { currentUrl, isCurrentUrl } = useCurrentUrl();
 
@@ -163,6 +174,11 @@ function NavigationSection({
                         <>
                             <item.icon />
                             <span>{item.title}</span>
+                            {item.countKey && (
+                                <span className="crm-sidebar__count">
+                                    {(counts[item.countKey] ?? 0).toLocaleString()}
+                                </span>
+                            )}
                         </>
                     );
 
@@ -189,10 +205,10 @@ function NavigationSection({
 }
 
 export function AppSidebar() {
-    const { auth } = usePage<{ auth: Auth }>().props;
-    const [search, setSearch] = useState('');
-    const query = search.trim().toLowerCase();
-
+    const { auth, workflowCounts } = usePage<{
+        auth: Auth;
+        workflowCounts: Record<string, number>;
+    }>().props;
     const filterItems = (items: SidebarItem[]) => {
         const accessible = items.filter(
             (item) =>
@@ -201,22 +217,18 @@ export function AppSidebar() {
                 auth.permissions?.[item.permission] === 'view' ||
                 auth.permissions?.[item.permission] === 'edit',
         );
-        return query
-            ? accessible.filter((item) =>
-                  item.title.toLowerCase().includes(query),
-              )
-            : accessible;
+        return accessible;
     };
 
     const filteredWorkflow = useMemo(
         () => filterItems(workflowItems),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [query, auth.permissions, auth.user.role],
+        [auth.permissions, auth.user.role],
     );
     const filteredManagement = useMemo(
         () => filterItems(managementItems),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [query, auth.permissions, auth.user.role],
+        [auth.permissions, auth.user.role],
     );
 
     const handleLogout = () => router.flushAll();
@@ -237,21 +249,14 @@ export function AppSidebar() {
                 </div>
             </header>
 
-            <div className="crm-sidebar__search">
-                <Search aria-hidden="true" />
-                <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search accessible leads"
-                    aria-label="Search sidebar"
-                />
-            </div>
+            <LeadGlobalSearch className="crm-sidebar__search" placeholder="Search accessible leads" />
 
             <SidebarContent className="crm-sidebar__content">
                 {filteredWorkflow.length > 0 && (
                     <NavigationSection
                         label="Lead Workflow"
                         items={filteredWorkflow}
+                        counts={workflowCounts}
                     />
                 )}
 
@@ -262,7 +267,7 @@ export function AppSidebar() {
                     />
                 )}
 
-                {!query && (
+                {(
                     <SidebarGroup className="crm-sidebar__group crm-sidebar__account">
                         <SidebarGroupLabel className="crm-sidebar__label">
                             Account

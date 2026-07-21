@@ -25,11 +25,15 @@ import {
     UserRound,
     X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import '@/../css/leads-shop.css';
 import { RingCentralCallButton } from '@/components/ringcentral-call-button';
 import { useSystemModal } from '@/components/system-modal-provider';
 import { zillowSearchUrl } from '@/lib/address-search';
+import {
+    appointmentInputValue,
+    formatAppointmentDate,
+} from '@/lib/appointment-date';
 
 export type Lead = {
     id: number;
@@ -45,7 +49,7 @@ export type Lead = {
     state: string;
     email: string | null;
     years_in_house: number;
-    appointment_at: string;
+    appointment_at: string | null;
     appointment_result: string | null;
     telemarketer_notes: string;
     source: string;
@@ -56,9 +60,11 @@ export type Lead = {
     product: { prod_id: number; product_name: string } | null;
     agent: { agent_id: number; agent_name: string } | null;
     second_agent: { agent_id: number; agent_name: string } | null;
+    agent_assignments?: LeadAgentAssignment[];
     salesman_one: { salesman_id: number; salesman_name: string } | null;
     salesman_two: { salesman_id: number; salesman_name: string } | null;
     notes: LeadNote[];
+    movements?: LeadMovement[];
 };
 
 type LeadNote = {
@@ -67,6 +73,22 @@ type LeadNote = {
     body: string;
     created_at: string;
     creator: { acc_id: number; username: string } | null;
+};
+
+type LeadMovement = {
+    id: number;
+    from_status: string | null;
+    to_status: string;
+    created_at: string;
+    mover: { acc_id: number; username: string } | null;
+};
+
+type LeadAgentAssignment = {
+    id: number;
+    is_original: boolean;
+    created_at: string;
+    agent: { agent_id: number; agent_name: string } | null;
+    assigner: { acc_id: number; username: string } | null;
 };
 
 export type CompanyOption = { com_id: number; company: string };
@@ -106,6 +128,7 @@ const emptyLeadForm = {
     years_in_house: '',
     product_id: '',
     appointment_at: '',
+    appointment_result: '',
     telemarketer_notes: '',
     company_id: '',
     source: 'CallTools',
@@ -122,6 +145,61 @@ const formatDate = (value: string) =>
         hour: 'numeric',
         minute: '2-digit',
     }).format(new Date(value));
+
+const workflowLocation = (status: string | null) => {
+    const locations: Record<string, string> = {
+        fresh: 'Leads Shop / Freshly In',
+        raw: 'Leads Shop / Raw',
+        cb: 'Leads Shop / Call Back',
+        naov: 'Leads Shop / NAOV',
+        toss: 'Leads Shop / TOSS',
+        confirmed: 'Confirm Leads',
+        dispatched: 'Dispatch Leads',
+        reschedule: 'Reschedule',
+        rehash: 'Rehash',
+        rehash_ng: 'Rehash / NG',
+        rehash_toss: 'Rehash / TOSS',
+        rehash_cb: 'Rehash / Call Back',
+        '555': '555',
+        kit: 'Keep in Touch',
+        kit_ng: 'Keep in Touch / NG',
+        kit_toss: 'Keep in Touch / TOSS',
+        kit_cb: 'Keep in Touch / Call Back',
+        la: 'LA',
+        his: 'HIS',
+        project: 'Projects',
+    };
+
+    return status ? (locations[status] ?? status.replaceAll('_', ' ')) : 'New lead';
+};
+
+const historyNoteLabel = (type: string) => {
+    const labels: Record<string, string> = {
+        telemarketer: 'Telemarketer note',
+        confirmation: 'Confirmation note',
+        dispatch: 'Dispatch note',
+        appointment_result: 'Appointment result',
+        salesman_sent: 'Salesman Sent',
+        salesman_assignment: 'Salesman assignment',
+        agent_reassigned: 'Agent reassigned',
+    };
+
+    return labels[type] ?? 'Lead note';
+};
+
+const calendarDateKey = (value: string | null | undefined) => {
+    if (!value) return null;
+
+    const datePart = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+
+    if (datePart) return datePart;
+
+    const parsed = new Date(value);
+
+    return Number.isNaN(parsed.getTime())
+        ? null
+        : parsed.toLocaleDateString('en-CA');
+};
 
 const leadAddress = (lead: Lead) =>
     [lead.address, lead.city, lead.state, lead.zip_code]
@@ -333,17 +411,27 @@ export default function LeadsShop({
     salesmen = [],
     queue,
 }: LeadsShopProps) {
+    const requestedLeadId = Number(new URLSearchParams(window.location.search).get('lead')) || null;
+    const requestedLead = leads.find((lead) => lead.id === requestedLeadId) ?? null;
     const { notify } = useSystemModal();
     const [search, setSearch] = useState('');
     const [selectedDate, setSelectedDate] = useState<string>('all');
     const [selectedStatus, setSelectedStatus] = useState(
-        queue?.status ?? 'fresh',
+        requestedLead?.status ?? queue?.status ?? 'fresh',
     );
     const [companyFilter, setCompanyFilter] = useState('all');
     const [sourceFilter, setSourceFilter] = useState('all');
     const [cityFilter, setCityFilter] = useState('all');
     const [productFilter, setProductFilter] = useState('all');
-    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [agentFilter, setAgentFilter] = useState('all');
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [selectedId, setSelectedId] = useState<number | null>(requestedLeadId);
+    const [appointmentResultDraft, setAppointmentResultDraft] = useState('');
+    const [salesmanOneDraft, setSalesmanOneDraft] = useState('');
+    const [salesmanTwoDraft, setSalesmanTwoDraft] = useState('');
+    const [savingAssignment, setSavingAssignment] = useState<
+        'appointment' | 'salesman_1' | 'salesman_2' | null
+    >(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
     const [historyType, setHistoryType] = useState<
@@ -375,14 +463,92 @@ export default function LeadsShop({
         amount: '',
     });
 
-    const lastThirtyDays = useMemo(() => {
+    useEffect(() => {
+        let refreshing = false;
+
+        const refreshLeads = () => {
+            if (
+                refreshing ||
+                document.hidden ||
+                isEditing ||
+                saleModalOpen ||
+                form.processing ||
+                telemarketerNoteForm.processing ||
+                confirmationNoteForm.processing ||
+                dispatchNoteForm.processing ||
+                appointmentResultNoteForm.processing ||
+                saleForm.processing
+            ) {
+                return;
+            }
+
+            refreshing = true;
+            router.reload({
+                only: ['leads'],
+                showProgress: false,
+                onFinish: () => {
+                    refreshing = false;
+                },
+            });
+        };
+
+        const interval = window.setInterval(refreshLeads, 5000);
+        const refreshWhenVisible = () => {
+            if (!document.hidden) {
+                refreshLeads();
+            }
+        };
+
+        document.addEventListener('visibilitychange', refreshWhenVisible);
+
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener(
+                'visibilitychange',
+                refreshWhenVisible,
+            );
+        };
+    }, [
+        appointmentResultNoteForm.processing,
+        confirmationNoteForm.processing,
+        dispatchNoteForm.processing,
+        form.processing,
+        isEditing,
+        saleForm.processing,
+        saleModalOpen,
+        telemarketerNoteForm.processing,
+    ]);
+
+    const availableDateRows = useMemo(() => {
         const counts = new Map<string, number>();
         leads.forEach((lead) => {
-            const key = new Date(
+            const key = calendarDateKey(
                 lead[queue?.dateField ?? 'created_at'],
-            ).toLocaleDateString('en-CA');
+            );
+            if (!key) return;
             counts.set(key, (counts.get(key) ?? 0) + 1);
         });
+
+        if (queue?.dateField === 'appointment_at') {
+            return [...counts.entries()]
+                .sort(([first], [second]) => first.localeCompare(second))
+                .map(([key, count]) => {
+                    const date = new Date(`${key}T12:00:00`);
+
+                    return {
+                        key,
+                        date: new Intl.DateTimeFormat('en-US', {
+                            month: '2-digit',
+                            day: '2-digit',
+                            year: '2-digit',
+                        }).format(date),
+                        day: new Intl.DateTimeFormat('en-US', {
+                            weekday: 'short',
+                        }).format(date),
+                        count,
+                    };
+                });
+        }
 
         return Array.from({ length: 30 }, (_, index) => {
             const date = new Date();
@@ -402,7 +568,7 @@ export default function LeadsShop({
                 }).format(date),
                 count: counts.get(key) ?? 0,
             };
-        });
+        }).filter((day) => day.count > 0);
     }, [leads, queue?.dateField]);
 
     const filterOptions = useMemo(
@@ -429,6 +595,20 @@ export default function LeadsShop({
                             String(lead.product!.prod_id),
                             lead.product!.product_name,
                         ]),
+                ),
+            ).sort((a, b) => a[1].localeCompare(b[1])),
+            agents: Array.from(
+                new Map(
+                    leads.flatMap((lead) => [
+                        ...(lead.agent
+                            ? [[String(lead.agent.agent_id), lead.agent.agent_name] as [string, string]]
+                            : []),
+                        ...(lead.agent_assignments ?? []).flatMap((assignment) =>
+                            assignment.agent
+                                ? [[String(assignment.agent.agent_id), assignment.agent.agent_name] as [string, string]]
+                                : [],
+                        ),
+                    ]),
                 ),
             ).sort((a, b) => a[1].localeCompare(b[1])),
         }),
@@ -469,9 +649,9 @@ export default function LeadsShop({
         return leads.filter((lead) => {
             const matchesDate =
                 selectedDate === 'all' ||
-                new Date(
+                calendarDateKey(
                     lead[queue?.dateField ?? 'created_at'],
-                ).toLocaleDateString('en-CA') === selectedDate;
+                ) === selectedDate;
             const matchesSearch =
                 !query ||
                 [
@@ -496,6 +676,14 @@ export default function LeadsShop({
             const matchesProduct =
                 productFilter === 'all' ||
                 String(lead.product?.prod_id) === productFilter;
+            const matchesAgent =
+                agentFilter === 'all' ||
+                (agentFilter === 'unassigned'
+                    ? !lead.agent
+                    : String(lead.agent?.agent_id) === agentFilter ||
+                      (lead.agent_assignments ?? []).some(
+                          (assignment) => String(assignment.agent?.agent_id) === agentFilter,
+                      ));
 
             return (
                 matchesDate &&
@@ -504,7 +692,8 @@ export default function LeadsShop({
                 matchesCompany &&
                 matchesSource &&
                 matchesCity &&
-                matchesProduct
+                matchesProduct &&
+                matchesAgent
             );
         });
     }, [
@@ -516,21 +705,35 @@ export default function LeadsShop({
         sourceFilter,
         cityFilter,
         productFilter,
+        agentFilter,
         queue?.dateField,
     ]);
 
     const clearListFilters = () => {
+        setSearch('');
+        setSelectedDate('all');
         setSelectedStatus(queue?.status ?? 'fresh');
         setCompanyFilter('all');
         setSourceFilter('all');
         setCityFilter('all');
         setProductFilter('all');
+        setAgentFilter('all');
+        setIsRefreshing(true);
+
+        router.reload({
+            only: ['leads'],
+            showProgress: false,
+            onFinish: () => setIsRefreshing(false),
+        });
     };
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
 
     const selectLead = (lead: Lead) => {
         setSelectedId(lead.id);
+        setAppointmentResultDraft(lead.appointment_result ?? '');
+        setSalesmanOneDraft(String(lead.salesman_one?.salesman_id ?? ''));
+        setSalesmanTwoDraft(String(lead.salesman_two?.salesman_id ?? ''));
         setIsEditing(false);
         setHistoryType(null);
         telemarketerNoteForm.reset();
@@ -555,7 +758,8 @@ export default function LeadsShop({
             email: lead.email ?? '',
             years_in_house: String(lead.years_in_house),
             product_id: String(lead.product?.prod_id ?? ''),
-            appointment_at: lead.appointment_at.slice(0, 16),
+            appointment_at: appointmentInputValue(lead.appointment_at ?? ''),
+            appointment_result: lead.appointment_result ?? '',
             telemarketer_notes: lead.telemarketer_notes,
             company_id: String(lead.company?.com_id ?? ''),
             source: 'CallTools',
@@ -573,7 +777,13 @@ export default function LeadsShop({
 
         form.put(`/lead-workflow/leads-shop/${selected.id}`, {
             preserveScroll: true,
-            onSuccess: () => setIsEditing(false),
+            onSuccess: () => {
+                setAppointmentResultDraft(form.data.appointment_result);
+                setSalesmanOneDraft(form.data.salesman_1_id);
+                setSalesmanTwoDraft(form.data.salesman_2_id);
+                setIsEditing(false);
+                router.flushAll();
+            },
         });
     };
 
@@ -687,44 +897,43 @@ export default function LeadsShop({
         });
     };
 
-    const assignSalesman = (
-        field: 'salesman_1_id' | 'salesman_2_id',
-        value: string,
-    ) => {
+    const saveSalesman = (field: 'salesman_1_id' | 'salesman_2_id') => {
         if (!selected) {
             return;
         }
+
+        setSavingAssignment(
+            field === 'salesman_1_id' ? 'salesman_1' : 'salesman_2',
+        );
 
         router.patch(
             `/lead-workflow/leads-shop/${selected.id}/salesmen`,
             {
-                salesman_1_id:
-                    field === 'salesman_1_id'
-                        ? value || null
-                        : (selected.salesman_one?.salesman_id ?? null),
-                salesman_2_id:
-                    field === 'salesman_2_id'
-                        ? value || null
-                        : (selected.salesman_two?.salesman_id ?? null),
+                salesman_1_id: salesmanOneDraft || null,
+                salesman_2_id: salesmanTwoDraft || null,
             },
             {
                 preserveScroll: true,
                 onSuccess: () => router.flushAll(),
+                onFinish: () => setSavingAssignment(null),
             },
         );
     };
 
-    const updateAppointmentResult = (appointmentResult: string) => {
+    const saveAppointmentResult = () => {
         if (!selected) {
             return;
         }
 
+        setSavingAssignment('appointment');
+
         router.patch(
             `/lead-workflow/leads-shop/${selected.id}/appointment-result`,
-            { appointment_result: appointmentResult || null },
+            { appointment_result: appointmentResultDraft || null },
             {
                 preserveScroll: true,
                 onSuccess: () => router.flushAll(),
+                onFinish: () => setSavingAssignment(null),
             },
         );
     };
@@ -759,6 +968,35 @@ export default function LeadsShop({
             : (selected?.notes.filter(
                   (note) => note.note_type === historyType,
               ) ?? []);
+    const displayedTimeline = useMemo(() => {
+        if (historyType !== 'all' || !selected) {
+            return displayedHistory.map((note) => ({
+                kind: 'note' as const,
+                id: note.id,
+                created_at: note.created_at,
+                note,
+            }));
+        }
+
+        return [
+            ...selected.notes.map((note) => ({
+                kind: 'note' as const,
+                id: note.id,
+                created_at: note.created_at,
+                note,
+            })),
+            ...(selected.movements ?? []).map((movement) => ({
+                kind: 'movement' as const,
+                id: movement.id,
+                created_at: movement.created_at,
+                movement,
+            })),
+        ].sort(
+            (first, second) =>
+                new Date(second.created_at).getTime() -
+                new Date(first.created_at).getTime(),
+        );
+    }, [displayedHistory, historyType, selected]);
 
     const defaultWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
@@ -775,6 +1013,7 @@ export default function LeadsShop({
     const confirmWorkflowActions = [
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
         ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['history', 'History', History, 'history'],
     ] as const;
     const dispatchWorkflowActions = [
         ['kit', 'Keep in Touch', MessageCircle, 'callback'],
@@ -921,7 +1160,7 @@ export default function LeadsShop({
                             <span>Count</span>
                         </div>
                         <div className="lead-dates__list">
-                            {lastThirtyDays.map((day) => (
+                            {availableDateRows.map((day) => (
                                 <button
                                     type="button"
                                     key={day.key}
@@ -937,6 +1176,13 @@ export default function LeadsShop({
                                     <strong>{day.count}</strong>
                                 </button>
                             ))}
+                            {availableDateRows.length === 0 && (
+                                <div className="lead-dates__empty">
+                                    {queue?.dateField === 'appointment_at'
+                                        ? 'No appointment dates in this queue.'
+                                        : 'No leads in the last 30 days.'}
+                                </div>
+                            )}
                         </div>
                         <button
                             type="button"
@@ -980,10 +1226,11 @@ export default function LeadsShop({
                                 ))}
                                 <button
                                     type="button"
-                                    className="lead-filter-reset"
+                                    className={`lead-filter-reset${isRefreshing ? ' lead-filter-reset--loading' : ''}`}
                                     onClick={clearListFilters}
-                                    aria-label="Reset lead filters"
-                                    title="Reset filters"
+                                    disabled={isRefreshing}
+                                    aria-label="Refresh leads and reset filters"
+                                    title="Refresh leads and reset filters"
                                 >
                                     <RotateCcw />
                                 </button>
@@ -1059,6 +1306,27 @@ export default function LeadsShop({
                                         )}
                                     </select>
                                 </label>
+                                <label>
+                                    <UserRound />
+                                    <select
+                                        value={agentFilter}
+                                        onChange={(event) =>
+                                            setAgentFilter(event.target.value)
+                                        }
+                                    >
+                                        <option value="all">All agents</option>
+                                        <option value="unassigned">
+                                            Unassigned
+                                        </option>
+                                        {filterOptions.agents.map(
+                                            ([id, name]) => (
+                                                <option key={id} value={id}>
+                                                    {name}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </label>
                             </div>
                         </div>
                         <div className="lead-browser__columns">
@@ -1091,11 +1359,11 @@ export default function LeadsShop({
                                     </span>
                                     <span>{lead.city}</span>
                                     <span>
-                                        {formatDate(
-                                            lead[
-                                                queue?.dateField ?? 'created_at'
-                                            ],
-                                        )}
+                                        {queue?.dateField === 'appointment_at'
+                                            ? lead.appointment_at
+                                                ? formatAppointmentDate(lead.appointment_at)
+                                                : 'No appointment'
+                                            : formatDate(lead.created_at)}
                                     </span>
                                 </button>
                             ))}
@@ -1482,6 +1750,56 @@ export default function LeadsShop({
                                                 </em>
                                             )}
                                         </label>
+                                        {[
+                                            'dispatched',
+                                            'rehash',
+                                            '555',
+                                            'his',
+                                            'kit',
+                                        ].includes(queue?.status ?? '') && (
+                                            <label>
+                                                <span>Appointment result</span>
+                                                <select
+                                                    value={
+                                                        form.data
+                                                            .appointment_result
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'appointment_result',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                >
+                                                    <option value="">
+                                                        Select result
+                                                    </option>
+                                                    <option value="PNS">PNS</option>
+                                                    <option value="PNS No Rehash">
+                                                        PNS No Rehash
+                                                    </option>
+                                                    <option value="2 ND Meeting">
+                                                        2 ND Meeting
+                                                    </option>
+                                                    <option value="Salesman Sent">
+                                                        Salesman Sent
+                                                    </option>
+                                                    <option value="Sold">Sold</option>
+                                                    <option value="Sold and Cancel">
+                                                        Sold and Cancel
+                                                    </option>
+                                                </select>
+                                                {form.errors
+                                                    .appointment_result && (
+                                                    <em>
+                                                        {
+                                                            form.errors
+                                                                .appointment_result
+                                                        }
+                                                    </em>
+                                                )}
+                                            </label>
+                                        )}
                                         <label>
                                             <span>Company</span>
                                             <select
@@ -1512,7 +1830,7 @@ export default function LeadsShop({
                                             )}
                                         </label>
                                         <label>
-                                            <span>Assigned agent</span>
+                                            <span>Original agent / reassign</span>
                                             <select
                                                 value={form.data.agent_id}
                                                 onChange={(event) =>
@@ -1773,9 +2091,9 @@ export default function LeadsShop({
                                                             Appointment
                                                         </small>
                                                         <strong>
-                                                            {formatDate(
-                                                                selected.appointment_at,
-                                                            )}
+                                                            {selected.appointment_at
+                                                                ? formatAppointmentDate(selected.appointment_at)
+                                                                : 'Not scheduled'}
                                                         </strong>
                                                     </span>
                                                 </div>
@@ -1793,7 +2111,7 @@ export default function LeadsShop({
                                                     <UserRound />
                                                     <span>
                                                         <small>
-                                                            Assigned agent
+                                                            Original agent
                                                         </small>
                                                         <strong>
                                                             {selected.agent
@@ -1802,28 +2120,15 @@ export default function LeadsShop({
                                                         </strong>
                                                     </span>
                                                 </div>
-                                                {[
-                                                    'reschedule',
-                                                    'rehash',
-                                                    '555',
-                                                    'his',
-                                                ].includes(
-                                                    queue?.status ?? '',
-                                                ) && (
-                                                    <div>
+                                                <div>
                                                         <UserRound />
                                                         <span>
                                                             <small>
-                                                                Second agent
+                                                                Assign another agent
                                                             </small>
                                                             <select
                                                                 className="lead-inline-assignment"
-                                                                value={
-                                                                    selected
-                                                                        .second_agent
-                                                                        ?.agent_id ??
-                                                                    ''
-                                                                }
+                                                                value=""
                                                                 onChange={(
                                                                     event,
                                                                 ) =>
@@ -1835,7 +2140,7 @@ export default function LeadsShop({
                                                                 }
                                                             >
                                                                 <option value="">
-                                                                    Unassigned
+                                                                    Select agent
                                                                 </option>
                                                                 {agents.map(
                                                                     (agent) => (
@@ -1862,7 +2167,20 @@ export default function LeadsShop({
                                                             </select>
                                                         </span>
                                                     </div>
-                                                )}
+                                                {(selected.agent_assignments ?? [])
+                                                    .filter((assignment) => !assignment.is_original)
+                                                    .map((assignment, index) => (
+                                                        <div key={assignment.id}>
+                                                            <UserRound />
+                                                            <span>
+                                                                <small>Agent {index + 2}</small>
+                                                                <strong>{assignment.agent?.agent_name ?? 'Unknown'}</strong>
+                                                                <small>
+                                                                    {assignment.assigner?.username ?? 'System'} · {formatDate(assignment.created_at)}
+                                                                </small>
+                                                            </span>
+                                                        </div>
+                                                    ))}
                                                 {[
                                                     'dispatched',
                                                     'rehash',
@@ -1873,8 +2191,12 @@ export default function LeadsShop({
                                                     queue?.status ?? '',
                                                 ) && (
                                                     <>
-                                                        {queue?.status ===
-                                                            'dispatched' && (
+                                                        {[
+                                                            'dispatched',
+                                                            'kit',
+                                                        ].includes(
+                                                            queue?.status ?? '',
+                                                        ) && (
                                                             <div>
                                                                 <CalendarClock />
                                                                 <span>
@@ -1882,22 +2204,8 @@ export default function LeadsShop({
                                                                         Appointment
                                                                         result
                                                                     </small>
-                                                                    <select
-                                                                        className="lead-inline-assignment"
-                                                                        value={
-                                                                            selected.appointment_result ??
-                                                                            ''
-                                                                        }
-                                                                        onChange={(
-                                                                            event,
-                                                                        ) =>
-                                                                            updateAppointmentResult(
-                                                                                event
-                                                                                    .target
-                                                                                    .value,
-                                                                            )
-                                                                        }
-                                                                    >
+                                                                    <div className="lead-inline-save-field">
+                                                                    <select className="lead-inline-assignment" value={appointmentResultDraft} onChange={(event) => setAppointmentResultDraft(event.target.value)}>
                                                                         <option value="">
                                                                             Select
                                                                             result
@@ -1914,6 +2222,10 @@ export default function LeadsShop({
                                                                             2 ND
                                                                             Meeting
                                                                         </option>
+                                                                        <option value="Salesman Sent">
+                                                                            Salesman
+                                                                            Sent
+                                                                        </option>
                                                                         <option value="Sold">
                                                                             Sold
                                                                         </option>
@@ -1923,6 +2235,8 @@ export default function LeadsShop({
                                                                             Cancel
                                                                         </option>
                                                                     </select>
+                                                                    <button type="button" className="lead-inline-save" onClick={saveAppointmentResult} disabled={savingAssignment !== null || appointmentResultDraft === (selected.appointment_result ?? '')} aria-label="Save appointment result" title="Save appointment result"><Save /></button>
+                                                                    </div>
                                                                 </span>
                                                             </div>
                                                         )}
@@ -1932,25 +2246,8 @@ export default function LeadsShop({
                                                                 <small>
                                                                     Salesman 1
                                                                 </small>
-                                                                <select
-                                                                    className="lead-inline-assignment"
-                                                                    value={
-                                                                        selected
-                                                                            .salesman_one
-                                                                            ?.salesman_id ??
-                                                                        ''
-                                                                    }
-                                                                    onChange={(
-                                                                        event,
-                                                                    ) =>
-                                                                        assignSalesman(
-                                                                            'salesman_1_id',
-                                                                            event
-                                                                                .target
-                                                                                .value,
-                                                                        )
-                                                                    }
-                                                                >
+                                                                <div className="lead-inline-save-field">
+                                                                <select className="lead-inline-assignment" value={salesmanOneDraft} onChange={(event) => setSalesmanOneDraft(event.target.value)}>
                                                                     <option value="">
                                                                         Unassigned
                                                                     </option>
@@ -1966,10 +2263,7 @@ export default function LeadsShop({
                                                                                     salesman.salesman_id
                                                                                 }
                                                                                 disabled={
-                                                                                    selected
-                                                                                        .salesman_two
-                                                                                        ?.salesman_id ===
-                                                                                    salesman.salesman_id
+                                                                                    salesmanTwoDraft === String(salesman.salesman_id)
                                                                                 }
                                                                             >
                                                                                 {
@@ -1979,6 +2273,8 @@ export default function LeadsShop({
                                                                         ),
                                                                     )}
                                                                 </select>
+                                                                <button type="button" className="lead-inline-save" onClick={() => saveSalesman('salesman_1_id')} disabled={savingAssignment !== null || salesmanOneDraft === String(selected.salesman_one?.salesman_id ?? '')} aria-label="Save salesman 1" title="Save salesman 1"><Save /></button>
+                                                                </div>
                                                             </span>
                                                         </div>
                                                         <div>
@@ -1987,25 +2283,8 @@ export default function LeadsShop({
                                                                 <small>
                                                                     Salesman 2
                                                                 </small>
-                                                                <select
-                                                                    className="lead-inline-assignment"
-                                                                    value={
-                                                                        selected
-                                                                            .salesman_two
-                                                                            ?.salesman_id ??
-                                                                        ''
-                                                                    }
-                                                                    onChange={(
-                                                                        event,
-                                                                    ) =>
-                                                                        assignSalesman(
-                                                                            'salesman_2_id',
-                                                                            event
-                                                                                .target
-                                                                                .value,
-                                                                        )
-                                                                    }
-                                                                >
+                                                                <div className="lead-inline-save-field">
+                                                                <select className="lead-inline-assignment" value={salesmanTwoDraft} onChange={(event) => setSalesmanTwoDraft(event.target.value)}>
                                                                     <option value="">
                                                                         Unassigned
                                                                     </option>
@@ -2021,10 +2300,7 @@ export default function LeadsShop({
                                                                                     salesman.salesman_id
                                                                                 }
                                                                                 disabled={
-                                                                                    selected
-                                                                                        .salesman_one
-                                                                                        ?.salesman_id ===
-                                                                                    salesman.salesman_id
+                                                                                    salesmanOneDraft === String(salesman.salesman_id)
                                                                                 }
                                                                             >
                                                                                 {
@@ -2034,6 +2310,8 @@ export default function LeadsShop({
                                                                         ),
                                                                     )}
                                                                 </select>
+                                                                <button type="button" className="lead-inline-save" onClick={() => saveSalesman('salesman_2_id')} disabled={savingAssignment !== null || salesmanTwoDraft === String(selected.salesman_two?.salesman_id ?? '')} aria-label="Save salesman 2" title="Save salesman 2"><Save /></button>
+                                                                </div>
                                                             </span>
                                                         </div>
                                                     </>
@@ -2454,7 +2732,7 @@ export default function LeadsShop({
                                     <div>
                                         <h2 id="lead-note-history-title">
                                             {historyType === 'all'
-                                                ? 'Lead note history'
+                                                ? 'Lead activity history'
                                                 : historyType === 'confirmation'
                                                   ? 'Confirmation note history'
                                                   : historyType === 'dispatch'
@@ -2479,26 +2757,79 @@ export default function LeadsShop({
                                 </button>
                             </header>
                             <div className="lead-note-history">
-                                {displayedHistory.map((note) => (
-                                    <article key={note.id}>
-                                        <div>
-                                            <strong>
-                                                {note.creator?.username ??
-                                                    'Unknown user'}
-                                            </strong>
-                                            <time>
-                                                {formatDate(note.created_at)}
-                                            </time>
-                                        </div>
-                                        <p>{note.body}</p>
-                                    </article>
-                                ))}
-                                {displayedHistory.length === 0 && (
+                                {displayedTimeline.map((entry) =>
+                                    entry.kind === 'movement' ? (
+                                        <article
+                                            key={`movement-${entry.id}`}
+                                            className="lead-note-history__movement"
+                                        >
+                                            <div>
+                                                <strong>
+                                                    {entry.movement.mover
+                                                        ?.username ??
+                                                        'System'}
+                                                </strong>
+                                                <time>
+                                                    {formatDate(
+                                                        entry.movement
+                                                            .created_at,
+                                                    )}
+                                                </time>
+                                            </div>
+                                            <span className="lead-movement-label">
+                                                Lead moved
+                                            </span>
+                                            <p>
+                                                <b>
+                                                    {workflowLocation(
+                                                        entry.movement
+                                                            .from_status,
+                                                    )}
+                                                </b>
+                                                <span aria-hidden="true">
+                                                    {' '}
+                                                    →{' '}
+                                                </span>
+                                                <b>
+                                                    {workflowLocation(
+                                                        entry.movement
+                                                            .to_status,
+                                                    )}
+                                                </b>
+                                            </p>
+                                        </article>
+                                    ) : (
+                                        <article key={`note-${entry.id}`}>
+                                            <div>
+                                                <strong>
+                                                    {entry.note.creator
+                                                        ?.username ??
+                                                        'Unknown user'}
+                                                </strong>
+                                                <time>
+                                                    {formatDate(
+                                                        entry.note.created_at,
+                                                    )}
+                                                </time>
+                                            </div>
+                                            <span
+                                                className={`lead-history-event-label${entry.note.note_type === 'salesman_sent' ? ' lead-history-event-label--salesman' : ''}`}
+                                            >
+                                                {historyNoteLabel(
+                                                    entry.note.note_type,
+                                                )}
+                                            </span>
+                                            <p>{entry.note.body}</p>
+                                        </article>
+                                    ),
+                                )}
+                                {displayedTimeline.length === 0 && (
                                     <div className="lead-note-history__empty">
                                         <History />
-                                        <strong>No note history yet</strong>
+                                        <strong>No history yet</strong>
                                         <span>
-                                            Saved notes will appear here.
+                                            Lead movements and saved notes will
+                                            appear here.
                                         </span>
                                     </div>
                                 )}

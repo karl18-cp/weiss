@@ -16,7 +16,7 @@ class LeadSecondAgentRequest extends FormRequest
     {
         return [
             'agent_2_id' => [
-                'nullable',
+                'required',
                 'integer',
                 Rule::notIn([$this->route('lead')?->agent_id]),
                 'exists:agents,agent_id',

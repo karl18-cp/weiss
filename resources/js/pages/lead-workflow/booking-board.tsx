@@ -14,6 +14,10 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/booking-board.css';
 import { RingCentralCallButton } from '@/components/ringcentral-call-button';
+import {
+    appointmentDate,
+    appointmentDateKey,
+} from '@/lib/appointment-date';
 
 type BookingLead = {
     id: number;
@@ -62,11 +66,7 @@ const timeFormatter = new Intl.DateTimeFormat('en-US', {
     minute: '2-digit',
 });
 
-const dateKey = (value: string) => {
-    const date = new Date(value);
-
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
+const dateKey = appointmentDateKey;
 
 const fullAddress = (lead: BookingLead) =>
     `${lead.address}, ${lead.city}, ${lead.state} ${lead.zip_code}`;
@@ -259,12 +259,12 @@ export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
                                     <time>
                                         <strong>
                                             {timeFormatter.format(
-                                                new Date(lead.appointment_at),
+                                                appointmentDate(lead.appointment_at),
                                             )}
                                         </strong>
                                         <span>
                                             {dayFormatter.format(
-                                                new Date(lead.appointment_at),
+                                                appointmentDate(lead.appointment_at),
                                             )}
                                         </span>
                                     </time>
@@ -355,14 +355,14 @@ export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
                                         <strong>
                                             {longDateFormatter.format(
                                                 new Date(
-                                                    selected.appointment_at,
+                                                    appointmentDate(selected.appointment_at),
                                                 ),
                                             )}
                                         </strong>
                                         <small>
                                             {timeFormatter.format(
                                                 new Date(
-                                                    selected.appointment_at,
+                                                    appointmentDate(selected.appointment_at),
                                                 ),
                                             )}
                                         </small>

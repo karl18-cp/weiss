@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Agent;
 use App\Models\Company;
 use App\Models\Lead;
+use App\Models\LeadAgentAssignment;
 use App\Models\Product;
 use App\Models\Salesman;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -85,6 +87,15 @@ class LeadQueueController extends Controller
                     'salesmanOne:salesman_id,salesman_name',
                     'salesmanTwo:salesman_id,salesman_name',
                     'notes.creator:acc_id,username',
+                    ...(Schema::hasTable('lead_movements')
+                        ? ['movements.mover:acc_id,username']
+                        : []),
+                    ...(class_exists(LeadAgentAssignment::class) && Schema::hasTable('lead_agent_assignments')
+                        ? [
+                            'agentAssignments.agent:agent_id,agent_name',
+                            'agentAssignments.assigner:acc_id,username',
+                        ]
+                        : []),
                 ])
                 ->latest()
                 ->get(),

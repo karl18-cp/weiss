@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/lead-workflow-queue.css';
+import { formatAppointmentDate } from '@/lib/appointment-date';
 
 export type QueueLead = {
     id: number;
@@ -59,14 +60,7 @@ const actions = [
     { status: 'toss', label: 'TOSS', icon: Trash2, tone: 'toss' },
 ] as const;
 
-const formatDate = (value: string) =>
-    new Intl.DateTimeFormat('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-    }).format(new Date(value));
+const formatDate = formatAppointmentDate;
 
 export default function LeadWorkflowQueue({
     title,

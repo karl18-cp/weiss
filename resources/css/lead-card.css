@@ -259,6 +259,23 @@
     color: #99a3b2;
 }
 
+.lead-input--date-time,
+.lead-input--date-time input {
+    cursor: pointer;
+}
+
+.lead-input--date-time input {
+    color-scheme: light;
+}
+
+.lead-input--date-time input::-webkit-calendar-picker-indicator {
+    width: 1rem;
+    height: 1rem;
+    margin-left: 0.35rem;
+    cursor: pointer;
+    opacity: 0.72;
+}
+
 .lead-input select {
     appearance: none;
     padding-right: 1.4rem;

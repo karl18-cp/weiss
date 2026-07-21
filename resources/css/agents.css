@@ -237,12 +237,18 @@
     width: 1rem;
     color: #8997aa;
 }
-.agents-input input {
+.agents-input input,
+.agents-input select {
     width: 100%;
     min-width: 0;
     background: transparent;
     font-size: 0.85rem;
     outline: none;
+}
+
+.agents-form label > span small {
+    color: #8b97aa;
+    font-weight: 600;
 }
 .agents-form-actions {
     display: flex;

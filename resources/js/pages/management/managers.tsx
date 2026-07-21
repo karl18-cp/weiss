@@ -23,6 +23,7 @@ type Manager = {
     manager_types: string[];
     account: { acc_id: number; username: string };
     company: { com_id: number; company: string } | null;
+    companies: { com_id: number; company: string }[];
     permissions: { module: string; access_level: Access }[];
 };
 type Company = { com_id: number; company: string };
@@ -49,7 +50,7 @@ export default function Managers({
         username: '',
         phone: '',
         password: '',
-        company_id: '',
+        company_ids: [] as string[],
         manager_types: [] as string[],
         permissions: blankPermissions,
     });
@@ -61,7 +62,7 @@ export default function Managers({
                   [
                       manager.manager_name,
                       manager.account.username,
-                      manager.company?.company,
+                      ...manager.companies.map((company) => company.company),
                   ]
                       .join(' ')
                       .toLowerCase()
@@ -77,7 +78,7 @@ export default function Managers({
             username: '',
             phone: '',
             password: '',
-            company_id: '',
+            company_ids: [],
             manager_types: [],
             permissions: blankPermissions,
         });
@@ -90,7 +91,7 @@ export default function Managers({
             username: manager.account.username,
             phone: manager.phone,
             password: '',
-            company_id: String(manager.company?.com_id ?? ''),
+            company_ids: manager.companies.map((company) => String(company.com_id)),
             manager_types: manager.manager_types,
             permissions: {
                 ...blankPermissions,
@@ -111,6 +112,15 @@ export default function Managers({
                 ? form.data.manager_types.filter((item) => item !== type)
                 : [...form.data.manager_types, type],
         );
+    const toggleCompany = (companyId: number) => {
+        const value = String(companyId);
+        form.setData(
+            'company_ids',
+            form.data.company_ids.includes(value)
+                ? form.data.company_ids.filter((id) => id !== value)
+                : [...form.data.company_ids, value],
+        );
+    };
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
         const options = { preserveScroll: true, onSuccess: reset };
@@ -302,35 +312,24 @@ export default function Managers({
                                     </div>
                                     <em>{form.errors.password}</em>
                                 </label>
-                                <label className="manager-field--wide">
-                                    <span>Company</span>
-                                    <div>
-                                        <Building2 />
-                                        <select
-                                            value={form.data.company_id}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'company_id',
-                                                    e.target.value,
-                                                )
-                                            }
-                                        >
-                                            <option value="">
-                                                Select company
-                                            </option>
-                                            {companies.map((company) => (
-                                                <option
-                                                    key={company.com_id}
-                                                    value={company.com_id}
-                                                >
-                                                    {company.company}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <em>{form.errors.company_id}</em>
-                                </label>
                             </div>
+                            <section className="manager-companies">
+                                <h3><Building2 /> Assigned companies</h3>
+                                <p>Select one or more companies this manager is assigned to.</p>
+                                <div>
+                                    {companies.map((company) => (
+                                        <label key={company.com_id}>
+                                            <input
+                                                type="checkbox"
+                                                checked={form.data.company_ids.includes(String(company.com_id))}
+                                                onChange={() => toggleCompany(company.com_id)}
+                                            />
+                                            <span>{company.company}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                {form.errors.company_ids && <em>{form.errors.company_ids}</em>}
+                            </section>
                             <section className="manager-types">
                                 <h3>Manager roles</h3>
                                 <div>

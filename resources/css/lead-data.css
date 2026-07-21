@@ -116,6 +116,99 @@
     font-weight: 800;
 }
 
+.lead-data-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.lead-data-header-actions > button {
+    display: inline-flex;
+    min-height: 2.35rem;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.8rem;
+    border-radius: 0.7rem;
+    color: #fff;
+    background: #172f63;
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.lead-data-header-actions > button svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.lead-import-result {
+    display: flex;
+    flex-shrink: 0;
+    align-items: flex-start;
+    gap: 0.7rem;
+    margin-bottom: 0.8rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid #bcd9ff;
+    border-radius: 0.8rem;
+    color: #214579;
+    background: #eaf4ff;
+    font-size: 0.75rem;
+}
+
+.lead-import-result > svg { width: 1.25rem; flex: 0 0 auto; }
+.lead-import-result strong, .lead-import-result span { display: block; }
+.lead-import-result span { margin-top: 0.1rem; color: #536b8d; }
+.lead-import-result details { margin-top: 0.4rem; }
+.lead-import-result summary { cursor: pointer; font-weight: 800; }
+.lead-import-result ul { margin: 0.35rem 0 0 1rem; color: #7d3f2d; }
+
+.lead-import-backdrop {
+    position: fixed;
+    z-index: 80;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(8 18 39 / 60%);
+    backdrop-filter: blur(5px);
+}
+
+.lead-import-modal {
+    width: min(42rem, 100%);
+    overflow: hidden;
+    border-radius: 1.15rem;
+    color: #172036;
+    background: #fff;
+    box-shadow: 0 24px 80px rgb(0 0 0 / 30%);
+}
+
+.lead-import-modal > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(125deg, #edf5ff, #fff);
+}
+
+.lead-import-modal > header > div { display: flex; align-items: center; gap: 0.65rem; }
+.lead-import-modal > header svg { width: 1.2rem; color: #176af4; }
+.lead-import-modal > header span, .lead-import-modal > header strong, .lead-import-modal > header small { display: block; }
+.lead-import-modal > header strong { font-size: 1rem; }
+.lead-import-modal > header small { margin-top: 0.1rem; color: #718096; font-size: 0.7rem; }
+.lead-import-modal > header > button { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; background: #fff; }
+.lead-import-modal > header > button svg { color: #48566c; }
+
+.lead-import-modal form { padding: 1.1rem; }
+.lead-import-modal form > p { margin-bottom: 1rem; color: #627188; font-size: 0.78rem; line-height: 1.55; }
+.lead-import-modal label { display: grid; gap: 0.35rem; color: #344056; font-size: 0.75rem; font-weight: 800; }
+.lead-import-modal input, .lead-import-modal select { width: 100%; min-height: 2.75rem; padding: 0.65rem 0.75rem; border: 1px solid #ccd8e8; border-radius: 0.65rem; color: #18233a; background: #f9fbfd; font-size: 0.78rem; }
+.lead-import-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.8rem; }
+.lead-import-error { color: #c43636; font-size: 0.7rem; font-weight: 700; }
+.lead-import-modal footer { display: flex; justify-content: flex-end; gap: 0.55rem; margin-top: 1rem; }
+.lead-import-modal footer button { min-height: 2.55rem; padding: 0.55rem 0.95rem; border-radius: 0.65rem; color: #fff; background: #176af4; font-size: 0.76rem; font-weight: 800; }
+.lead-import-modal footer button.is-secondary { border: 1px solid #ccd7e6; color: #46556c; background: #fff; }
+.lead-import-modal footer button:disabled { cursor: wait; opacity: 0.6; }
+
 .lead-data-workspace {
     display: grid;
     min-height: 0;
@@ -490,4 +583,7 @@
     .lead-data-pagination {
         margin-left: 0;
     }
+
+    .lead-data-header-actions { width: 100%; justify-content: space-between; }
+    .lead-import-grid { grid-template-columns: 1fr; }
 }

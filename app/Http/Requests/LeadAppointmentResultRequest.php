@@ -17,7 +17,7 @@ class LeadAppointmentResultRequest extends FormRequest
         return [
             'appointment_result' => [
                 'nullable',
-                Rule::in(['PNS', 'PNS No Rehash', '2 ND Meeting', 'Sold', 'Sold and Cancel']),
+                Rule::in(['PNS', 'PNS No Rehash', '2 ND Meeting', 'Salesman Sent', 'Sold', 'Sold and Cancel']),
             ],
         ];
     }

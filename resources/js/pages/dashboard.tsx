@@ -11,6 +11,7 @@ import {
 import { useState } from 'react';
 import '@/../css/dashboard.css';
 import { dashboard } from '@/routes';
+import LeadGlobalSearch from '@/components/lead-global-search';
 
 type DashboardProps = {
     metrics: {
@@ -124,6 +125,7 @@ export default function Dashboard({
                         </div>
                     </div>
                     <form
+                        style={{ display: 'none' }}
                         onSubmit={(event) => {
                             event.preventDefault();
                             router.get('/lead-workflow/data', {
@@ -138,6 +140,7 @@ export default function Dashboard({
                             placeholder="Search leads, customers, phone numbers…"
                         />
                     </form>
+                    <LeadGlobalSearch className="crm-dashboard-search" />
                 </section>
 
                 <section className="crm-dashboard-kpis">

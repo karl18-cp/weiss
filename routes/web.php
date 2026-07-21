@@ -6,6 +6,8 @@ use App\Http\Controllers\ContractorController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LeadCardController;
 use App\Http\Controllers\LeadDataController;
+use App\Http\Controllers\LeadImportController;
+use App\Http\Controllers\LeadSearchController;
 use App\Http\Controllers\LeadQueueController;
 use App\Http\Controllers\LeadsShopController;
 use App\Http\Controllers\ManagerController;
@@ -22,6 +24,7 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified', 'manager.permission'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('lead-search', LeadSearchController::class)->name('lead-search');
     Route::post('integrations/ringcentral/calls', RingCentralCallController::class)
         ->middleware('throttle:10,1')
         ->name('integrations.ringcentral.calls.store');
@@ -50,6 +53,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('his', [LeadQueueController::class, 'his'])->name('his');
         Route::get('keep-in-touch', [LeadQueueController::class, 'keepInTouch'])->name('keep-in-touch');
         Route::get('data', [LeadDataController::class, 'index'])->name('data');
+        Route::post('data/import', LeadImportController::class)->name('data.import');
         Route::get('data/vendor-invoices', [LeadDataController::class, 'vendorInvoices'])->name('data.vendor-invoices');
         Route::get('data/receivables', [LeadDataController::class, 'receivables'])->name('data.receivables');
         Route::get('data/payables', [LeadDataController::class, 'payables'])->name('data.payables');

@@ -1,4 +1,5 @@
 import { Form, Head } from '@inertiajs/react';
+import { ArrowRight, UserRound } from 'lucide-react';
 import LoginPasswordField from '@/components/auth/login-password-field';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
@@ -31,17 +32,10 @@ export default function Login({ status }: Props) {
                                 >
                                     Username
                                 </Label>
-                                <Input
-                                    id="username"
-                                    type="text"
-                                    name="username"
-                                    required
-                                    autoFocus
-                                    tabIndex={1}
-                                    autoComplete="username"
-                                    placeholder="Enter your username"
-                                    className="auth-login-input"
-                                />
+                                <div className="auth-input-shell">
+                                    <UserRound aria-hidden="true" />
+                                    <Input id="username" type="text" name="username" required autoFocus tabIndex={1} autoComplete="username" placeholder="Enter your username" className="auth-login-input" />
+                                </div>
                                 <InputError message={errors.username} />
                             </div>
 
@@ -55,7 +49,7 @@ export default function Login({ status }: Props) {
                                 data-test="login-button"
                             >
                                 {processing && <Spinner />}
-                                Login
+                                Sign in to WEISS <ArrowRight aria-hidden="true" />
                             </button>
                         </div>
                     </>

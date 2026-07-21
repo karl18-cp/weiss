@@ -101,7 +101,8 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->and($lead->agent_id)->toBe($matchedAgent->agent_id)
         ->and($lead->product_id)->toBe($matchedProduct->prod_id)
         ->and($lead->appointment_at->format('Y-m-d H:i:s'))->toBe('2026-07-22 14:30:00')
-        ->and($lead->calltools_campaign_name)->toBe('Summer Campaign');
+        ->and($lead->calltools_campaign_name)->toBe('Summer Campaign')
+        ->and($lead->telemarketer_notes)->toBe('Interested customer');
     expect(LeadNote::query()
         ->where('lead_id', $lead->id)
         ->where('note_type', 'telemarketer')
@@ -120,6 +121,48 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->and(LeadNote::query()->where('lead_id', $lead->id)->count())->toBe(1);
 });
 
+test('calltools note variants are saved as telemarketer notes', function () {
+    configureCallToolsWebhook();
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => 'contact-note-variant',
+            'phone_number' => '+15559876543',
+            'last_note_text' => 'Customer requested a morning appointment.',
+        ])
+        ->assertCreated();
+
+    $lead = Lead::query()
+        ->where('calltools_contact_id', 'contact-note-variant')
+        ->firstOrFail();
+
+    expect($lead->telemarketer_notes)
+        ->toBe('Customer requested a morning appointment.');
+
+    $this->assertDatabaseHas('lead_notes', [
+        'lead_id' => $lead->id,
+        'note_type' => 'telemarketer',
+        'body' => 'Customer requested a morning appointment.',
+    ]);
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => 'contact-note-variant',
+            'phone_number' => '+15559876543',
+            'note' => 'Follow-up note from the telemarketer.',
+        ])
+        ->assertOk();
+
+    expect($lead->fresh()->telemarketer_notes)
+        ->toBe('Follow-up note from the telemarketer.');
+
+    $this->assertDatabaseHas('lead_notes', [
+        'lead_id' => $lead->id,
+        'note_type' => 'telemarketer',
+        'body' => 'Follow-up note from the telemarketer.',
+    ]);
+});
+
 test('calltools webhook accepts native connector phone fields and derives a contact id', function () {
     configureCallToolsWebhook();
 
@@ -135,4 +178,23 @@ test('calltools webhook accepts native connector phone fields and derives a cont
     $lead = Lead::query()->where('primary_number', '+1 (555) 123-4567')->firstOrFail();
 
     expect($lead->calltools_contact_id)->toStartWith('phone-');
+});
+
+test('calltools webhook normalizes connector appointment date formats', function () {
+    configureCallToolsWebhook();
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => 'formatted-appointment',
+            'phone_number' => '+15551112222',
+            'appoint_time' => 'July 23rd, 2026 at 2:45 PM',
+        ])
+        ->assertCreated();
+
+    $lead = Lead::query()
+        ->where('calltools_contact_id', 'formatted-appointment')
+        ->firstOrFail();
+
+    expect($lead->appointment_at->format('Y-m-d H:i:s'))
+        ->toBe('2026-07-23 14:45:00');
 });

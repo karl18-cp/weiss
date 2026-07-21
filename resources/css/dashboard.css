@@ -6,12 +6,14 @@
 }
 
 .crm-dashboard-hero {
+    position: relative;
+    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1.5rem;
     padding: 1.4rem 1.6rem;
-    overflow: hidden;
+    overflow: visible;
     border-radius: 1.1rem;
     color: #fff;
     background: linear-gradient(110deg, #2456d9, #3d83ed 72%, #65a4f4);
@@ -50,23 +52,38 @@
     font-size: 0.72rem;
 }
 
-.crm-dashboard-hero form {
+.crm-dashboard-hero form,
+.crm-dashboard-search {
     display: flex;
     width: min(31rem, 42vw);
+    height: 2.85rem;
+    flex: 0 1 31rem;
     min-height: 2.65rem;
     align-items: center;
     gap: 0.55rem;
     padding-inline: 0.8rem;
     border: 1px solid rgb(255 255 255 / 35%);
     border-radius: 0.7rem;
-    background: rgb(255 255 255 / 92%);
+    background: #fff;
+    box-shadow: 0 6px 18px rgb(20 59 130 / 16%);
 }
 
-.crm-dashboard-hero form svg {
+.crm-dashboard-hero > .crm-dashboard-search {
+    display: block;
+}
+
+.crm-dashboard-search .lead-global-search__input {
+    display: flex;
+    width: 100%;
+}
+
+.crm-dashboard-hero form svg,
+.crm-dashboard-search svg {
     color: #73839b;
 }
 
-.crm-dashboard-hero input {
+.crm-dashboard-hero input,
+.crm-dashboard-search input {
     min-width: 0;
     flex: 1;
     border: 0;
@@ -74,6 +91,11 @@
     color: #344056;
     background: transparent;
     font-size: 0.72rem;
+}
+
+.crm-dashboard-search input::placeholder {
+    color: #71819a;
+    opacity: 1;
 }
 
 .crm-dashboard-kpis {
@@ -464,8 +486,10 @@
         align-items: flex-start;
         flex-direction: column;
     }
-    .crm-dashboard-hero form {
+    .crm-dashboard-hero form,
+    .crm-dashboard-search {
         width: 100%;
+        flex-basis: auto;
     }
     .crm-dashboard-kpis,
     .crm-dashboard-main-grid {

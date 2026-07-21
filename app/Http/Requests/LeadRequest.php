@@ -28,6 +28,7 @@ class LeadRequest extends FormRequest
             'years_in_house' => ['required', 'integer', 'min:0', 'max:150'],
             'product_id' => ['required', 'integer', 'exists:products,prod_id'],
             'appointment_at' => ['required', 'date'],
+            'appointment_result' => ['nullable', 'string', 'in:PNS,PNS No Rehash,2 ND Meeting,Salesman Sent,Sold,Sold and Cancel'],
             'telemarketer_notes' => ['required', 'string', 'max:5000'],
             'company_id' => ['required', 'integer', 'exists:companies,com_id'],
             'source' => ['required', 'in:CallTools'],

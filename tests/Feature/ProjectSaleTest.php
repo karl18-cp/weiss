@@ -65,6 +65,24 @@ test('a sale requires an assigned salesman', function () {
     expect($lead->refresh()->status)->toBe('dispatched');
 });
 
+test('assigning a salesman is recorded in lead history', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+
+    $this->actingAs($account)
+        ->patch(route('lead-workflow.leads-shop.salesmen.update', $lead), [
+            'salesman_1_id' => $salesman->salesman_id,
+            'salesman_2_id' => null,
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('lead_notes', [
+        'lead_id' => $lead->id,
+        'note_type' => 'salesman_sent',
+        'body' => "Salesman Sent: {$salesman->salesman_name} (Salesman 1).",
+        'created_by' => $account->acc_id,
+    ]);
+});
+
 test('accepting a sale creates a related project', function () {
     ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
     $lead->update(['salesman_1_id' => $salesman->salesman_id]);

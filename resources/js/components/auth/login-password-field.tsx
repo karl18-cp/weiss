@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Eye, EyeOff, LockKeyhole } from 'lucide-react';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,7 @@ export default function LoginPasswordField({ error }: Props) {
                 Password
             </Label>
             <div className="auth-password-field">
+                <LockKeyhole className="auth-input-icon" aria-hidden="true" />
                 <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
@@ -34,7 +36,7 @@ export default function LoginPasswordField({ error }: Props) {
                         showPassword ? 'Hide password' : 'Show password'
                     }
                 >
-                    {showPassword ? 'Hide' : 'Show'}
+                    {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
                 </button>
             </div>
             <InputError message={error} />

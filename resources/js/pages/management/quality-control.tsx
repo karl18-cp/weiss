@@ -93,7 +93,7 @@ function toForm(lead?: Lead) {
         email: lead.email ?? '',
         years_in_house: String(lead.years_in_house),
         product_id: String(lead.product?.prod_id ?? ''),
-        appointment_at: lead.appointment_at.slice(0, 16),
+        appointment_at: lead.appointment_at?.slice(0, 16) ?? '',
         telemarketer_notes: lead.telemarketer_notes,
         company_id: String(lead.company?.com_id ?? ''),
         source: 'CallTools',
@@ -137,6 +137,7 @@ export default function QualityControl({
         const counts = new Map<string, number>();
 
         projects.forEach(({ lead }) => {
+            if (!lead.appointment_at) return;
             const key = new Date(lead.appointment_at).toLocaleDateString(
                 'en-CA',
             );
@@ -157,9 +158,9 @@ export default function QualityControl({
         const query = search.trim().toLowerCase();
 
         return projects.filter(({ lead }) => {
-            const appointmentDate = new Date(
-                lead.appointment_at,
-            ).toLocaleDateString('en-CA');
+            const appointmentDate = lead.appointment_at
+                ? new Date(lead.appointment_at).toLocaleDateString('en-CA')
+                : '';
             const matchesSearch =
                 !query ||
                 [
@@ -422,18 +423,14 @@ export default function QualityControl({
                                     </strong>
                                     <span>{project.lead.city}</span>
                                     <time>
-                                        {timeFormatter.format(
-                                            new Date(
-                                                project.lead.appointment_at,
-                                            ),
-                                        )}
+                                        {project.lead.appointment_at
+                                            ? timeFormatter.format(new Date(project.lead.appointment_at))
+                                            : 'Not scheduled'}
                                     </time>
                                     <small>
-                                        {dateFormatter.format(
-                                            new Date(
-                                                project.lead.appointment_at,
-                                            ),
-                                        )}
+                                        {project.lead.appointment_at
+                                            ? dateFormatter.format(new Date(project.lead.appointment_at))
+                                            : 'No date'}
                                     </small>
                                 </button>
                             ))}

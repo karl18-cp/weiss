@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 #[Fillable(['account_id', 'manager_name', 'phone', 'company_id', 'manager_types'])]
 class Manager extends Model
@@ -20,6 +21,18 @@ class Manager extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class, 'company_id', 'com_id');
+    }
+
+    public function companies(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Company::class,
+            'company_manager',
+            'manager_id',
+            'company_id',
+            'manager_id',
+            'com_id',
+        )->withTimestamps();
     }
 
     public function permissions(): HasMany

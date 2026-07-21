@@ -89,13 +89,13 @@ test('data page shows workflow results and the latest telemarketer note', functi
             ->where('leads.data.0.lead_result', 'Salesman Sent')
             ->where('leads.data.0.appointment_result', 'Demoed')
             ->where('leads.data.0.note', 'Newest telemarketer note')
-            ->where('leads.data.0.verified', false)
+            ->where('leads.data.0.verified', true)
             ->has('agents', 1)
             ->where('agents.0.leads_count', 1),
         );
 });
 
-test('only project leads are verified in data', function () {
+test('project status alone does not mark a lead verified in data', function () {
     $admin = dataAdmin();
     $lead = dataLead(['status' => 'project']);
     Project::query()->create([
@@ -107,10 +107,27 @@ test('only project leads are verified in data', function () {
     $this->actingAs($admin)
         ->get(route('lead-workflow.data'))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('leads.data.0.verified', true)
+            ->where('leads.data.0.verified', false)
             ->where('leads.data.0.lead_result', 'Project'),
         );
 });
+
+test('confirm dispatch and salesman sent leads are verified in data', function (string $status, ?string $appointmentResult) {
+    $admin = dataAdmin();
+    dataLead([
+        'status' => $status,
+        'appointment_result' => $appointmentResult,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('lead-workflow.data'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('leads.data.0.verified', true));
+})->with([
+    'confirm leads' => ['confirmed', null],
+    'dispatch leads' => ['dispatched', null],
+    'salesman sent result' => ['fresh', 'Salesman Sent'],
+]);
 
 test('data accounting registers aggregate receivables and payables from all projects', function () {
     $admin = dataAdmin();

@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Phone, Save, Search, Trash2, UserRound, Users, X } from 'lucide-react';
+import { Building2, LockKeyhole, Phone, Save, Search, Trash2, UserRound, Users, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/salesmen.css';
 import DirectoryNavigation from '@/components/directory-navigation';
@@ -9,13 +9,17 @@ type Salesman = {
     salesman_id: number;
     salesman_name: string;
     phone: string | null;
+    account: { acc_id: number; username: string } | null;
+    company: { com_id: number; company: string } | null;
 };
 
-export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
+type Company = { com_id: number; company: string };
+
+export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]; companies: Company[] }) {
     const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Salesman | null>(null);
     const [search, setSearch] = useState('');
-    const form = useForm({ salesman_name: '', phone: '' });
+    const form = useForm({ salesman_name: '', phone: '', company_id: '', username: '', password: '' });
 
     const filteredSalesmen = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -32,7 +36,7 @@ export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
 
     const resetForm = () => {
         setSelected(null);
-        form.setData({ salesman_name: '', phone: '' });
+        form.setData({ salesman_name: '', phone: '', company_id: '', username: '', password: '' });
         form.clearErrors();
     };
 
@@ -41,6 +45,9 @@ export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
         form.setData({
             salesman_name: salesman.salesman_name,
             phone: salesman.phone ?? '',
+            company_id: String(salesman.company?.com_id ?? ''),
+            username: salesman.account?.username ?? '',
+            password: '',
         });
         form.clearErrors();
     };
@@ -144,7 +151,7 @@ export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
                                             {salesman.salesman_name}
                                         </strong>
                                         <small>
-                                            {salesman.phone || 'No phone'}
+                                            {salesman.company?.company ?? 'No company'} · {salesman.phone || 'No phone'}
                                         </small>
                                     </span>
                                 </button>
@@ -196,6 +203,33 @@ export default function Salesmen({ salesmen }: { salesmen: Salesman[] }) {
                                 {form.errors.salesman_name && (
                                     <small>{form.errors.salesman_name}</small>
                                 )}
+                            </label>
+                            <label>
+                                <span>Assigned company</span>
+                                <div className="agents-input">
+                                    <Building2 />
+                                    <select value={form.data.company_id} onChange={(event) => form.setData('company_id', event.target.value)}>
+                                        <option value="">Select company</option>
+                                        {companies.map((company) => <option key={company.com_id} value={company.com_id}>{company.company}</option>)}
+                                    </select>
+                                </div>
+                                {form.errors.company_id && <small>{form.errors.company_id}</small>}
+                            </label>
+                            <label>
+                                <span>Username <small>(optional)</small></span>
+                                <div className="agents-input">
+                                    <UserRound />
+                                    <input value={form.data.username} onChange={(event) => form.setData('username', event.target.value)} placeholder="Optional login username" autoComplete="off" />
+                                </div>
+                                {form.errors.username && <small>{form.errors.username}</small>}
+                            </label>
+                            <label>
+                                <span>Password <small>(optional)</small></span>
+                                <div className="agents-input">
+                                    <LockKeyhole />
+                                    <input type="password" value={form.data.password} onChange={(event) => form.setData('password', event.target.value)} placeholder={selected?.account ? 'Leave blank to keep current password' : 'At least 8 characters'} autoComplete="new-password" />
+                                </div>
+                                {form.errors.password && <small>{form.errors.password}</small>}
                             </label>
                             <label>
                                 <span>Phone number</span>

@@ -257,13 +257,28 @@ export default function LeadCard({
                 {label}
                 {optional && <small>Optional</small>}
             </span>
-            <div className="lead-input">
+            <div
+                className={`lead-input${type === 'datetime-local' ? ' lead-input--date-time' : ''}`}
+            >
                 {icon}
                 <input
                     type={type}
                     value={form.data[name]}
                     onChange={(event) => form.setData(name, event.target.value)}
+                    onClick={(event) => {
+                        if (type !== 'datetime-local') {
+                            return;
+                        }
+
+                        try {
+                            event.currentTarget.showPicker?.();
+                        } catch {
+                            // The native indicator remains available if a
+                            // browser does not permit a scripted picker.
+                        }
+                    }}
                     placeholder={placeholder}
+                    step={type === 'datetime-local' ? 60 : undefined}
                 />
             </div>
             {form.errors[name] && <em>{form.errors[name]}</em>}

@@ -51,13 +51,14 @@ class LeadDataController extends Controller
                 'origin_at' => $lead->created_at?->toIso8601String(),
                 'agent' => $lead->agent?->agent_name ?? 'Unassigned',
                 'customer' => $lead->customer_name,
-                'verified' => $lead->project !== null,
+                'verified' => $this->isVerified($lead),
                 'address' => $lead->address,
                 'city' => $lead->city,
                 'state' => $lead->state,
                 'zip' => $lead->zip_code,
                 'appointment_at' => $lead->appointment_at?->toIso8601String(),
                 'lead_result' => $this->leadResult($lead),
+                'rep' => $lead->rep ?: 'N/A',
                 'appointment_result' => $lead->appointment_result ?: 'N/A',
                 'mobile' => $lead->mobile_number ?: '—',
                 'phone' => $lead->primary_number ?: '—',
@@ -252,6 +253,7 @@ class LeadDataController extends Controller
             'toss', 'rehash_toss', 'kit_toss' => 'Toss',
             'confirmed' => 'Confirm',
             'dispatched' => 'Dispatch',
+            'salesman_sent' => 'Salesman Sent',
             'reschedule' => 'Reschedule',
             'rehash' => 'Rehash',
             'rehash_ng', 'kit_ng' => 'NG',
@@ -262,5 +264,13 @@ class LeadDataController extends Controller
             'project' => 'Project',
             default => str($lead->status)->replace('_', ' ')->title()->toString(),
         };
+    }
+
+    private function isVerified(Lead $lead): bool
+    {
+        return in_array($lead->status, ['confirmed', 'dispatched', 'salesman_sent'], true)
+            || $lead->salesman_1_id !== null
+            || $lead->salesman_2_id !== null
+            || $lead->appointment_result === 'Salesman Sent';
     }
 }
