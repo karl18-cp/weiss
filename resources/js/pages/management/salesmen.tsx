@@ -1,9 +1,22 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Building2, LockKeyhole, Phone, Save, Search, Trash2, UserRound, Users, X } from 'lucide-react';
+import {
+    Building2,
+    LockKeyhole,
+    Phone,
+    Save,
+    Search,
+    Trash2,
+    UserRound,
+    Users,
+    X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/salesmen.css';
 import DirectoryNavigation from '@/components/directory-navigation';
 import { useSystemModal } from '@/components/system-modal-provider';
+import ModulePermissionsEditor, {
+    type PermissionAccess,
+} from '@/components/module-permissions-editor';
 
 type Salesman = {
     salesman_id: number;
@@ -11,15 +24,34 @@ type Salesman = {
     phone: string | null;
     account: { acc_id: number; username: string } | null;
     company: { com_id: number; company: string } | null;
+    permissions: { module: string; access_level: PermissionAccess }[];
 };
 
 type Company = { com_id: number; company: string };
 
-export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]; companies: Company[] }) {
+export default function Salesmen({
+    salesmen,
+    companies,
+    permissionModules,
+}: {
+    salesmen: Salesman[];
+    companies: Company[];
+    permissionModules: Record<string, string>;
+}) {
     const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Salesman | null>(null);
     const [search, setSearch] = useState('');
-    const form = useForm({ salesman_name: '', phone: '', company_id: '', username: '', password: '' });
+    const blankPermissions = Object.fromEntries(
+        Object.keys(permissionModules).map((module) => [module, 'none']),
+    ) as Record<string, PermissionAccess>;
+    const form = useForm({
+        salesman_name: '',
+        phone: '',
+        company_id: '',
+        username: '',
+        password: '',
+        permissions: blankPermissions,
+    });
 
     const filteredSalesmen = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -36,7 +68,14 @@ export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]
 
     const resetForm = () => {
         setSelected(null);
-        form.setData({ salesman_name: '', phone: '', company_id: '', username: '', password: '' });
+        form.setData({
+            salesman_name: '',
+            phone: '',
+            company_id: '',
+            username: '',
+            password: '',
+            permissions: blankPermissions,
+        });
         form.clearErrors();
     };
 
@@ -48,6 +87,15 @@ export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]
             company_id: String(salesman.company?.com_id ?? ''),
             username: salesman.account?.username ?? '',
             password: '',
+            permissions: {
+                ...blankPermissions,
+                ...Object.fromEntries(
+                    salesman.permissions.map((permission) => [
+                        permission.module,
+                        permission.access_level,
+                    ]),
+                ),
+            },
         });
         form.clearErrors();
     };
@@ -151,7 +199,9 @@ export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]
                                             {salesman.salesman_name}
                                         </strong>
                                         <small>
-                                            {salesman.company?.company ?? 'No company'} · {salesman.phone || 'No phone'}
+                                            {salesman.company?.company ??
+                                                'No company'}{' '}
+                                            · {salesman.phone || 'No phone'}
                                         </small>
                                     </span>
                                 </button>
@@ -208,28 +258,78 @@ export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]
                                 <span>Assigned company</span>
                                 <div className="agents-input">
                                     <Building2 />
-                                    <select value={form.data.company_id} onChange={(event) => form.setData('company_id', event.target.value)}>
+                                    <select
+                                        value={form.data.company_id}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'company_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
                                         <option value="">Select company</option>
-                                        {companies.map((company) => <option key={company.com_id} value={company.com_id}>{company.company}</option>)}
+                                        {companies.map((company) => (
+                                            <option
+                                                key={company.com_id}
+                                                value={company.com_id}
+                                            >
+                                                {company.company}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
-                                {form.errors.company_id && <small>{form.errors.company_id}</small>}
+                                {form.errors.company_id && (
+                                    <small>{form.errors.company_id}</small>
+                                )}
                             </label>
                             <label>
-                                <span>Username <small>(optional)</small></span>
+                                <span>
+                                    Username <small>(optional)</small>
+                                </span>
                                 <div className="agents-input">
                                     <UserRound />
-                                    <input value={form.data.username} onChange={(event) => form.setData('username', event.target.value)} placeholder="Optional login username" autoComplete="off" />
+                                    <input
+                                        value={form.data.username}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'username',
+                                                event.target.value,
+                                            )
+                                        }
+                                        placeholder="Optional login username"
+                                        autoComplete="off"
+                                    />
                                 </div>
-                                {form.errors.username && <small>{form.errors.username}</small>}
+                                {form.errors.username && (
+                                    <small>{form.errors.username}</small>
+                                )}
                             </label>
                             <label>
-                                <span>Password <small>(optional)</small></span>
+                                <span>
+                                    Password <small>(optional)</small>
+                                </span>
                                 <div className="agents-input">
                                     <LockKeyhole />
-                                    <input type="password" value={form.data.password} onChange={(event) => form.setData('password', event.target.value)} placeholder={selected?.account ? 'Leave blank to keep current password' : 'At least 8 characters'} autoComplete="new-password" />
+                                    <input
+                                        type="password"
+                                        value={form.data.password}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'password',
+                                                event.target.value,
+                                            )
+                                        }
+                                        placeholder={
+                                            selected?.account
+                                                ? 'Leave blank to keep current password'
+                                                : 'At least 8 characters'
+                                        }
+                                        autoComplete="new-password"
+                                    />
                                 </div>
-                                {form.errors.password && <small>{form.errors.password}</small>}
+                                {form.errors.password && (
+                                    <small>{form.errors.password}</small>
+                                )}
                             </label>
                             <label>
                                 <span>Phone number</span>
@@ -250,6 +350,14 @@ export default function Salesmen({ salesmen, companies }: { salesmen: Salesman[]
                                     <small>{form.errors.phone}</small>
                                 )}
                             </label>
+                            <ModulePermissionsEditor
+                                roleLabel="salesman"
+                                modules={permissionModules}
+                                permissions={form.data.permissions}
+                                onChange={(permissions) =>
+                                    form.setData('permissions', permissions)
+                                }
+                            />
                             <div className="agents-form-actions">
                                 {selected && (
                                     <>

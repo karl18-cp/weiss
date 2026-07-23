@@ -5,6 +5,11 @@
 
     RewriteEngine On
 
+    # Keep Laravel's secure session and CSRF cookies on one canonical HTTPS host.
+    RewriteCond %{HTTPS} !=on [OR]
+    RewriteCond %{HTTP_HOST} !^weiss\.brighthorizon-cg\.com$ [NC]
+    RewriteRule ^ https://weiss.brighthorizon-cg.com%{REQUEST_URI} [R=301,L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

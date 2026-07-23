@@ -33,6 +33,8 @@ class AgentRequest extends FormRequest
                 Rule::requiredIf($this->filled('username') && ! $agent?->account_id),
                 'nullable', 'string', 'min:8', 'max:255',
             ],
+            'permissions' => ['required', 'array'],
+            'permissions.*' => ['required', Rule::in(['none', 'view', 'edit'])],
         ];
     }
 }

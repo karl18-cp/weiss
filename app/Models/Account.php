@@ -34,6 +34,16 @@ class Account extends Authenticatable
         return $this->hasOne(Manager::class, 'account_id', 'acc_id');
     }
 
+    public function agent(): HasOne
+    {
+        return $this->hasOne(Agent::class, 'account_id', 'acc_id');
+    }
+
+    public function salesman(): HasOne
+    {
+        return $this->hasOne(Salesman::class, 'account_id', 'acc_id');
+    }
+
     protected function casts(): array
     {
         return [

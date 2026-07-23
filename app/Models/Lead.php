@@ -67,6 +67,11 @@ class Lead extends Model
         return $this->hasMany(LeadMovement::class)->latest();
     }
 
+    public function ringCentralCalls(): HasMany
+    {
+        return $this->hasMany(RingCentralCall::class)->latest('initiated_at');
+    }
+
     public function agentAssignments(): HasMany
     {
         return $this->hasMany(LeadAgentAssignment::class)->oldest();

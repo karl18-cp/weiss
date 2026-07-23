@@ -16,6 +16,8 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QualityControlController;
 use App\Http\Controllers\RingCentralCallController;
 use App\Http\Controllers\RingCentralCallStatusController;
+use App\Http\Controllers\RingCentralCallIntentController;
+use App\Http\Controllers\RingCentralRecordingController;
 use App\Http\Controllers\SalesmanController;
 use App\Http\Controllers\TeleHoursController;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +41,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('leads-shop', [LeadsShopController::class, 'index'])->name('leads-shop');
         Route::put('leads-shop/{lead}', [LeadsShopController::class, 'update'])->name('leads-shop.update');
         Route::post('leads-shop/{lead}/notes', [LeadsShopController::class, 'storeNote'])->name('leads-shop.notes.store');
+        Route::post('leads-shop/{lead}/ringcentral-calls', RingCentralCallIntentController::class)->name('leads-shop.ringcentral-calls.store');
+        Route::get('leads-shop/{lead}/ringcentral-calls/{ringCentralCall}/recording', RingCentralRecordingController::class)->name('leads-shop.ringcentral-calls.recording');
         Route::patch('leads-shop/{lead}/status', [LeadsShopController::class, 'updateStatus'])->name('leads-shop.status.update');
         Route::patch('leads-shop/{lead}/salesmen', [LeadsShopController::class, 'assignSalesmen'])->name('leads-shop.salesmen.update');
         Route::patch('leads-shop/{lead}/appointment-result', [LeadsShopController::class, 'updateAppointmentResult'])->name('leads-shop.appointment-result.update');

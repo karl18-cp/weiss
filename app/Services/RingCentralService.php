@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -9,6 +10,47 @@ use RuntimeException;
 
 class RingCentralService
 {
+    public function callLog(CarbonInterface $from): array
+    {
+        $this->assertConfigured();
+        $response = $this->api()
+            ->withToken($this->accessToken())
+            ->get('/restapi/v1.0/account/~/call-log', [
+                'view' => 'Detailed',
+                'dateFrom' => $from->utc()->toIso8601String(),
+                'dateTo' => now()->utc()->toIso8601String(),
+                'perPage' => 1000,
+            ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException($response->json('message') ?: 'RingCentral could not read the call log.');
+        }
+
+        return $response->json('records') ?? [];
+    }
+
+    /** @return array{body: string, content_type: string} */
+    public function recording(string $recordingId): array
+    {
+        $this->assertConfigured();
+        if (! preg_match('/\A[A-Za-z0-9_-]+\z/', $recordingId)) {
+            throw new RuntimeException('The RingCentral recording ID is invalid.');
+        }
+
+        $response = $this->api()
+            ->withToken($this->accessToken())
+            ->get('/restapi/v1.0/account/~/recording/'.rawurlencode($recordingId).'/content');
+
+        if ($response->failed()) {
+            throw new RuntimeException($response->json('message') ?: 'RingCentral could not download the recording.');
+        }
+
+        return [
+            'body' => $response->body(),
+            'content_type' => $response->header('Content-Type') ?: 'audio/mpeg',
+        ];
+    }
+
     public function ringOut(string $phoneNumber): array
     {
         $this->assertConfigured();

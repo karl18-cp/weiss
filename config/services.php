@@ -49,6 +49,10 @@ return [
     ],
 
     'calltools' => [
+        'api_base_url' => env('CALLTOOLS_API_BASE_URL', 'https://app.calltools.io'),
+        'api_key' => env('CALLTOOLS_API_KEY'),
+        'sync_start_date' => env('CALLTOOLS_SYNC_START_DATE', '2026-07-01'),
+        'report_timezone' => env('CALLTOOLS_REPORT_TIMEZONE', 'Asia/Manila'),
         'webhook_secret' => env('CALLTOOLS_WEBHOOK_SECRET'),
         'default_company_id' => env('CALLTOOLS_DEFAULT_COMPANY_ID'),
         'default_product_id' => env('CALLTOOLS_DEFAULT_PRODUCT_ID'),

@@ -11,7 +11,7 @@ class EnforceManagerPermission
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        if (! $user || $user->role !== 'manager') {
+        if (! $user || ! in_array($user->role, ['manager', 'agent', 'salesman'], true)) {
             return $next($request);
         }
 
@@ -28,7 +28,12 @@ class EnforceManagerPermission
             return $next($request);
         }
 
-        $level = $user->manager?->permissions()->where('module', $module)->value('access_level') ?? 'none';
+        $profile = match ($user->role) {
+            'manager' => $user->manager,
+            'agent' => $user->agent,
+            'salesman' => $user->salesman,
+        };
+        $level = $profile?->permissions()->where('module', $module)->value('access_level') ?? 'none';
         $allowed = $request->isMethod('GET') ? in_array($level, ['view', 'edit'], true) : $level === 'edit';
         abort_unless($allowed, 403, 'You do not have permission to access this section.');
 
@@ -38,6 +43,7 @@ class EnforceManagerPermission
     private function moduleFor(string $path): ?string
     {
         $map = [
+            'dashboard' => 'dashboard',
             'lead-workflow/lead-card' => 'lead_card', 'lead-workflow/leads-shop' => 'leads_shop',
             'lead-workflow/confirm-leads' => 'confirm_leads', 'lead-workflow/dispatch-leads' => 'dispatch_leads',
             'lead-workflow/reschedule' => 'reschedule', 'lead-workflow/rehash' => 'rehash',

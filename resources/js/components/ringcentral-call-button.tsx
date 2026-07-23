@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 type RingCentralCallButtonProps = {
     phone: string;
+    leadId?: number;
     children: ReactNode;
     className?: string;
     title?: string;
@@ -10,6 +11,7 @@ type RingCentralCallButtonProps = {
 
 export function RingCentralCallButton({
     phone,
+    leadId,
     children,
     className,
     title = 'Call with RingCentral',
@@ -43,9 +45,57 @@ export function RingCentralCallButton({
         return false;
     };
 
-    const startCall = () => {
+    const trackCall = async () => {
+        if (!leadId) return true;
+
+        const token = document
+            .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.getAttribute('content');
+        const response = await fetch(
+            `/lead-workflow/leads-shop/${leadId}/ringcentral-calls`,
+            {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    ...(token ? { 'X-CSRF-TOKEN': token } : {}),
+                },
+                body: JSON.stringify({ phone }),
+            },
+        );
+
+        if (response.ok) {
+            window.dispatchEvent(
+                new CustomEvent('weiss:ringcentral-call-tracked', {
+                    detail: { leadId },
+                }),
+            );
+        }
+
+        return response.ok;
+    };
+
+    const startCall = async () => {
         if (opening) {
             return;
+        }
+
+        setOpening(true);
+        try {
+            if (!(await trackCall())) {
+                window.alert(
+                    'The call could not be linked to this lead. Please try again.',
+                );
+                return;
+            }
+        } catch {
+            window.alert(
+                'The call could not be linked to this lead. Please check your connection and try again.',
+            );
+            return;
+        } finally {
+            setOpening(false);
         }
 
         if (!callWithRingCentral()) {

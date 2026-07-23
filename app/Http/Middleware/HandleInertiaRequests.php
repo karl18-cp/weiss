@@ -41,9 +41,17 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
-                'permissions' => fn () => $request->user()?->role === 'manager'
-                    ? $request->user()->manager?->permissions()->pluck('access_level', 'module') ?? []
-                    : [],
+                'permissions' => function () use ($request) {
+                    $user = $request->user();
+                    $profile = match ($user?->role) {
+                        'manager' => $user->manager,
+                        'agent' => $user->agent,
+                        'salesman' => $user->salesman,
+                        default => null,
+                    };
+
+                    return $profile?->permissions()->pluck('access_level', 'module') ?? [];
+                },
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'importResult' => fn () => $request->session()->get('importResult'),

@@ -67,8 +67,18 @@ test('a valid body secret works even when calltools also sends an outdated beare
 });
 
 test('calltools webhook creates and updates one lead per contact', function () {
-    configureCallToolsWebhook();
-    $matchedAgent = Agent::query()->create(['agent_name' => 'CallTools Agent']);
+    $defaults = configureCallToolsWebhook();
+    $agentCompany = Company::query()->create([
+        'com_id' => 102,
+        'company' => 'Agent Company',
+        'address' => '',
+        'prefix' => 'AC',
+        'project_code' => 'AC-001',
+    ]);
+    $matchedAgent = Agent::query()->create([
+        'agent_name' => 'CallTools Agent',
+        'company_id' => $agentCompany->com_id,
+    ]);
     $matchedProduct = Product::query()->create(['product_name' => 'Electrical / Plumbing']);
 
     $payload = [
@@ -99,6 +109,8 @@ test('calltools webhook creates and updates one lead per contact', function () {
 
     expect($lead->customer_name)->toBe('Jamie Customer')
         ->and($lead->agent_id)->toBe($matchedAgent->agent_id)
+        ->and($lead->company_id)->toBe($agentCompany->com_id)
+        ->and($lead->company_id)->not->toBe($defaults['company']->com_id)
         ->and($lead->product_id)->toBe($matchedProduct->prod_id)
         ->and($lead->appointment_at->format('Y-m-d H:i:s'))->toBe('2026-07-22 14:30:00')
         ->and($lead->calltools_campaign_name)->toBe('Summer Campaign')

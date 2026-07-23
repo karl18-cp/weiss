@@ -1,24 +1,54 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Building2, LockKeyhole, Save, Search, Trash2, UserRound, Users, X } from 'lucide-react';
+import {
+    Building2,
+    LockKeyhole,
+    Save,
+    Search,
+    Trash2,
+    UserRound,
+    Users,
+    X,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/agents.css';
 import DirectoryNavigation from '@/components/directory-navigation';
 import { useSystemModal } from '@/components/system-modal-provider';
+import ModulePermissionsEditor, {
+    type PermissionAccess,
+} from '@/components/module-permissions-editor';
 
 type Agent = {
     agent_id: number;
     agent_name: string;
     account: { acc_id: number; username: string } | null;
     company: { com_id: number; company: string } | null;
+    permissions: { module: string; access_level: PermissionAccess }[];
 };
 
 type Company = { com_id: number; company: string };
 
-export default function Agents({ agents, companies }: { agents: Agent[]; companies: Company[] }) {
+export default function Agents({
+    agents,
+    companies,
+    permissionModules,
+}: {
+    agents: Agent[];
+    companies: Company[];
+    permissionModules: Record<string, string>;
+}) {
     const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Agent | null>(null);
     const [search, setSearch] = useState('');
-    const form = useForm({ agent_name: '', company_id: '', username: '', password: '' });
+    const blankPermissions = Object.fromEntries(
+        Object.keys(permissionModules).map((module) => [module, 'none']),
+    ) as Record<string, PermissionAccess>;
+    const form = useForm({
+        agent_name: '',
+        company_id: '',
+        username: '',
+        password: '',
+        permissions: blankPermissions,
+    });
 
     const filteredAgents = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -32,7 +62,13 @@ export default function Agents({ agents, companies }: { agents: Agent[]; compani
 
     const resetForm = () => {
         setSelected(null);
-        form.setData({ agent_name: '', company_id: '', username: '', password: '' });
+        form.setData({
+            agent_name: '',
+            company_id: '',
+            username: '',
+            password: '',
+            permissions: blankPermissions,
+        });
         form.clearErrors();
     };
 
@@ -43,6 +79,15 @@ export default function Agents({ agents, companies }: { agents: Agent[]; compani
             company_id: String(agent.company?.com_id ?? ''),
             username: agent.account?.username ?? '',
             password: '',
+            permissions: {
+                ...blankPermissions,
+                ...Object.fromEntries(
+                    agent.permissions.map((permission) => [
+                        permission.module,
+                        permission.access_level,
+                    ]),
+                ),
+            },
         });
         form.clearErrors();
     };
@@ -146,7 +191,11 @@ export default function Agents({ agents, companies }: { agents: Agent[]; compani
                                     </span>
                                     <span>
                                         <strong>{agent.agent_name}</strong>
-                                        <small>{agent.company?.company ?? 'No company'} · Agent #{agent.agent_id}</small>
+                                        <small>
+                                            {agent.company?.company ??
+                                                'No company'}{' '}
+                                            · Agent #{agent.agent_id}
+                                        </small>
                                     </span>
                                 </button>
                             ))}
@@ -198,29 +247,87 @@ export default function Agents({ agents, companies }: { agents: Agent[]; compani
                                 <span>Assigned company</span>
                                 <div className="agents-input">
                                     <Building2 />
-                                    <select value={form.data.company_id} onChange={(event) => form.setData('company_id', event.target.value)}>
+                                    <select
+                                        value={form.data.company_id}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'company_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
                                         <option value="">Select company</option>
-                                        {companies.map((company) => <option key={company.com_id} value={company.com_id}>{company.company}</option>)}
+                                        {companies.map((company) => (
+                                            <option
+                                                key={company.com_id}
+                                                value={company.com_id}
+                                            >
+                                                {company.company}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
-                                {form.errors.company_id && <small>{form.errors.company_id}</small>}
+                                {form.errors.company_id && (
+                                    <small>{form.errors.company_id}</small>
+                                )}
                             </label>
                             <label>
-                                <span>Username <small>(optional)</small></span>
+                                <span>
+                                    Username <small>(optional)</small>
+                                </span>
                                 <div className="agents-input">
                                     <UserRound />
-                                    <input value={form.data.username} onChange={(event) => form.setData('username', event.target.value)} placeholder="Optional login username" autoComplete="off" />
+                                    <input
+                                        value={form.data.username}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'username',
+                                                event.target.value,
+                                            )
+                                        }
+                                        placeholder="Optional login username"
+                                        autoComplete="off"
+                                    />
                                 </div>
-                                {form.errors.username && <small>{form.errors.username}</small>}
+                                {form.errors.username && (
+                                    <small>{form.errors.username}</small>
+                                )}
                             </label>
                             <label>
-                                <span>Password <small>(optional)</small></span>
+                                <span>
+                                    Password <small>(optional)</small>
+                                </span>
                                 <div className="agents-input">
                                     <LockKeyhole />
-                                    <input type="password" value={form.data.password} onChange={(event) => form.setData('password', event.target.value)} placeholder={selected?.account ? 'Leave blank to keep current password' : 'At least 8 characters'} autoComplete="new-password" />
+                                    <input
+                                        type="password"
+                                        value={form.data.password}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'password',
+                                                event.target.value,
+                                            )
+                                        }
+                                        placeholder={
+                                            selected?.account
+                                                ? 'Leave blank to keep current password'
+                                                : 'At least 8 characters'
+                                        }
+                                        autoComplete="new-password"
+                                    />
                                 </div>
-                                {form.errors.password && <small>{form.errors.password}</small>}
+                                {form.errors.password && (
+                                    <small>{form.errors.password}</small>
+                                )}
                             </label>
+                            <ModulePermissionsEditor
+                                roleLabel="agent"
+                                modules={permissionModules}
+                                permissions={form.data.permissions}
+                                onChange={(permissions) =>
+                                    form.setData('permissions', permissions)
+                                }
+                            />
                             <div className="agents-form-actions">
                                 {selected && (
                                     <>

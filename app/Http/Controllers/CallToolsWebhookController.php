@@ -252,9 +252,14 @@ class CallToolsWebhookController extends Controller
         if (is_string($agentName) && trim($agentName) !== '') {
             $matchedAgent = Agent::query()
                 ->where('agent_name', trim($agentName))
-                ->value('agent_id');
+                ->first(['agent_id', 'company_id']);
 
-            $agentId = $matchedAgent ? (int) $matchedAgent : $agentId;
+            if ($matchedAgent) {
+                $agentId = (int) $matchedAgent->agent_id;
+                $companyId = $matchedAgent->company_id
+                    ? (int) $matchedAgent->company_id
+                    : $companyId;
+            }
         }
 
         if (is_string($productName) && trim($productName) !== '') {

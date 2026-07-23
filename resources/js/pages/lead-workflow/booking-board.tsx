@@ -14,10 +14,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/booking-board.css';
 import { RingCentralCallButton } from '@/components/ringcentral-call-button';
-import {
-    appointmentDate,
-    appointmentDateKey,
-} from '@/lib/appointment-date';
+import { appointmentDate, appointmentDateKey } from '@/lib/appointment-date';
 
 type BookingLead = {
     id: number;
@@ -259,12 +256,16 @@ export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
                                     <time>
                                         <strong>
                                             {timeFormatter.format(
-                                                appointmentDate(lead.appointment_at),
+                                                appointmentDate(
+                                                    lead.appointment_at,
+                                                ),
                                             )}
                                         </strong>
                                         <span>
                                             {dayFormatter.format(
-                                                appointmentDate(lead.appointment_at),
+                                                appointmentDate(
+                                                    lead.appointment_at,
+                                                ),
                                             )}
                                         </span>
                                     </time>
@@ -355,14 +356,18 @@ export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
                                         <strong>
                                             {longDateFormatter.format(
                                                 new Date(
-                                                    appointmentDate(selected.appointment_at),
+                                                    appointmentDate(
+                                                        selected.appointment_at,
+                                                    ),
                                                 ),
                                             )}
                                         </strong>
                                         <small>
                                             {timeFormatter.format(
                                                 new Date(
-                                                    appointmentDate(selected.appointment_at),
+                                                    appointmentDate(
+                                                        selected.appointment_at,
+                                                    ),
                                                 ),
                                             )}
                                         </small>
@@ -426,6 +431,7 @@ export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
 
                                 <footer>
                                     <RingCentralCallButton
+                                        leadId={selected.id}
                                         phone={selected.primary_number}
                                     >
                                         <Phone /> Call customer

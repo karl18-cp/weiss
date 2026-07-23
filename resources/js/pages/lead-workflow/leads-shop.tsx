@@ -8,6 +8,7 @@ import {
     CircleDollarSign,
     Clock3,
     History,
+    Headphones,
     Mail,
     MapPin,
     MessageCircle,
@@ -65,6 +66,18 @@ export type Lead = {
     salesman_two: { salesman_id: number; salesman_name: string } | null;
     notes: LeadNote[];
     movements?: LeadMovement[];
+    ring_central_calls?: RingCentralCall[];
+};
+
+type RingCentralCall = {
+    id: number;
+    phone_number: string;
+    result: string | null;
+    duration_seconds: number;
+    initiated_at: string;
+    started_at: string | null;
+    recording_path: string | null;
+    caller: { acc_id: number; username: string } | null;
 };
 
 type LeadNote = {
@@ -91,6 +104,18 @@ type LeadAgentAssignment = {
     assigner: { acc_id: number; username: string } | null;
 };
 
+const latestNoteBody = (lead: Lead | null, noteType: string): string => {
+    if (!lead) return '';
+
+    const latest = [...lead.notes]
+        .filter((note) => note.note_type === noteType)
+        .sort((a, b) => b.id - a.id)[0];
+
+    if (latest) return latest.body;
+
+    return noteType === 'telemarketer' ? (lead.telemarketer_notes ?? '') : '';
+};
+
 export type CompanyOption = { com_id: number; company: string };
 export type ProductOption = { prod_id: number; product_name: string };
 export type AgentOption = { agent_id: number; agent_name: string };
@@ -100,6 +125,7 @@ export type LeadsShopProps = {
     leads: Lead[];
     companies: CompanyOption[];
     products: ProductOption[];
+    cities: string[];
     agents: AgentOption[];
     salesmen?: SalesmanOption[];
     queue?: {
@@ -170,7 +196,9 @@ const workflowLocation = (status: string | null) => {
         project: 'Projects',
     };
 
-    return status ? (locations[status] ?? status.replaceAll('_', ' ')) : 'New lead';
+    return status
+        ? (locations[status] ?? status.replaceAll('_', ' '))
+        : 'New lead';
 };
 
 const historyNoteLabel = (type: string) => {
@@ -199,6 +227,25 @@ const calendarDateKey = (value: string | null | undefined) => {
     return Number.isNaN(parsed.getTime())
         ? null
         : parsed.toLocaleDateString('en-CA');
+};
+
+const deviceDateKey = (value: string | null | undefined) => {
+    if (!value) return null;
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? null
+        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const isInstantAppointment = (lead: Lead) => {
+    const createdDate = deviceDateKey(lead.created_at);
+    const appointmentDate = deviceDateKey(lead.appointment_at);
+
+    return Boolean(
+        createdDate && appointmentDate && createdDate === appointmentDate,
+    );
 };
 
 const leadAddress = (lead: Lead) =>
@@ -407,12 +454,19 @@ export default function LeadsShop({
     leads,
     companies,
     products,
+    cities,
     agents,
     salesmen = [],
     queue,
 }: LeadsShopProps) {
-    const requestedLeadId = Number(new URLSearchParams(window.location.search).get('lead')) || null;
-    const requestedLead = leads.find((lead) => lead.id === requestedLeadId) ?? null;
+    const requestedLeadId =
+        Number(new URLSearchParams(window.location.search).get('lead')) || null;
+    const requestedLead =
+        leads.find((lead) => lead.id === requestedLeadId) ?? null;
+    const requestedTelemarketerNote = latestNoteBody(
+        requestedLead,
+        'telemarketer',
+    );
     const { notify } = useSystemModal();
     const [search, setSearch] = useState('');
     const [selectedDate, setSelectedDate] = useState<string>('all');
@@ -425,7 +479,9 @@ export default function LeadsShop({
     const [productFilter, setProductFilter] = useState('all');
     const [agentFilter, setAgentFilter] = useState('all');
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [selectedId, setSelectedId] = useState<number | null>(requestedLeadId);
+    const [selectedId, setSelectedId] = useState<number | null>(
+        requestedLeadId,
+    );
     const [appointmentResultDraft, setAppointmentResultDraft] = useState('');
     const [salesmanOneDraft, setSalesmanOneDraft] = useState('');
     const [salesmanTwoDraft, setSalesmanTwoDraft] = useState('');
@@ -434,6 +490,10 @@ export default function LeadsShop({
     >(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
+    const [recordingsOpen, setRecordingsOpen] = useState(false);
+    const [newCallAttempts, setNewCallAttempts] = useState<
+        Record<number, number>
+    >({});
     const [historyType, setHistoryType] = useState<
         | 'telemarketer'
         | 'confirmation'
@@ -443,10 +503,35 @@ export default function LeadsShop({
         | null
     >(null);
     const form = useForm(emptyLeadForm);
+
+    useEffect(() => {
+        const handleTrackedCall = (event: Event) => {
+            const leadId = (event as CustomEvent<{ leadId?: number }>).detail
+                ?.leadId;
+            if (!leadId) return;
+            setNewCallAttempts((current) => ({
+                ...current,
+                [leadId]: (current[leadId] ?? 0) + 1,
+            }));
+        };
+
+        window.addEventListener(
+            'weiss:ringcentral-call-tracked',
+            handleTrackedCall,
+        );
+        return () =>
+            window.removeEventListener(
+                'weiss:ringcentral-call-tracked',
+                handleTrackedCall,
+            );
+    }, []);
     const telemarketerNoteForm = useForm({
         note_type: 'telemarketer',
-        body: '',
+        body: requestedTelemarketerNote,
     });
+    const [loadedTelemarketerNote, setLoadedTelemarketerNote] = useState(
+        requestedTelemarketerNote,
+    );
     const confirmationNoteForm = useForm({
         note_type: 'confirmation',
         body: '',
@@ -522,9 +607,7 @@ export default function LeadsShop({
     const availableDateRows = useMemo(() => {
         const counts = new Map<string, number>();
         leads.forEach((lead) => {
-            const key = calendarDateKey(
-                lead[queue?.dateField ?? 'created_at'],
-            );
+            const key = calendarDateKey(lead[queue?.dateField ?? 'created_at']);
             if (!key) return;
             counts.set(key, (counts.get(key) ?? 0) + 1);
         });
@@ -573,46 +656,52 @@ export default function LeadsShop({
 
     const filterOptions = useMemo(
         () => ({
-            companies: Array.from(
-                new Map(
-                    leads
-                        .filter((lead) => lead.company)
-                        .map((lead) => [
-                            String(lead.company!.com_id),
-                            lead.company!.company,
-                        ]),
-                ),
-            ).sort((a, b) => a[1].localeCompare(b[1])),
+            companies: companies.map(
+                (company) =>
+                    [String(company.com_id), company.company] as [
+                        string,
+                        string,
+                    ],
+            ),
             sources: Array.from(
                 new Set(leads.map((lead) => lead.source)),
             ).sort(),
-            cities: Array.from(new Set(leads.map((lead) => lead.city))).sort(),
-            products: Array.from(
-                new Map(
-                    leads
-                        .filter((lead) => lead.product)
-                        .map((lead) => [
-                            String(lead.product!.prod_id),
-                            lead.product!.product_name,
-                        ]),
-                ),
-            ).sort((a, b) => a[1].localeCompare(b[1])),
+            cities,
+            products: products.map(
+                (product) =>
+                    [String(product.prod_id), product.product_name] as [
+                        string,
+                        string,
+                    ],
+            ),
             agents: Array.from(
                 new Map(
                     leads.flatMap((lead) => [
                         ...(lead.agent
-                            ? [[String(lead.agent.agent_id), lead.agent.agent_name] as [string, string]]
+                            ? [
+                                  [
+                                      String(lead.agent.agent_id),
+                                      lead.agent.agent_name,
+                                  ] as [string, string],
+                              ]
                             : []),
-                        ...(lead.agent_assignments ?? []).flatMap((assignment) =>
-                            assignment.agent
-                                ? [[String(assignment.agent.agent_id), assignment.agent.agent_name] as [string, string]]
-                                : [],
+                        ...(lead.agent_assignments ?? []).flatMap(
+                            (assignment) =>
+                                assignment.agent
+                                    ? [
+                                          [
+                                              String(assignment.agent.agent_id),
+                                              assignment.agent.agent_name,
+                                          ] as [string, string],
+                                      ]
+                                    : [],
                         ),
                     ]),
                 ),
             ).sort((a, b) => a[1].localeCompare(b[1])),
+            hasUnassignedAgents: leads.some((lead) => !lead.agent),
         }),
-        [leads],
+        [cities, companies, leads, products],
     );
 
     const statusFilters = useMemo(
@@ -646,56 +735,73 @@ export default function LeadsShop({
     const filteredLeads = useMemo(() => {
         const query = search.trim().toLowerCase();
 
-        return leads.filter((lead) => {
-            const matchesDate =
-                selectedDate === 'all' ||
-                calendarDateKey(
-                    lead[queue?.dateField ?? 'created_at'],
-                ) === selectedDate;
-            const matchesSearch =
-                !query ||
-                [
-                    lead.customer_name,
-                    lead.city,
-                    lead.company?.company,
-                    lead.product?.product_name,
-                    lead.agent?.agent_name,
-                ]
-                    .join(' ')
-                    .toLowerCase()
-                    .includes(query);
+        return leads
+            .filter((lead) => {
+                const matchesDate =
+                    selectedDate === 'all' ||
+                    calendarDateKey(lead[queue?.dateField ?? 'created_at']) ===
+                        selectedDate;
+                const matchesSearch =
+                    !query ||
+                    [
+                        lead.customer_name,
+                        lead.city,
+                        lead.company?.company,
+                        lead.product?.product_name,
+                        lead.agent?.agent_name,
+                    ]
+                        .join(' ')
+                        .toLowerCase()
+                        .includes(query);
 
-            const matchesStatus = (lead.status || 'fresh') === selectedStatus;
-            const matchesCompany =
-                companyFilter === 'all' ||
-                String(lead.company?.com_id) === companyFilter;
-            const matchesSource =
-                sourceFilter === 'all' || lead.source === sourceFilter;
-            const matchesCity =
-                cityFilter === 'all' || lead.city === cityFilter;
-            const matchesProduct =
-                productFilter === 'all' ||
-                String(lead.product?.prod_id) === productFilter;
-            const matchesAgent =
-                agentFilter === 'all' ||
-                (agentFilter === 'unassigned'
-                    ? !lead.agent
-                    : String(lead.agent?.agent_id) === agentFilter ||
-                      (lead.agent_assignments ?? []).some(
-                          (assignment) => String(assignment.agent?.agent_id) === agentFilter,
-                      ));
+                const matchesStatus =
+                    (lead.status || 'fresh') === selectedStatus;
+                const matchesCompany =
+                    companyFilter === 'all' ||
+                    String(lead.company?.com_id) === companyFilter;
+                const matchesSource =
+                    sourceFilter === 'all' || lead.source === sourceFilter;
+                const matchesCity =
+                    cityFilter === 'all' || lead.city === cityFilter;
+                const matchesProduct =
+                    productFilter === 'all' ||
+                    String(lead.product?.prod_id) === productFilter;
+                const matchesAgent =
+                    agentFilter === 'all' ||
+                    (agentFilter === 'unassigned'
+                        ? !lead.agent
+                        : String(lead.agent?.agent_id) === agentFilter ||
+                          (lead.agent_assignments ?? []).some(
+                              (assignment) =>
+                                  String(assignment.agent?.agent_id) ===
+                                  agentFilter,
+                          ));
 
-            return (
-                matchesDate &&
-                matchesSearch &&
-                matchesStatus &&
-                matchesCompany &&
-                matchesSource &&
-                matchesCity &&
-                matchesProduct &&
-                matchesAgent
-            );
-        });
+                return (
+                    matchesDate &&
+                    matchesSearch &&
+                    matchesStatus &&
+                    matchesCompany &&
+                    matchesSource &&
+                    matchesCity &&
+                    matchesProduct &&
+                    matchesAgent
+                );
+            })
+            .sort((first, second) => {
+                const dateField = queue?.dateField ?? 'created_at';
+                const firstTime = first[dateField]
+                    ? new Date(first[dateField] as string).getTime()
+                    : 0;
+                const secondTime = second[dateField]
+                    ? new Date(second[dateField] as string).getTime()
+                    : 0;
+                const dateDifference =
+                    (Number.isNaN(secondTime) ? 0 : secondTime) -
+                    (Number.isNaN(firstTime) ? 0 : firstTime);
+
+                return dateDifference || second.id - first.id;
+            });
     }, [
         leads,
         search,
@@ -730,13 +836,16 @@ export default function LeadsShop({
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
 
     const selectLead = (lead: Lead) => {
+        const latestTelemarketerNote = latestNoteBody(lead, 'telemarketer');
         setSelectedId(lead.id);
         setAppointmentResultDraft(lead.appointment_result ?? '');
         setSalesmanOneDraft(String(lead.salesman_one?.salesman_id ?? ''));
         setSalesmanTwoDraft(String(lead.salesman_two?.salesman_id ?? ''));
         setIsEditing(false);
         setHistoryType(null);
-        telemarketerNoteForm.reset();
+        setRecordingsOpen(false);
+        telemarketerNoteForm.setData('body', latestTelemarketerNote);
+        setLoadedTelemarketerNote(latestTelemarketerNote);
         telemarketerNoteForm.clearErrors();
         confirmationNoteForm.reset();
         confirmationNoteForm.clearErrors();
@@ -788,7 +897,8 @@ export default function LeadsShop({
     };
 
     const saveTelemarketerNote = () => {
-        if (!selected || !telemarketerNoteForm.data.body.trim()) {
+        const body = telemarketerNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedTelemarketerNote.trim()) {
             return;
         }
 
@@ -796,7 +906,10 @@ export default function LeadsShop({
             `/lead-workflow/leads-shop/${selected.id}/notes`,
             {
                 preserveScroll: true,
-                onSuccess: () => telemarketerNoteForm.reset(),
+                onSuccess: () => {
+                    telemarketerNoteForm.setData('body', body);
+                    setLoadedTelemarketerNote(body);
+                },
             },
         );
     };
@@ -978,24 +1091,18 @@ export default function LeadsShop({
             }));
         }
 
-        return [
-            ...selected.notes.map((note) => ({
-                kind: 'note' as const,
-                id: note.id,
-                created_at: note.created_at,
-                note,
-            })),
-            ...(selected.movements ?? []).map((movement) => ({
+        return (selected.movements ?? [])
+            .map((movement) => ({
                 kind: 'movement' as const,
                 id: movement.id,
                 created_at: movement.created_at,
                 movement,
-            })),
-        ].sort(
-            (first, second) =>
-                new Date(second.created_at).getTime() -
-                new Date(first.created_at).getTime(),
-        );
+            }))
+            .sort(
+                (first, second) =>
+                    new Date(second.created_at).getTime() -
+                    new Date(first.created_at).getTime(),
+            );
     }, [displayedHistory, historyType, selected]);
 
     const defaultWorkflowActions = [
@@ -1226,7 +1333,7 @@ export default function LeadsShop({
                                 ))}
                                 <button
                                     type="button"
-                                    className={`lead-filter-reset${isRefreshing ? ' lead-filter-reset--loading' : ''}`}
+                                    className={`lead-filter-reset${isRefreshing ? 'lead-filter-reset--loading' : ''}`}
                                     onClick={clearListFilters}
                                     disabled={isRefreshing}
                                     aria-label="Refresh leads and reset filters"
@@ -1315,9 +1422,11 @@ export default function LeadsShop({
                                         }
                                     >
                                         <option value="all">All agents</option>
-                                        <option value="unassigned">
-                                            Unassigned
-                                        </option>
+                                        {filterOptions.hasUnassignedAgents && (
+                                            <option value="unassigned">
+                                                Unassigned
+                                            </option>
+                                        )}
                                         {filterOptions.agents.map(
                                             ([id, name]) => (
                                                 <option key={id} value={id}>
@@ -1343,15 +1452,30 @@ export default function LeadsShop({
                                 <button
                                     type="button"
                                     key={lead.id}
-                                    className={
+                                    className={[
+                                        'lead-browser-row',
                                         selectedId === lead.id
-                                            ? 'lead-browser-row lead-browser-row--active'
-                                            : 'lead-browser-row'
-                                    }
+                                            ? 'lead-browser-row--active'
+                                            : '',
+                                        isInstantAppointment(lead)
+                                            ? 'lead-browser-row--instant'
+                                            : '',
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ')}
                                     onClick={() => selectLead(lead)}
                                 >
                                     <span>
-                                        <strong>{lead.customer_name}</strong>
+                                        <span className="lead-browser-row__name">
+                                            <strong>
+                                                {lead.customer_name}
+                                            </strong>
+                                            {isInstantAppointment(lead) && (
+                                                <span className="lead-browser-row__instant-badge">
+                                                    Instant
+                                                </span>
+                                            )}
+                                        </span>
                                         <small>
                                             {lead.product?.product_name ??
                                                 'No product'}
@@ -1361,7 +1485,9 @@ export default function LeadsShop({
                                     <span>
                                         {queue?.dateField === 'appointment_at'
                                             ? lead.appointment_at
-                                                ? formatAppointmentDate(lead.appointment_at)
+                                                ? formatAppointmentDate(
+                                                      lead.appointment_at,
+                                                  )
                                                 : 'No appointment'
                                             : formatDate(lead.created_at)}
                                     </span>
@@ -1398,6 +1524,24 @@ export default function LeadsShop({
                                     </div>
                                     <div className="lead-detail__controls">
                                         <div className="lead-address-actions">
+                                            <button
+                                                type="button"
+                                                className="lead-address-action lead-address-action--recordings"
+                                                onClick={() =>
+                                                    setRecordingsOpen(true)
+                                                }
+                                            >
+                                                <Headphones />
+                                                <span>
+                                                    Call attempts{' '}
+                                                    {(selected
+                                                        .ring_central_calls
+                                                        ?.length ?? 0) +
+                                                        (newCallAttempts[
+                                                            selected.id
+                                                        ] ?? 0)}
+                                                </span>
+                                            </button>
                                             <a
                                                 className="lead-address-action lead-address-action--zillow"
                                                 href={
@@ -1523,6 +1667,7 @@ export default function LeadsShop({
                                                 />
                                                 {form.data.primary_number.trim() && (
                                                     <RingCentralCallButton
+                                                        leadId={selected.id}
                                                         phone={
                                                             form.data
                                                                 .primary_number
@@ -1556,6 +1701,7 @@ export default function LeadsShop({
                                                 />
                                                 {form.data.secondary_number.trim() && (
                                                     <RingCentralCallButton
+                                                        leadId={selected.id}
                                                         phone={
                                                             form.data
                                                                 .secondary_number
@@ -1583,6 +1729,7 @@ export default function LeadsShop({
                                                 />
                                                 {form.data.mobile_number.trim() && (
                                                     <RingCentralCallButton
+                                                        leadId={selected.id}
                                                         phone={
                                                             form.data
                                                                 .mobile_number
@@ -1774,7 +1921,9 @@ export default function LeadsShop({
                                                     <option value="">
                                                         Select result
                                                     </option>
-                                                    <option value="PNS">PNS</option>
+                                                    <option value="PNS">
+                                                        PNS
+                                                    </option>
                                                     <option value="PNS No Rehash">
                                                         PNS No Rehash
                                                     </option>
@@ -1784,7 +1933,9 @@ export default function LeadsShop({
                                                     <option value="Salesman Sent">
                                                         Salesman Sent
                                                     </option>
-                                                    <option value="Sold">Sold</option>
+                                                    <option value="Sold">
+                                                        Sold
+                                                    </option>
                                                     <option value="Sold and Cancel">
                                                         Sold and Cancel
                                                     </option>
@@ -1830,7 +1981,9 @@ export default function LeadsShop({
                                             )}
                                         </label>
                                         <label>
-                                            <span>Original agent / reassign</span>
+                                            <span>
+                                                Original agent / reassign
+                                            </span>
                                             <select
                                                 value={form.data.agent_id}
                                                 onChange={(event) =>
@@ -2009,6 +2162,9 @@ export default function LeadsShop({
                                                         </strong>
                                                         {selected.primary_number.trim() && (
                                                             <RingCentralCallButton
+                                                                leadId={
+                                                                    selected.id
+                                                                }
                                                                 phone={
                                                                     selected.primary_number
                                                                 }
@@ -2028,6 +2184,9 @@ export default function LeadsShop({
                                                         </strong>
                                                         {selected.secondary_number?.trim() && (
                                                             <RingCentralCallButton
+                                                                leadId={
+                                                                    selected.id
+                                                                }
                                                                 phone={
                                                                     selected.secondary_number
                                                                 }
@@ -2047,6 +2206,9 @@ export default function LeadsShop({
                                                         </strong>
                                                         {selected.mobile_number?.trim() && (
                                                             <RingCentralCallButton
+                                                                leadId={
+                                                                    selected.id
+                                                                }
                                                                 phone={
                                                                     selected.mobile_number
                                                                 }
@@ -2092,7 +2254,9 @@ export default function LeadsShop({
                                                         </small>
                                                         <strong>
                                                             {selected.appointment_at
-                                                                ? formatAppointmentDate(selected.appointment_at)
+                                                                ? formatAppointmentDate(
+                                                                      selected.appointment_at,
+                                                                  )
                                                                 : 'Not scheduled'}
                                                         </strong>
                                                     </span>
@@ -2121,66 +2285,91 @@ export default function LeadsShop({
                                                     </span>
                                                 </div>
                                                 <div>
-                                                        <UserRound />
-                                                        <span>
-                                                            <small>
-                                                                Assign another agent
-                                                            </small>
-                                                            <select
-                                                                className="lead-inline-assignment"
-                                                                value=""
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    assignSecondAgent(
-                                                                        event
-                                                                            .target
-                                                                            .value,
-                                                                    )
+                                                    <UserRound />
+                                                    <span>
+                                                        <small>
+                                                            Assign another agent
+                                                        </small>
+                                                        <select
+                                                            className="lead-inline-assignment"
+                                                            value=""
+                                                            onChange={(event) =>
+                                                                assignSecondAgent(
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                        >
+                                                            <option value="">
+                                                                Select agent
+                                                            </option>
+                                                            {agents.map(
+                                                                (agent) => (
+                                                                    <option
+                                                                        key={
+                                                                            agent.agent_id
+                                                                        }
+                                                                        value={
+                                                                            agent.agent_id
+                                                                        }
+                                                                        disabled={
+                                                                            selected
+                                                                                .agent
+                                                                                ?.agent_id ===
+                                                                            agent.agent_id
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            agent.agent_name
+                                                                        }
+                                                                    </option>
+                                                                ),
+                                                            )}
+                                                        </select>
+                                                    </span>
+                                                </div>
+                                                {(
+                                                    selected.agent_assignments ??
+                                                    []
+                                                )
+                                                    .filter(
+                                                        (assignment) =>
+                                                            !assignment.is_original,
+                                                    )
+                                                    .map(
+                                                        (assignment, index) => (
+                                                            <div
+                                                                key={
+                                                                    assignment.id
                                                                 }
                                                             >
-                                                                <option value="">
-                                                                    Select agent
-                                                                </option>
-                                                                {agents.map(
-                                                                    (agent) => (
-                                                                        <option
-                                                                            key={
-                                                                                agent.agent_id
-                                                                            }
-                                                                            value={
-                                                                                agent.agent_id
-                                                                            }
-                                                                            disabled={
-                                                                                selected
-                                                                                    .agent
-                                                                                    ?.agent_id ===
-                                                                                agent.agent_id
-                                                                            }
-                                                                        >
-                                                                            {
-                                                                                agent.agent_name
-                                                                            }
-                                                                        </option>
-                                                                    ),
-                                                                )}
-                                                            </select>
-                                                        </span>
-                                                    </div>
-                                                {(selected.agent_assignments ?? [])
-                                                    .filter((assignment) => !assignment.is_original)
-                                                    .map((assignment, index) => (
-                                                        <div key={assignment.id}>
-                                                            <UserRound />
-                                                            <span>
-                                                                <small>Agent {index + 2}</small>
-                                                                <strong>{assignment.agent?.agent_name ?? 'Unknown'}</strong>
-                                                                <small>
-                                                                    {assignment.assigner?.username ?? 'System'} · {formatDate(assignment.created_at)}
-                                                                </small>
-                                                            </span>
-                                                        </div>
-                                                    ))}
+                                                                <UserRound />
+                                                                <span>
+                                                                    <small>
+                                                                        Agent{' '}
+                                                                        {index +
+                                                                            2}
+                                                                    </small>
+                                                                    <strong>
+                                                                        {assignment
+                                                                            .agent
+                                                                            ?.agent_name ??
+                                                                            'Unknown'}
+                                                                    </strong>
+                                                                    <small>
+                                                                        {assignment
+                                                                            .assigner
+                                                                            ?.username ??
+                                                                            'System'}{' '}
+                                                                        ·{' '}
+                                                                        {formatDate(
+                                                                            assignment.created_at,
+                                                                        )}
+                                                                    </small>
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
                                                 {[
                                                     'dispatched',
                                                     'rehash',
@@ -2205,37 +2394,69 @@ export default function LeadsShop({
                                                                         result
                                                                     </small>
                                                                     <div className="lead-inline-save-field">
-                                                                    <select className="lead-inline-assignment" value={appointmentResultDraft} onChange={(event) => setAppointmentResultDraft(event.target.value)}>
-                                                                        <option value="">
-                                                                            Select
-                                                                            result
-                                                                        </option>
-                                                                        <option value="PNS">
-                                                                            PNS
-                                                                        </option>
-                                                                        <option value="PNS No Rehash">
-                                                                            PNS
-                                                                            No
-                                                                            Rehash
-                                                                        </option>
-                                                                        <option value="2 ND Meeting">
-                                                                            2 ND
-                                                                            Meeting
-                                                                        </option>
-                                                                        <option value="Salesman Sent">
-                                                                            Salesman
-                                                                            Sent
-                                                                        </option>
-                                                                        <option value="Sold">
-                                                                            Sold
-                                                                        </option>
-                                                                        <option value="Sold and Cancel">
-                                                                            Sold
-                                                                            and
-                                                                            Cancel
-                                                                        </option>
-                                                                    </select>
-                                                                    <button type="button" className="lead-inline-save" onClick={saveAppointmentResult} disabled={savingAssignment !== null || appointmentResultDraft === (selected.appointment_result ?? '')} aria-label="Save appointment result" title="Save appointment result"><Save /></button>
+                                                                        <select
+                                                                            className="lead-inline-assignment"
+                                                                            value={
+                                                                                appointmentResultDraft
+                                                                            }
+                                                                            onChange={(
+                                                                                event,
+                                                                            ) =>
+                                                                                setAppointmentResultDraft(
+                                                                                    event
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <option value="">
+                                                                                Select
+                                                                                result
+                                                                            </option>
+                                                                            <option value="PNS">
+                                                                                PNS
+                                                                            </option>
+                                                                            <option value="PNS No Rehash">
+                                                                                PNS
+                                                                                No
+                                                                                Rehash
+                                                                            </option>
+                                                                            <option value="2 ND Meeting">
+                                                                                2
+                                                                                ND
+                                                                                Meeting
+                                                                            </option>
+                                                                            <option value="Salesman Sent">
+                                                                                Salesman
+                                                                                Sent
+                                                                            </option>
+                                                                            <option value="Sold">
+                                                                                Sold
+                                                                            </option>
+                                                                            <option value="Sold and Cancel">
+                                                                                Sold
+                                                                                and
+                                                                                Cancel
+                                                                            </option>
+                                                                        </select>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="lead-inline-save"
+                                                                            onClick={
+                                                                                saveAppointmentResult
+                                                                            }
+                                                                            disabled={
+                                                                                savingAssignment !==
+                                                                                    null ||
+                                                                                appointmentResultDraft ===
+                                                                                    (selected.appointment_result ??
+                                                                                        '')
+                                                                            }
+                                                                            aria-label="Save appointment result"
+                                                                            title="Save appointment result"
+                                                                        >
+                                                                            <Save />
+                                                                        </button>
                                                                     </div>
                                                                 </span>
                                                             </div>
@@ -2247,33 +2468,73 @@ export default function LeadsShop({
                                                                     Salesman 1
                                                                 </small>
                                                                 <div className="lead-inline-save-field">
-                                                                <select className="lead-inline-assignment" value={salesmanOneDraft} onChange={(event) => setSalesmanOneDraft(event.target.value)}>
-                                                                    <option value="">
-                                                                        Unassigned
-                                                                    </option>
-                                                                    {salesmen.map(
-                                                                        (
-                                                                            salesman,
-                                                                        ) => (
-                                                                            <option
-                                                                                key={
-                                                                                    salesman.salesman_id
-                                                                                }
-                                                                                value={
-                                                                                    salesman.salesman_id
-                                                                                }
-                                                                                disabled={
-                                                                                    salesmanTwoDraft === String(salesman.salesman_id)
-                                                                                }
-                                                                            >
-                                                                                {
-                                                                                    salesman.salesman_name
-                                                                                }
-                                                                            </option>
-                                                                        ),
-                                                                    )}
-                                                                </select>
-                                                                <button type="button" className="lead-inline-save" onClick={() => saveSalesman('salesman_1_id')} disabled={savingAssignment !== null || salesmanOneDraft === String(selected.salesman_one?.salesman_id ?? '')} aria-label="Save salesman 1" title="Save salesman 1"><Save /></button>
+                                                                    <select
+                                                                        className="lead-inline-assignment"
+                                                                        value={
+                                                                            salesmanOneDraft
+                                                                        }
+                                                                        onChange={(
+                                                                            event,
+                                                                        ) =>
+                                                                            setSalesmanOneDraft(
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <option value="">
+                                                                            Unassigned
+                                                                        </option>
+                                                                        {salesmen.map(
+                                                                            (
+                                                                                salesman,
+                                                                            ) => (
+                                                                                <option
+                                                                                    key={
+                                                                                        salesman.salesman_id
+                                                                                    }
+                                                                                    value={
+                                                                                        salesman.salesman_id
+                                                                                    }
+                                                                                    disabled={
+                                                                                        salesmanTwoDraft ===
+                                                                                        String(
+                                                                                            salesman.salesman_id,
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    {
+                                                                                        salesman.salesman_name
+                                                                                    }
+                                                                                </option>
+                                                                            ),
+                                                                        )}
+                                                                    </select>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="lead-inline-save"
+                                                                        onClick={() =>
+                                                                            saveSalesman(
+                                                                                'salesman_1_id',
+                                                                            )
+                                                                        }
+                                                                        disabled={
+                                                                            savingAssignment !==
+                                                                                null ||
+                                                                            salesmanOneDraft ===
+                                                                                String(
+                                                                                    selected
+                                                                                        .salesman_one
+                                                                                        ?.salesman_id ??
+                                                                                        '',
+                                                                                )
+                                                                        }
+                                                                        aria-label="Save salesman 1"
+                                                                        title="Save salesman 1"
+                                                                    >
+                                                                        <Save />
+                                                                    </button>
                                                                 </div>
                                                             </span>
                                                         </div>
@@ -2284,33 +2545,73 @@ export default function LeadsShop({
                                                                     Salesman 2
                                                                 </small>
                                                                 <div className="lead-inline-save-field">
-                                                                <select className="lead-inline-assignment" value={salesmanTwoDraft} onChange={(event) => setSalesmanTwoDraft(event.target.value)}>
-                                                                    <option value="">
-                                                                        Unassigned
-                                                                    </option>
-                                                                    {salesmen.map(
-                                                                        (
-                                                                            salesman,
-                                                                        ) => (
-                                                                            <option
-                                                                                key={
-                                                                                    salesman.salesman_id
-                                                                                }
-                                                                                value={
-                                                                                    salesman.salesman_id
-                                                                                }
-                                                                                disabled={
-                                                                                    salesmanOneDraft === String(salesman.salesman_id)
-                                                                                }
-                                                                            >
-                                                                                {
-                                                                                    salesman.salesman_name
-                                                                                }
-                                                                            </option>
-                                                                        ),
-                                                                    )}
-                                                                </select>
-                                                                <button type="button" className="lead-inline-save" onClick={() => saveSalesman('salesman_2_id')} disabled={savingAssignment !== null || salesmanTwoDraft === String(selected.salesman_two?.salesman_id ?? '')} aria-label="Save salesman 2" title="Save salesman 2"><Save /></button>
+                                                                    <select
+                                                                        className="lead-inline-assignment"
+                                                                        value={
+                                                                            salesmanTwoDraft
+                                                                        }
+                                                                        onChange={(
+                                                                            event,
+                                                                        ) =>
+                                                                            setSalesmanTwoDraft(
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <option value="">
+                                                                            Unassigned
+                                                                        </option>
+                                                                        {salesmen.map(
+                                                                            (
+                                                                                salesman,
+                                                                            ) => (
+                                                                                <option
+                                                                                    key={
+                                                                                        salesman.salesman_id
+                                                                                    }
+                                                                                    value={
+                                                                                        salesman.salesman_id
+                                                                                    }
+                                                                                    disabled={
+                                                                                        salesmanOneDraft ===
+                                                                                        String(
+                                                                                            salesman.salesman_id,
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    {
+                                                                                        salesman.salesman_name
+                                                                                    }
+                                                                                </option>
+                                                                            ),
+                                                                        )}
+                                                                    </select>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="lead-inline-save"
+                                                                        onClick={() =>
+                                                                            saveSalesman(
+                                                                                'salesman_2_id',
+                                                                            )
+                                                                        }
+                                                                        disabled={
+                                                                            savingAssignment !==
+                                                                                null ||
+                                                                            salesmanTwoDraft ===
+                                                                                String(
+                                                                                    selected
+                                                                                        .salesman_two
+                                                                                        ?.salesman_id ??
+                                                                                        '',
+                                                                                )
+                                                                        }
+                                                                        aria-label="Save salesman 2"
+                                                                        title="Save salesman 2"
+                                                                    >
+                                                                        <Save />
+                                                                    </button>
                                                                 </div>
                                                             </span>
                                                         </div>
@@ -2377,7 +2678,9 @@ export default function LeadsShop({
                                                     type="button"
                                                     disabled={
                                                         telemarketerNoteForm.processing ||
-                                                        !telemarketerNoteForm.data.body.trim()
+                                                        !telemarketerNoteForm.data.body.trim() ||
+                                                        telemarketerNoteForm.data.body.trim() ===
+                                                            loadedTelemarketerNote.trim()
                                                     }
                                                     onClick={
                                                         saveTelemarketerNote
@@ -2711,6 +3014,123 @@ export default function LeadsShop({
                     </div>
                 )}
 
+                {recordingsOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-recordings-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setRecordingsOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-recordings-modal">
+                            <header>
+                                <div>
+                                    <span>
+                                        <Headphones />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-recordings-title">
+                                            Calls & recordings
+                                        </h2>
+                                        <p>
+                                            {selected.customer_name} · Lead #
+                                            {selected.id}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setRecordingsOpen(false)}
+                                    aria-label="Close recordings"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-recordings-summary">
+                                <strong>
+                                    {(selected.ring_central_calls?.length ??
+                                        0) +
+                                        (newCallAttempts[selected.id] ??
+                                            0)}{' '}
+                                    call attempts
+                                </strong>
+                                <span>
+                                    {selected.ring_central_calls?.filter(
+                                        (call) => call.recording_path,
+                                    ).length ?? 0}{' '}
+                                    recordings available
+                                </span>
+                            </div>
+                            <div className="lead-recordings-list">
+                                {(selected.ring_central_calls ?? []).map(
+                                    (call) => (
+                                        <article key={call.id}>
+                                            <div className="lead-recordings-list__details">
+                                                <strong>
+                                                    {call.caller?.username ??
+                                                        'Unknown user'}
+                                                </strong>
+                                                <span>{call.phone_number}</span>
+                                                <time>
+                                                    {formatDate(
+                                                        call.started_at ??
+                                                            call.initiated_at,
+                                                    )}
+                                                </time>
+                                            </div>
+                                            <div className="lead-recordings-list__status">
+                                                <b>
+                                                    {call.result ??
+                                                        'Waiting for RingCentral'}
+                                                </b>
+                                                <span>
+                                                    {Math.floor(
+                                                        call.duration_seconds /
+                                                            60,
+                                                    )}
+                                                    :
+                                                    {String(
+                                                        call.duration_seconds %
+                                                            60,
+                                                    ).padStart(2, '0')}
+                                                </span>
+                                            </div>
+                                            {call.recording_path ? (
+                                                <audio
+                                                    controls
+                                                    preload="none"
+                                                    src={`/lead-workflow/leads-shop/${selected.id}/ringcentral-calls/${call.id}/recording`}
+                                                />
+                                            ) : (
+                                                <small>
+                                                    {call.result
+                                                        ? 'No recording is available for this call.'
+                                                        : 'The call result is being synchronized.'}
+                                                </small>
+                                            )}
+                                        </article>
+                                    ),
+                                )}
+                                {(selected.ring_central_calls ?? []).length ===
+                                    0 && (
+                                    <div className="lead-note-history__empty">
+                                        <Headphones />
+                                        <strong>No calls recorded yet</strong>
+                                        <span>
+                                            Calls launched from this lead will
+                                            appear here.
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+                )}
+
                 {historyType && selected && (
                     <div
                         className="lead-note-modal"
@@ -2723,7 +3143,9 @@ export default function LeadsShop({
                             }
                         }}
                     >
-                        <section className="lead-note-modal__card">
+                        <section
+                            className={`lead-note-modal__card lead-note-modal__card--history ${historyType === 'all' ? 'lead-note-modal__card--activity-history' : 'lead-note-modal__card--notes-history'}`}
+                        >
                             <header>
                                 <div>
                                     <span>
@@ -2766,8 +3188,7 @@ export default function LeadsShop({
                                             <div>
                                                 <strong>
                                                     {entry.movement.mover
-                                                        ?.username ??
-                                                        'System'}
+                                                        ?.username ?? 'System'}
                                                 </strong>
                                                 <time>
                                                     {formatDate(
@@ -2813,7 +3234,7 @@ export default function LeadsShop({
                                                 </time>
                                             </div>
                                             <span
-                                                className={`lead-history-event-label${entry.note.note_type === 'salesman_sent' ? ' lead-history-event-label--salesman' : ''}`}
+                                                className={`lead-history-event-label${entry.note.note_type === 'salesman_sent' ? 'lead-history-event-label--salesman' : ''}`}
                                             >
                                                 {historyNoteLabel(
                                                     entry.note.note_type,
@@ -2828,8 +3249,9 @@ export default function LeadsShop({
                                         <History />
                                         <strong>No history yet</strong>
                                         <span>
-                                            Lead movements and saved notes will
-                                            appear here.
+                                            {historyType === 'all'
+                                                ? 'Lead movements will appear here.'
+                                                : 'Saved notes will appear here.'}
                                         </span>
                                     </div>
                                 )}

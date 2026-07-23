@@ -40,6 +40,9 @@ class LeadsShopController extends Controller
                     'salesmanOne:salesman_id,salesman_name',
                     'salesmanTwo:salesman_id,salesman_name',
                     'notes.creator:acc_id,username',
+                    ...(Schema::hasTable('ringcentral_calls')
+                        ? ['ringCentralCalls.caller:acc_id,username']
+                        : []),
                     ...(Schema::hasTable('lead_movements')
                         ? ['movements.mover:acc_id,username']
                         : []),
@@ -54,6 +57,12 @@ class LeadsShopController extends Controller
                 ->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
+            'cities' => Lead::query()
+                ->whereNotNull('city')
+                ->where('city', '!=', '')
+                ->distinct()
+                ->orderBy('city')
+                ->pluck('city'),
             'agents' => Agent::query()->orderBy('agent_name')->get(['agent_id', 'agent_name']),
             'salesmen' => Salesman::query()->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
         ]);

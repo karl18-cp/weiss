@@ -1,8 +1,10 @@
 .tele-hours-page {
     display: flex;
+    height: 100%;
     min-height: 100%;
     flex-direction: column;
     gap: 1.15rem;
+    overflow: hidden;
     padding: 1.25rem 1.5rem 1.5rem;
     color: #172036;
     background: linear-gradient(145deg, #fffaff, #fdf1ff);
@@ -57,7 +59,8 @@
 .tele-hours-hero p {
     margin-top: 0.18rem;
     color: rgb(255 255 255 / 76%);
-    font-size: 0.78rem;
+    font-size: 0.86rem;
+    font-weight: 550;
 }
 
 .tele-hours-hero nav {
@@ -133,7 +136,169 @@
     color: #f97316;
 }
 
+.tele-hours-filters {
+    display: flex;
+    align-items: end;
+    gap: 0.7rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #e9d7ed;
+    border-radius: 0.85rem;
+    background: #fff;
+}
+.tele-hours-filters label {
+    display: grid;
+    gap: 0.3rem;
+    color: #738198;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.tele-hours-filters input,
+.tele-hours-filters select {
+    min-width: 10rem;
+    height: 2.35rem;
+    padding: 0 0.65rem;
+    border: 1px solid #ddd5e3;
+    border-radius: 0.55rem;
+    background: #fff;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.tele-hours-filters button {
+    height: 2.35rem;
+    padding: 0 0.9rem;
+    border-radius: 0.55rem;
+    color: #fff;
+    background: #a321b2;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+.tele-hours-filters .tele-hours-today {
+    border: 1px solid #c92bd9;
+    color: #a321b2;
+    background: #fff;
+}
+.tele-hours-coverage {
+    margin: -0.65rem 0 -0.35rem;
+    padding-inline: 0.25rem;
+    color: #78869b;
+    font-size: 0.72rem;
+    font-weight: 550;
+}
+.tele-hours-filters small {
+    margin: 0 0 0 auto;
+    color: #8995a7;
+    font-size: 0.7rem;
+    font-weight: 550;
+}
+
+.tele-hours-report-table {
+    display: grid;
+    min-width: 88rem;
+    grid-template-columns: minmax(12rem, 1.5fr) repeat(10, minmax(6rem, 1fr));
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.tele-hours-login-days {
+    margin-top: 1rem;
+}
+
+.tele-hours-table-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.65rem;
+    padding: 0.8rem 1rem;
+    color: #29364d;
+    background: #fff;
+}
+
+.tele-hours-table-title strong {
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.tele-hours-table-title span {
+    color: #8995a7;
+    font-size: 0.7rem;
+    font-weight: 550;
+}
+
+.tele-hours-login-table {
+    display: grid;
+    grid-template-columns: 8rem minmax(10rem, 1.3fr) 12rem 12rem 8rem 6rem;
+    min-width: 60rem;
+}
+.tele-hours-call-table {
+    display: grid;
+    min-width: 72rem;
+    grid-template-columns: 10rem 9rem 6rem 9rem 9rem 5rem 5rem minmax(
+            10rem,
+            1fr
+        );
+    align-items: center;
+    gap: 0.65rem;
+}
+.tele-hours-disposition-table {
+    display: grid;
+    min-width: 55rem;
+    grid-template-columns: 11rem 10rem minmax(15rem, 1fr) 10rem 8rem;
+    align-items: center;
+    gap: 0.65rem;
+}
+.tele-hours-report-head {
+    padding: 0.75rem 1rem;
+    color: #bd2ccc;
+    background: #fff4ff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+.tele-hours-report-row {
+    padding: 0.72rem 1rem;
+    border-top: 1px solid #f1edf3;
+    color: #56647a;
+    font-size: 0.78rem;
+    font-weight: 550;
+}
+.tele-hours-report-row > strong {
+    color: #25324a;
+    font-weight: 750;
+}
+.tele-hours-report-row > strong small {
+    display: block;
+    margin-top: 0.15rem;
+    color: #929db0;
+    font-size: 0.57rem;
+    font-weight: 600;
+}
+.tele-hours-report-row .flow-in,
+.tele-hours-report-row .flow-out {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem 0.45rem;
+    border-radius: 0.45rem;
+    font-weight: 800;
+}
+.tele-hours-report-row .flow-in {
+    color: #087c5a;
+    background: #e9faf4;
+}
+.tele-hours-report-row .flow-out {
+    color: #c45016;
+    background: #fff1e8;
+}
+.tele-hours-report-row .flow-in svg,
+.tele-hours-report-row .flow-out svg {
+    width: 0.75rem;
+}
+
 .tele-hours-table-card {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid #e7a4ef;
     border-radius: 0.9rem;
@@ -142,10 +307,9 @@
 
 .tele-hours-table {
     display: grid;
-    grid-template-columns: minmax(11rem, 1.1fr) repeat(
-            6,
-            minmax(7rem, 1fr)
-        ) 5rem 5rem;
+    grid-template-columns:
+        minmax(11rem, 1.1fr) repeat(6, minmax(7rem, 1fr))
+        5rem 5rem;
     align-items: center;
     gap: 0.65rem;
 }
@@ -160,7 +324,28 @@
 }
 
 .tele-hours-table-body {
-    overflow-x: auto;
+    min-height: 0;
+    flex: 1;
+    max-height: none;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.tele-hours-table-body::-webkit-scrollbar {
+    width: 0.65rem;
+    height: 0.65rem;
+}
+
+.tele-hours-table-body::-webkit-scrollbar-thumb {
+    border: 0.15rem solid transparent;
+    border-radius: 999px;
+    background: #cfb6d5;
+    background-clip: padding-box;
+}
+
+.tele-hours-table-body::-webkit-scrollbar-track {
+    background: #faf6fb;
 }
 
 .tele-hours-row {
@@ -303,6 +488,11 @@
 
 @media (max-width: 600px) {
     .tele-hours-page {
+        height: auto;
+        min-height: 100%;
+        overflow: auto;
+    }
+    .tele-hours-page {
         padding: 0.8rem;
     }
 
@@ -325,5 +515,19 @@
     .tele-hours-metrics,
     .tele-hours-summary {
         grid-template-columns: 1fr;
+    }
+    .tele-hours-filters {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .tele-hours-filters input,
+    .tele-hours-filters select {
+        width: 100%;
+    }
+    .tele-hours-filters small {
+        margin-left: 0;
+    }
+    .tele-hours-table-body {
+        max-height: calc(100vh - 18rem);
     }
 }

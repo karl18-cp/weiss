@@ -6,6 +6,7 @@ use App\Http\Requests\AgentRequest;
 use App\Models\Agent;
 use App\Models\Account;
 use App\Models\Company;
+use App\Support\ManagerAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -16,8 +17,9 @@ class AgentController extends Controller
     public function index(): Response
     {
         return Inertia::render('management/agents', [
-            'agents' => Agent::query()->with(['account:acc_id,username', 'company:com_id,company'])->orderBy('agent_name')->get(),
+            'agents' => Agent::query()->with(['account:acc_id,username', 'company:com_id,company', 'permissions'])->orderBy('agent_name')->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
+            'permissionModules' => ManagerAccess::MODULES,
         ]);
     }
 
@@ -26,11 +28,12 @@ class AgentController extends Controller
         DB::transaction(function () use ($request): void {
             $data = $request->validated();
             $account = $this->createAccount($data, 'agent');
-            Agent::query()->create([
+            $agent = Agent::query()->create([
                 'agent_name' => $data['agent_name'],
                 'company_id' => $data['company_id'],
                 'account_id' => $account?->acc_id,
             ]);
+            $this->syncPermissions($agent, $data['permissions']);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Agent created.']);
@@ -48,6 +51,7 @@ class AgentController extends Controller
                 'company_id' => $data['company_id'],
                 'account_id' => $account?->acc_id,
             ]);
+            $this->syncPermissions($agent, $data['permissions']);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Agent updated.']);
@@ -95,5 +99,15 @@ class AgentController extends Controller
         $account->update($updates);
 
         return $account;
+    }
+
+    private function syncPermissions(Agent $agent, array $permissions): void
+    {
+        foreach (ManagerAccess::MODULES as $module => $label) {
+            $agent->permissions()->updateOrCreate(
+                ['module' => $module],
+                ['access_level' => $permissions[$module] ?? 'none'],
+            );
+        }
     }
 }

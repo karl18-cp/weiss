@@ -1,53 +1,144 @@
-import { Head } from '@inertiajs/react';
-import { Clock3, LayoutGrid, List } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import { Activity, Clock3, History, PhoneCall } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import '@/../css/tele-hours.css';
 
-type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
-
-type AgentHours = {
-    id: number;
-    name: string;
-    leads_count: number;
-    hours: Record<Weekday, number>;
+type LoginDay = {
+    app_user_id?: string | null;
+    agent_id: number;
+    agent_name: string;
+    shift_date: string;
+    first_login_at?: string | null;
+    last_logout_at?: string | null;
+    logged_seconds: number;
+    sessions: number;
+};
+type CallLog = {
+    uuid: string;
+    started_at: string;
+    inbound: boolean;
+    call_type?: string;
+    duration: number;
+    billable_seconds: number;
+    system_disposition?: string;
+    call_disposition?: string;
+    source?: string;
+    destination?: string;
+    agent_name?: string;
+    disposition_name?: string;
+};
+type Disposition = {
+    call_uuid?: string;
+    disposition_name?: string;
+    phone_number?: string;
+    calltools_created_at: string;
+    agent_name?: string;
+};
+type Filters = {
+    date: string;
+    agent: number | null;
+    timezone: string;
 };
 
-const weekdays: { key: Weekday; label: string }[] = [
-    { key: 'mon', label: 'Mon' },
-    { key: 'tue', label: 'Tue' },
-    { key: 'wed', label: 'Wed' },
-    { key: 'thu', label: 'Thu' },
-    { key: 'fri', label: 'Fri' },
-    { key: 'sat', label: 'Sat' },
-];
+const hours = (seconds: number) => `${(seconds / 3600).toFixed(1)}h`;
+const duration = (seconds: number) =>
+    `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+const dateTime = (value: string) => {
+    const normalized = value.includes('T')
+        ? value
+        : `${value.replace(' ', 'T')}Z`;
 
-const initials = (name: string) =>
-    name
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join('');
+    return new Date(normalized).toLocaleString();
+};
 
-export default function TeleHours({ agents = [] }: { agents?: AgentHours[] }) {
-    const [view, setView] = useState<'table' | 'summary'>('table');
-    const totals = useMemo(() => {
-        const hours = agents.reduce(
-            (sum, agent) =>
-                sum +
-                weekdays.reduce(
-                    (agentTotal, day) => agentTotal + agent.hours[day.key],
-                    0,
-                ),
-            0,
+export default function TeleHours({
+    loginDays,
+    agentOptions,
+    callLogs,
+    dispositions,
+    filters,
+    sync,
+    activityCoverage,
+}: {
+    loginDays: LoginDay[];
+    agentOptions: { id: number; name: string }[];
+    callLogs: CallLog[];
+    dispositions: Disposition[];
+    filters: Filters;
+    sync: Record<string, string | null>;
+    activityCoverage: { from: string | null; to: string | null };
+}) {
+    const [view, setView] = useState<'hours' | 'calls' | 'dispositions'>(
+        'hours',
+    );
+    const [query, setQuery] = useState({
+        date: filters.date,
+        agent: filters.agent ? String(filters.agent) : '',
+        timezone: filters.timezone,
+    });
+    const lastSyncedAt =
+        sync.login_shifts_last_success_at ?? sync.last_success_at;
+    const navigate = (params: Record<string, string>) => {
+        const search = new URLSearchParams(
+            Object.entries(params).filter(([, value]) => value !== ''),
         );
+        window.location.assign(`/lead-workflow/tele-hours?${search}`);
+    };
+    const apply = () => navigate(query);
+    useEffect(() => {
+        const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-        return {
-            hours,
-            leads: agents.reduce((sum, agent) => sum + agent.leads_count, 0),
-            average: agents.length ? hours / agents.length : 0,
-        };
-    }, [agents]);
+        if (deviceTimezone && deviceTimezone !== filters.timezone) {
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: deviceTimezone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+            })
+                .formatToParts(new Date())
+                .reduce<Record<string, string>>((values, part) => {
+                    values[part.type] = part.value;
+
+                    return values;
+                }, {});
+            const deviceDate = `${parts.year}-${parts.month}-${parts.day}`;
+            const requestedDate = new URLSearchParams(
+                window.location.search,
+            ).has('date')
+                ? query.date
+                : deviceDate;
+            const search = new URLSearchParams({
+                date: requestedDate,
+                timezone: deviceTimezone,
+            });
+
+            if (query.agent) {
+                search.set('agent', query.agent);
+            }
+
+            window.location.replace(`/lead-workflow/tele-hours?${search}`);
+
+            return;
+        }
+
+        const timer = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') {
+                return;
+            }
+
+            router.reload({
+                only: [
+                    'loginDays',
+                    'callLogs',
+                    'dispositions',
+                    'sync',
+                    'activityCoverage',
+                ],
+            });
+        }, 30_000);
+
+        return () => window.clearInterval(timer);
+    }, [filters.timezone, query.agent, query.date]);
 
     return (
         <>
@@ -59,136 +150,219 @@ export default function TeleHours({ agents = [] }: { agents?: AgentHours[] }) {
                     </span>
                     <div>
                         <h1>Tele Hours</h1>
-                        <p>Agent call hours and productivity metrics.</p>
+                        <p>
+                            CallTools agent activity, call history,
+                            dispositions, and CRM lead flow.
+                        </p>
                     </div>
-                    <nav aria-label="Tele Hours view">
-                        <button
-                            type="button"
-                            className={view === 'table' ? 'is-active' : ''}
-                            onClick={() => setView('table')}
-                        >
-                            <List /> Table
-                        </button>
-                        <button
-                            type="button"
-                            className={view === 'summary' ? 'is-active' : ''}
-                            onClick={() => setView('summary')}
-                        >
-                            <LayoutGrid /> Summary
-                        </button>
+                    <nav>
+                        {(['hours', 'calls', 'dispositions'] as const).map(
+                            (tab) => (
+                                <button
+                                    key={tab}
+                                    type="button"
+                                    className={view === tab ? 'is-active' : ''}
+                                    onClick={() => setView(tab)}
+                                >
+                                    {tab === 'hours' ? (
+                                        <Activity />
+                                    ) : tab === 'calls' ? (
+                                        <PhoneCall />
+                                    ) : (
+                                        <History />
+                                    )}
+                                    {tab === 'hours'
+                                        ? 'Agent hours'
+                                        : tab === 'calls'
+                                          ? 'Call logs'
+                                          : 'Dispositions'}
+                                </button>
+                            ),
+                        )}
                     </nav>
                 </header>
-
-                <section className="tele-hours-metrics">
-                    <article>
-                        <span>Total hours this week</span>
-                        <strong>{totals.hours.toFixed(1)}h</strong>
-                    </article>
-                    <article>
-                        <span>Total leads generated</span>
-                        <strong>{totals.leads}</strong>
-                    </article>
-                    <article>
-                        <span>Active agents</span>
-                        <strong>{agents.length}</strong>
-                    </article>
-                    <article>
-                        <span>Average hours / agent</span>
-                        <strong>{totals.average.toFixed(1)}h</strong>
-                    </article>
-                </section>
-
-                {view === 'table' ? (
-                    <section className="tele-hours-table-card">
-                        <div className="tele-hours-table tele-hours-table--head">
-                            <span>Agent</span>
-                            {weekdays.map((day) => (
-                                <span key={day.key}>{day.label}</span>
+                <section className="tele-hours-filters">
+                    <label>
+                        Date
+                        <input
+                            type="date"
+                            min="2026-07-01"
+                            value={query.date}
+                            onChange={(e) =>
+                                setQuery({ ...query, date: e.target.value })
+                            }
+                        />
+                    </label>
+                    <label>
+                        Agent
+                        <select
+                            value={query.agent}
+                            onChange={(e) =>
+                                setQuery({ ...query, agent: e.target.value })
+                            }
+                        >
+                            <option value="">All agents</option>
+                            {agentOptions.map((agent) => (
+                                <option key={agent.id} value={agent.id}>
+                                    {agent.name}
+                                </option>
                             ))}
-                            <span>Total</span>
-                            <span>Leads</span>
+                        </select>
+                    </label>
+                    <button type="button" onClick={apply}>
+                        Apply filters
+                    </button>
+                    <small>
+                        Last synced:{' '}
+                        {lastSyncedAt
+                            ? new Date(lastSyncedAt).toLocaleString()
+                            : 'Waiting for first sync'}
+                    </small>
+                </section>
+                <p className="tele-hours-coverage">
+                    Showing login sessions for <strong>{filters.date}</strong>{' '}
+                    in <strong>{filters.timezone}</strong>. Imported coverage:{' '}
+                    {activityCoverage.from
+                        ? `${activityCoverage.from}${activityCoverage.to && activityCoverage.to !== activityCoverage.from ? ` through ${activityCoverage.to}` : ''}`
+                        : 'waiting for the first imported session'}
+                    . Call and disposition history continues backfilling
+                    separately.
+                </p>
+                {view === 'hours' && (
+                    <section className="tele-hours-table-card">
+                        <div className="tele-hours-table-title">
+                            <strong>Daily login sessions</strong>
+                            <span>
+                                Login, logout, and total time for each day
+                            </span>
+                        </div>
+                        <div className="tele-hours-login-table tele-hours-report-head">
+                            <span>Date</span>
+                            <span>Agent</span>
+                            <span>First login</span>
+                            <span>Last logout</span>
+                            <span>Total logged</span>
+                            <span>Sessions</span>
                         </div>
                         <div className="tele-hours-table-body">
-                            {agents.map((agent) => {
-                                const total = weekdays.reduce(
-                                    (sum, day) => sum + agent.hours[day.key],
-                                    0,
-                                );
-
-                                return (
-                                    <div
-                                        className="tele-hours-table tele-hours-row"
-                                        key={agent.id}
-                                    >
-                                        <div className="tele-hours-agent">
-                                            <span>{initials(agent.name)}</span>
-                                            <strong>{agent.name}</strong>
-                                        </div>
-                                        {weekdays.map((day) => (
-                                            <div
-                                                className="tele-hours-day"
-                                                key={day.key}
-                                            >
-                                                <i>
-                                                    <b
-                                                        style={{
-                                                            width: `${Math.min(100, (agent.hours[day.key] / 10) * 100)}%`,
-                                                        }}
-                                                    />
-                                                </i>
-                                                <span>
-                                                    {agent.hours[day.key]}h
-                                                </span>
-                                            </div>
-                                        ))}
-                                        <strong>{total.toFixed(1)}h</strong>
-                                        <strong className="tele-hours-leads">
-                                            {agent.leads_count}
-                                        </strong>
-                                    </div>
-                                );
-                            })}
-                            {agents.length === 0 && (
-                                <div className="tele-hours-empty">
-                                    <Clock3 />
-                                    <strong>No agent activity yet</strong>
+                            {loginDays.map((day) => (
+                                <div
+                                    className="tele-hours-login-table tele-hours-report-row"
+                                    key={`${day.app_user_id}-${day.shift_date}`}
+                                >
+                                    <span>{day.shift_date}</span>
+                                    <strong>
+                                        {day.agent_name ?? 'Unmapped'}
+                                    </strong>
                                     <span>
-                                        Agents will appear here when they are
-                                        added to the system.
+                                        {day.first_login_at
+                                            ? dateTime(day.first_login_at)
+                                            : 'No login recorded'}
                                     </span>
+                                    <span>
+                                        {!day.first_login_at
+                                            ? '—'
+                                            : day.last_logout_at
+                                              ? dateTime(day.last_logout_at)
+                                              : 'Still logged in'}
+                                    </span>
+                                    <span>{hours(day.logged_seconds)}</span>
+                                    <span>{day.sessions}</span>
+                                </div>
+                            ))}
+                            {loginDays.length === 0 && (
+                                <div className="tele-hours-empty">
+                                    No imported login sessions in this range
+                                    yet.
                                 </div>
                             )}
                         </div>
                     </section>
-                ) : (
-                    <section className="tele-hours-summary">
-                        {agents.map((agent) => (
-                            <article key={agent.id}>
-                                <span>{initials(agent.name)}</span>
-                                <div>
-                                    <h2>{agent.name}</h2>
-                                    <p>{agent.leads_count} generated leads</p>
+                )}
+
+                {view === 'calls' && (
+                    <section className="tele-hours-table-card">
+                        <div className="tele-hours-call-table tele-hours-report-head">
+                            <span>Date</span>
+                            <span>Agent</span>
+                            <span>Direction</span>
+                            <span>From</span>
+                            <span>To</span>
+                            <span>Duration</span>
+                            <span>Talk</span>
+                            <span>Disposition</span>
+                        </div>
+                        <div className="tele-hours-table-body">
+                            {callLogs.map((call) => (
+                                <div
+                                    className="tele-hours-call-table tele-hours-report-row"
+                                    key={call.uuid}
+                                >
+                                    <span>{dateTime(call.started_at)}</span>
+                                    <strong>
+                                        {call.agent_name ?? 'Unmapped'}
+                                    </strong>
+                                    <span>
+                                        {call.inbound ? 'Inbound' : 'Outbound'}
+                                    </span>
+                                    <span>{call.source ?? '—'}</span>
+                                    <span>{call.destination ?? '—'}</span>
+                                    <span>{duration(call.duration)}</span>
+                                    <span>
+                                        {duration(call.billable_seconds)}
+                                    </span>
+                                    <span>
+                                        {call.disposition_name ??
+                                            call.system_disposition ??
+                                            '—'}
+                                    </span>
                                 </div>
-                                <strong>
-                                    {weekdays
-                                        .reduce(
-                                            (sum, day) =>
-                                                sum + agent.hours[day.key],
-                                            0,
-                                        )
-                                        .toFixed(1)}
-                                    h
-                                </strong>
-                            </article>
-                        ))}
+                            ))}
+                            {callLogs.length === 0 && (
+                                <div className="tele-hours-empty">
+                                    No synchronized calls in this range yet.
+                                </div>
+                            )}
+                        </div>
                     </section>
                 )}
 
-                {totals.hours === 0 && agents.length > 0 && (
-                    <p className="tele-hours-notice">
-                        Agent and lead totals are live. Call-hour values will
-                        populate when time tracking is connected.
-                    </p>
+                {view === 'dispositions' && (
+                    <section className="tele-hours-table-card">
+                        <div className="tele-hours-disposition-table tele-hours-report-head">
+                            <span>Date</span>
+                            <span>Agent</span>
+                            <span>Call UUID</span>
+                            <span>Phone</span>
+                            <span>Disposition</span>
+                        </div>
+                        <div className="tele-hours-table-body">
+                            {dispositions.map((item, index) => (
+                                <div
+                                    className="tele-hours-disposition-table tele-hours-report-row"
+                                    key={`${item.call_uuid}-${index}`}
+                                >
+                                    <span>
+                                        {dateTime(item.calltools_created_at)}
+                                    </span>
+                                    <strong>
+                                        {item.agent_name ?? 'Unmapped'}
+                                    </strong>
+                                    <span>{item.call_uuid ?? '—'}</span>
+                                    <span>{item.phone_number ?? '—'}</span>
+                                    <span>
+                                        {item.disposition_name ?? 'Unknown'}
+                                    </span>
+                                </div>
+                            ))}
+                            {dispositions.length === 0 && (
+                                <div className="tele-hours-empty">
+                                    No synchronized dispositions in this range
+                                    yet.
+                                </div>
+                            )}
+                        </div>
+                    </section>
                 )}
             </main>
         </>

@@ -6,6 +6,7 @@ use App\Http\Requests\SalesmanRequest;
 use App\Models\Salesman;
 use App\Models\Account;
 use App\Models\Company;
+use App\Support\ManagerAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -16,8 +17,9 @@ class SalesmanController extends Controller
     public function index(): Response
     {
         return Inertia::render('management/salesmen', [
-            'salesmen' => Salesman::query()->with(['account:acc_id,username', 'company:com_id,company'])->orderBy('salesman_name')->get(),
+            'salesmen' => Salesman::query()->with(['account:acc_id,username', 'company:com_id,company', 'permissions'])->orderBy('salesman_name')->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
+            'permissionModules' => ManagerAccess::MODULES,
         ]);
     }
 
@@ -26,12 +28,13 @@ class SalesmanController extends Controller
         DB::transaction(function () use ($request): void {
             $data = $request->validated();
             $account = $this->createAccount($data);
-            Salesman::query()->create([
+            $salesman = Salesman::query()->create([
                 'salesman_name' => $data['salesman_name'],
                 'phone' => $data['phone'],
                 'company_id' => $data['company_id'],
                 'account_id' => $account?->acc_id,
             ]);
+            $this->syncPermissions($salesman, $data['permissions']);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Salesman created.']);
@@ -50,6 +53,7 @@ class SalesmanController extends Controller
                 'company_id' => $data['company_id'],
                 'account_id' => $account?->acc_id,
             ]);
+            $this->syncPermissions($salesman, $data['permissions']);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Salesman updated.']);
@@ -97,5 +101,15 @@ class SalesmanController extends Controller
         $account->update($updates);
 
         return $account;
+    }
+
+    private function syncPermissions(Salesman $salesman, array $permissions): void
+    {
+        foreach (ManagerAccess::MODULES as $module => $label) {
+            $salesman->permissions()->updateOrCreate(
+                ['module' => $module],
+                ['access_level' => $permissions[$module] ?? 'none'],
+            );
+        }
     }
 }

@@ -47,7 +47,12 @@ type SidebarItem = {
 };
 
 const workflowItems: SidebarItem[] = [
-    { title: 'Dashboard', icon: LayoutDashboard, href: dashboard() },
+    {
+        title: 'Dashboard',
+        icon: LayoutDashboard,
+        href: dashboard(),
+        permission: 'dashboard',
+    },
     {
         title: 'Lead Card',
         icon: UserRoundPlus,
@@ -96,7 +101,13 @@ const workflowItems: SidebarItem[] = [
         permission: '555',
         countKey: '555',
     },
-    { title: 'LA', icon: MapPin, href: '/lead-workflow/la', permission: 'la', countKey: 'la' },
+    {
+        title: 'LA',
+        icon: MapPin,
+        href: '/lead-workflow/la',
+        permission: 'la',
+        countKey: 'la',
+    },
     {
         title: 'HIS',
         icon: Clock3,
@@ -176,7 +187,9 @@ function NavigationSection({
                             <span>{item.title}</span>
                             {item.countKey && (
                                 <span className="crm-sidebar__count">
-                                    {(counts[item.countKey] ?? 0).toLocaleString()}
+                                    {(
+                                        counts[item.countKey] ?? 0
+                                    ).toLocaleString()}
                                 </span>
                             )}
                         </>
@@ -212,7 +225,9 @@ export function AppSidebar() {
     const filterItems = (items: SidebarItem[]) => {
         const accessible = items.filter(
             (item) =>
-                auth.user.role !== 'manager' ||
+                !['manager', 'agent', 'salesman'].includes(
+                    auth.user.role ?? '',
+                ) ||
                 !item.permission ||
                 auth.permissions?.[item.permission] === 'view' ||
                 auth.permissions?.[item.permission] === 'edit',
@@ -249,7 +264,10 @@ export function AppSidebar() {
                 </div>
             </header>
 
-            <LeadGlobalSearch className="crm-sidebar__search" placeholder="Search accessible leads" />
+            <LeadGlobalSearch
+                className="crm-sidebar__search"
+                placeholder="Search accessible leads"
+            />
 
             <SidebarContent className="crm-sidebar__content">
                 {filteredWorkflow.length > 0 && (
@@ -267,7 +285,7 @@ export function AppSidebar() {
                     />
                 )}
 
-                {(
+                {
                     <SidebarGroup className="crm-sidebar__group crm-sidebar__account">
                         <SidebarGroupLabel className="crm-sidebar__label">
                             Account
@@ -304,7 +322,7 @@ export function AppSidebar() {
                             </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroup>
-                )}
+                }
             </SidebarContent>
         </Sidebar>
     );
