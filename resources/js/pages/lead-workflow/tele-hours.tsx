@@ -9,9 +9,14 @@ type LoginDay = {
     agent_name: string;
     shift_date: string;
     first_login_at?: string | null;
+    first_logout_at?: string | null;
+    second_login_at?: string | null;
+    second_logout_at?: string | null;
     last_logout_at?: string | null;
     logged_seconds: number;
+    lunch_seconds: number;
     sessions: number;
+    leads_sent: number;
 };
 type CallLog = {
     uuid: string;
@@ -35,7 +40,8 @@ type Disposition = {
     agent_name?: string;
 };
 type Filters = {
-    date: string;
+    from: string;
+    to: string;
     agent: number | null;
     timezone: string;
 };
@@ -59,6 +65,7 @@ export default function TeleHours({
     filters,
     sync,
     activityCoverage,
+    isRange,
 }: {
     loginDays: LoginDay[];
     agentOptions: { id: number; name: string }[];
@@ -67,12 +74,14 @@ export default function TeleHours({
     filters: Filters;
     sync: Record<string, string | null>;
     activityCoverage: { from: string | null; to: string | null };
+    isRange: boolean;
 }) {
     const [view, setView] = useState<'hours' | 'calls' | 'dispositions'>(
         'hours',
     );
     const [query, setQuery] = useState({
-        date: filters.date,
+        from: filters.from,
+        to: filters.to,
         agent: filters.agent ? String(filters.agent) : '',
         timezone: filters.timezone,
     });
@@ -102,13 +111,10 @@ export default function TeleHours({
                     return values;
                 }, {});
             const deviceDate = `${parts.year}-${parts.month}-${parts.day}`;
-            const requestedDate = new URLSearchParams(
-                window.location.search,
-            ).has('date')
-                ? query.date
-                : deviceDate;
+            const hasExplicitRange = new URLSearchParams(window.location.search).has('from');
             const search = new URLSearchParams({
-                date: requestedDate,
+                from: hasExplicitRange ? query.from : deviceDate,
+                to: hasExplicitRange ? query.to : deviceDate,
                 timezone: deviceTimezone,
             });
 
@@ -138,18 +144,18 @@ export default function TeleHours({
         }, 30_000);
 
         return () => window.clearInterval(timer);
-    }, [filters.timezone, query.agent, query.date]);
+    }, [filters.timezone, query.agent, query.from, query.to]);
 
     return (
         <>
-            <Head title="Tele Hours" />
+            <Head title="Tele Report" />
             <main className="tele-hours-page">
                 <header className="tele-hours-hero">
                     <span>
                         <Clock3 />
                     </span>
                     <div>
-                        <h1>Tele Hours</h1>
+                        <h1>Tele Report</h1>
                         <p>
                             CallTools agent activity, call history,
                             dispositions, and CRM lead flow.
@@ -183,13 +189,26 @@ export default function TeleHours({
                 </header>
                 <section className="tele-hours-filters">
                     <label>
-                        Date
+                        From
                         <input
                             type="date"
                             min="2026-07-01"
-                            value={query.date}
+                            value={query.from}
+                            onClick={(event) => event.currentTarget.showPicker?.()}
                             onChange={(e) =>
-                                setQuery({ ...query, date: e.target.value })
+                                setQuery({ ...query, from: e.target.value })
+                            }
+                        />
+                    </label>
+                    <label>
+                        To
+                        <input
+                            type="date"
+                            min={query.from}
+                            value={query.to}
+                            onClick={(event) => event.currentTarget.showPicker?.()}
+                            onChange={(e) =>
+                                setQuery({ ...query, to: e.target.value })
                             }
                         />
                     </label>
@@ -212,6 +231,16 @@ export default function TeleHours({
                     <button type="button" onClick={apply}>
                         Apply filters
                     </button>
+                    <button
+                        type="button"
+                        className="tele-hours-today"
+                        onClick={() => {
+                            const today = new Date().toLocaleDateString('en-CA');
+                            navigate({ from: today, to: today, agent: query.agent, timezone: query.timezone });
+                        }}
+                    >
+                        Today
+                    </button>
                     <small>
                         Last synced:{' '}
                         {lastSyncedAt
@@ -220,7 +249,8 @@ export default function TeleHours({
                     </small>
                 </section>
                 <p className="tele-hours-coverage">
-                    Showing login sessions for <strong>{filters.date}</strong>{' '}
+                    Showing login sessions for{' '}
+                    <strong>{filters.from}{filters.to !== filters.from ? ` through ${filters.to}` : ''}</strong>{' '}
                     in <strong>{filters.timezone}</strong>. Imported coverage:{' '}
                     {activityCoverage.from
                         ? `${activityCoverage.from}${activityCoverage.to && activityCoverage.to !== activityCoverage.from ? ` through ${activityCoverage.to}` : ''}`
@@ -236,38 +266,52 @@ export default function TeleHours({
                                 Login, logout, and total time for each day
                             </span>
                         </div>
-                        <div className="tele-hours-login-table tele-hours-report-head">
-                            <span>Date</span>
+                        <div className={`tele-hours-login-table tele-hours-report-head${isRange ? ' is-range' : ''}`}>
+                            <span className="tele-hours-day-only">Date</span>
                             <span>Agent</span>
-                            <span>First login</span>
-                            <span>Last logout</span>
-                            <span>Total logged</span>
-                            <span>Sessions</span>
+                            <span className="tele-hours-day-only">First login</span>
+                            <span className="tele-hours-day-only">Final logout</span>
+                            <span>Leads sent</span>
+                            <span>Lunch hours</span>
+                            <span>Net hours</span>
+                            <span className="tele-hours-day-only">Sessions</span>
                         </div>
                         <div className="tele-hours-table-body">
                             {loginDays.map((day) => (
                                 <div
-                                    className="tele-hours-login-table tele-hours-report-row"
+                                    className={`tele-hours-login-table tele-hours-report-row${isRange ? ' is-range' : ''}`}
                                     key={`${day.app_user_id}-${day.shift_date}`}
                                 >
-                                    <span>{day.shift_date}</span>
+                                    <span className="tele-hours-day-only">{day.shift_date}</span>
                                     <strong>
                                         {day.agent_name ?? 'Unmapped'}
                                     </strong>
-                                    <span>
+                                    <span className="tele-hours-day-only">
                                         {day.first_login_at
                                             ? dateTime(day.first_login_at)
                                             : 'No login recorded'}
                                     </span>
-                                    <span>
-                                        {!day.first_login_at
+                                    <span className="tele-hours-session-boundary">
+                                        {!day.first_logout_at
                                             ? '—'
-                                            : day.last_logout_at
-                                              ? dateTime(day.last_logout_at)
-                                              : 'Still logged in'}
+                                            : dateTime(day.first_logout_at)}
                                     </span>
-                                    <span>{hours(day.logged_seconds)}</span>
-                                    <span>{day.sessions}</span>
+                                    <span className="tele-hours-session-boundary">
+                                        {day.second_login_at
+                                            ? dateTime(day.second_login_at)
+                                            : '—'}
+                                    </span>
+                                    <span className="tele-hours-day-only">
+                                        {day.second_login_at
+                                            ? day.second_logout_at
+                                                ? dateTime(day.second_logout_at)
+                                                : 'Still logged in'
+                                            : '—'}
+                                    </span>
+                                    <strong>{day.leads_sent}</strong>
+                                    <span>{hours(day.lunch_seconds)}</span>
+                                    <span>{hours(Math.max(0, day.logged_seconds - day.lunch_seconds))}</span>
+                                    <span className="tele-hours-day-only">{day.sessions}</span>
                                 </div>
                             ))}
                             {loginDays.length === 0 && (

@@ -211,10 +211,17 @@ export default function Projects({
     currentRequester: string | null;
 }) {
     const { confirm } = useSystemModal();
+    const requestedProjectId =
+        Number(new URLSearchParams(window.location.search).get('project')) ||
+        null;
     const [activeTab, setActiveTab] = useState<
         'PRJ' | 'DTL' | 'SP' | 'INV' | 'ACT' | 'DOC'
     >('PRJ');
-    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [selectedId, setSelectedId] = useState<number | null>(() =>
+        projects.some((project) => project.id === requestedProjectId)
+            ? requestedProjectId
+            : null,
+    );
     const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
     const [selectedScheduledPaymentId, setSelectedScheduledPaymentId] =
         useState<number | null>(null);
@@ -466,7 +473,9 @@ export default function Projects({
     const scheduledPaymentBalance = (
         project: Project,
         payment: ScheduledPayment,
-    ) => scheduledPaymentBalances(project).get(payment.id) ?? Number(payment.amount);
+    ) =>
+        scheduledPaymentBalances(project).get(payment.id) ??
+        Number(payment.amount);
 
     const projectInvoiceTotal = (project: Project) =>
         project.invoices.reduce(
@@ -1896,9 +1905,7 @@ export default function Projects({
                                                     {selectedInvoicePayables.map(
                                                         (payable) => (
                                                             <tr
-                                                                key={
-                                                                    payable.id
-                                                                }
+                                                                key={payable.id}
                                                             >
                                                                 <td>
                                                                     {dateFormatter.format(

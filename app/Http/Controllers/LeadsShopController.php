@@ -150,7 +150,7 @@ class LeadsShopController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($request, $lead): void {
+        $project = DB::transaction(function () use ($request, $lead): Project {
             $project = Project::query()->updateOrCreate(
                 ['lead_id' => $lead->id],
                 [
@@ -172,11 +172,13 @@ class LeadsShopController extends Controller
                 'status' => 'project',
                 'appointment_result' => 'Sold',
             ]);
+
+            return $project;
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Sale accepted and project created.']);
 
-        return back();
+        return to_route('management.projects', ['project' => $project->id]);
     }
 
     public function assignSecondAgent(LeadSecondAgentRequest $request, Lead $lead): RedirectResponse

@@ -2,7 +2,7 @@ import { router } from '@inertiajs/react';
 import { useEffect } from 'react';
 import { logout } from '@/routes';
 
-const IDLE_LIMIT_MS = 5 * 60 * 1000;
+const IDLE_LIMIT_MS = 15 * 60 * 1000;
 const LAST_ACTIVITY_KEY = 'weiss:last-activity';
 
 export default function IdleSessionGuard() {

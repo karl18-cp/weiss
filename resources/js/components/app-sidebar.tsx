@@ -135,7 +135,7 @@ const workflowItems: SidebarItem[] = [
         permission: 'booking_board',
     },
     {
-        title: 'Tele Hours',
+        title: 'Tele Report',
         icon: Clock3,
         href: '/lead-workflow/tele-hours',
         permission: 'tele_hours',

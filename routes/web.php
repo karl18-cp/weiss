@@ -4,6 +4,7 @@ use App\Http\Controllers\AgentController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ContractorController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DataTeleHoursController;
 use App\Http\Controllers\LeadCardController;
 use App\Http\Controllers\LeadDataController;
 use App\Http\Controllers\LeadImportController;
@@ -61,6 +62,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('data/vendor-invoices', [LeadDataController::class, 'vendorInvoices'])->name('data.vendor-invoices');
         Route::get('data/receivables', [LeadDataController::class, 'receivables'])->name('data.receivables');
         Route::get('data/payables', [LeadDataController::class, 'payables'])->name('data.payables');
+        Route::get('data/tele-hours', [DataTeleHoursController::class, 'index'])->name('data.tele-hours');
+        Route::post('data/tele-hours', [DataTeleHoursController::class, 'store'])->name('data.tele-hours.store');
         Route::get('booking-board', [LeadQueueController::class, 'bookingBoard'])->name('booking-board');
         Route::get('tele-hours', TeleHoursController::class)->name('tele-hours');
     });

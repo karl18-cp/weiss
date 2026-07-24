@@ -8,6 +8,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class CallToolsReportingSync
@@ -263,7 +264,9 @@ class CallToolsReportingSync
     {
         $json = $this->get('/api/agentstatuses/', ['page_size' => 'max']);
         $now = now()->utc();
-        $rows = collect($this->results($json))->map(fn (array $row): array => [
+        $results = $this->results($json);
+        $this->recordStatusIntervals($results, $now);
+        $rows = collect($results)->map(fn (array $row): array => [
             'app_user_id' => $this->externalId($row['app_user'] ?? null),
             'metric_date' => $now->toDateString(),
             'full_name' => $this->text($row['full_name'] ?? null),
@@ -287,6 +290,46 @@ class CallToolsReportingSync
         if ($rows !== []) DB::table('calltools_agent_daily_metrics')->upsert($rows, ['app_user_id', 'metric_date'], array_diff(array_keys($rows[0]), ['app_user_id', 'metric_date', 'created_at']));
 
         return count($rows);
+    }
+
+    private function recordStatusIntervals(array $rows, mixed $capturedAt): void
+    {
+        if (! Schema::hasTable('calltools_agent_status_intervals')) {
+            return;
+        }
+
+        foreach ($rows as $row) {
+            $appUserId = $this->externalId($row['app_user'] ?? null);
+            $statusId = $this->externalId($row['agent_status'] ?? null);
+            if (! $appUserId) {
+                continue;
+            }
+
+            $changedAt = $this->date($row['agent_status_modified_on'] ?? null) ?? CarbonImmutable::parse($capturedAt);
+            $open = DB::table('calltools_agent_status_intervals')
+                ->where('app_user_id', $appUserId)
+                ->whereNull('ended_at')
+                ->latest('started_at')
+                ->first();
+
+            if ($open && (string) $open->status_id !== (string) $statusId) {
+                DB::table('calltools_agent_status_intervals')
+                    ->where('id', $open->id)
+                    ->update(['ended_at' => $changedAt, 'updated_at' => $capturedAt]);
+                $open = null;
+            }
+
+            if ($statusId && ! $open) {
+                DB::table('calltools_agent_status_intervals')->insertOrIgnore([
+                    'app_user_id' => $appUserId,
+                    'status_id' => $statusId,
+                    'started_at' => $changedAt,
+                    'ended_at' => null,
+                    'created_at' => $capturedAt,
+                    'updated_at' => $capturedAt,
+                ]);
+            }
+        }
     }
 
     private function get(string $path, array $query): array

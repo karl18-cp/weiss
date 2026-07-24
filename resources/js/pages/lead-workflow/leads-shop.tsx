@@ -11,6 +11,7 @@ import {
     Headphones,
     Mail,
     MapPin,
+    Maximize2,
     MessageCircle,
     Package,
     Pencil,
@@ -103,6 +104,22 @@ type LeadAgentAssignment = {
     agent: { agent_id: number; agent_name: string } | null;
     assigner: { acc_id: number; username: string } | null;
 };
+
+type SmsTemplateField =
+    | 'heading'
+    | 'customer'
+    | 'address'
+    | 'phones'
+    | 'email'
+    | 'project'
+    | 'confirmation'
+    | 'appointment';
+
+type EditableNoteType =
+    | 'telemarketer'
+    | 'confirmation'
+    | 'dispatch'
+    | 'appointment_result';
 
 const latestNoteBody = (lead: Lead | null, noteType: string): string => {
     if (!lead) return '';
@@ -425,22 +442,22 @@ function BlankLeadDetail({ queueStatus }: { queueStatus?: string }) {
                         </div>
                     </div>
                 </article>
-                <article className="lead-detail-card lead-detail-card--notes">
+                <article className="lead-detail-card lead-detail-card--notes lead-note-card--telemarketer">
                     <h3>Telemarketer notes</h3>
                     <p>—</p>
                 </article>
-                <article className="lead-detail-card lead-detail-card--notes">
+                <article className="lead-detail-card lead-detail-card--notes lead-note-card--confirmation">
                     <h3>Confirmation notes</h3>
                     <p>—</p>
                 </article>
                 {showsDispatchNotes && (
-                    <article className="lead-detail-card lead-detail-card--notes">
+                    <article className="lead-detail-card lead-detail-card--notes lead-note-card--dispatch">
                         <h3>Dispatch notes</h3>
                         <p>Select a lead to view or add dispatch notes.</p>
                     </article>
                 )}
                 {queueStatus === 'dispatched' && (
-                    <article className="lead-detail-card lead-detail-card--notes">
+                    <article className="lead-detail-card lead-detail-card--notes lead-note-card--appointment-result">
                         <h3>Appointment result notes</h3>
                         <p>Select a lead to view or add appointment notes.</p>
                     </article>
@@ -467,6 +484,15 @@ export default function LeadsShop({
         requestedLead,
         'telemarketer',
     );
+    const requestedConfirmationNote = latestNoteBody(
+        requestedLead,
+        'confirmation',
+    );
+    const requestedDispatchNote = latestNoteBody(requestedLead, 'dispatch');
+    const requestedAppointmentResultNote = latestNoteBody(
+        requestedLead,
+        'appointment_result',
+    );
     const { notify } = useSystemModal();
     const [search, setSearch] = useState('');
     const [selectedDate, setSelectedDate] = useState<string>('all');
@@ -490,6 +516,10 @@ export default function LeadsShop({
     >(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
+    const [smsTemplateOpen, setSmsTemplateOpen] = useState(false);
+    const [smsTemplateFields, setSmsTemplateFields] = useState<
+        SmsTemplateField[]
+    >([]);
     const [recordingsOpen, setRecordingsOpen] = useState(false);
     const [newCallAttempts, setNewCallAttempts] = useState<
         Record<number, number>
@@ -502,6 +532,8 @@ export default function LeadsShop({
         | 'all'
         | null
     >(null);
+    const [expandedNoteType, setExpandedNoteType] =
+        useState<EditableNoteType | null>(null);
     const form = useForm(emptyLeadForm);
 
     useEffect(() => {
@@ -534,16 +566,24 @@ export default function LeadsShop({
     );
     const confirmationNoteForm = useForm({
         note_type: 'confirmation',
-        body: '',
+        body: requestedConfirmationNote,
     });
+    const [loadedConfirmationNote, setLoadedConfirmationNote] = useState(
+        requestedConfirmationNote,
+    );
     const dispatchNoteForm = useForm({
         note_type: 'dispatch',
-        body: '',
+        body: requestedDispatchNote,
     });
+    const [loadedDispatchNote, setLoadedDispatchNote] = useState(
+        requestedDispatchNote,
+    );
     const appointmentResultNoteForm = useForm({
         note_type: 'appointment_result',
-        body: '',
+        body: requestedAppointmentResultNote,
     });
+    const [loadedAppointmentResultNote, setLoadedAppointmentResultNote] =
+        useState(requestedAppointmentResultNote);
     const saleForm = useForm<{ amount: string; salesman?: string }>({
         amount: '',
     });
@@ -734,6 +774,9 @@ export default function LeadsShop({
 
     const filteredLeads = useMemo(() => {
         const query = search.trim().toLowerCase();
+        const todayInDeviceTimezone = deviceDateKey(
+            new Date().toISOString(),
+        );
 
         return leads
             .filter((lead) => {
@@ -789,6 +832,17 @@ export default function LeadsShop({
                 );
             })
             .sort((first, second) => {
+                const firstIsToday =
+                    deviceDateKey(first.appointment_at) ===
+                    todayInDeviceTimezone;
+                const secondIsToday =
+                    deviceDateKey(second.appointment_at) ===
+                    todayInDeviceTimezone;
+
+                if (firstIsToday !== secondIsToday) {
+                    return firstIsToday ? -1 : 1;
+                }
+
                 const dateField = queue?.dateField ?? 'created_at';
                 const firstTime = first[dateField]
                     ? new Date(first[dateField] as string).getTime()
@@ -835,8 +889,158 @@ export default function LeadsShop({
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
 
+    const smsTemplateSections = useMemo(() => {
+        if (!selected) return [];
+
+        const appointment = selected.appointment_at
+            ? new Date(selected.appointment_at)
+            : null;
+        const validAppointment =
+            appointment && !Number.isNaN(appointment.getTime())
+                ? appointment
+                : null;
+        const appointmentEnd = validAppointment
+            ? new Date(validAppointment.getTime() + 60 * 60 * 1000)
+            : null;
+        const time = (date: Date) =>
+            date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+            });
+        const shortDate = (date: Date) =>
+            date.toLocaleDateString('en-US', {
+                month: '2-digit',
+                day: '2-digit',
+            });
+        const setDate = new Date(selected.created_at);
+        const agentNames = [
+            selected.agent?.agent_name,
+            selected.second_agent?.agent_name,
+        ].filter(Boolean);
+        const salesmanNames = [
+            selected.salesman_one?.salesman_name,
+            selected.salesman_two?.salesman_name,
+        ].filter(Boolean);
+        const address = [
+            selected.address,
+            [selected.city, selected.state].filter(Boolean).join(', '),
+            selected.zip_code,
+        ]
+            .filter(Boolean)
+            .join(' ');
+        const phones = [
+            selected.primary_number,
+            selected.secondary_number,
+            selected.mobile_number,
+        ].filter(Boolean);
+        const confirmation =
+            latestNoteBody(selected, 'confirmation') ||
+            selected.confirmation_notes ||
+            '';
+        const project = [
+            selected.product?.product_name,
+            latestNoteBody(selected, 'telemarketer') ||
+                selected.telemarketer_notes,
+        ]
+            .filter(Boolean)
+            .join(' – ');
+        const assignment =
+            validAppointment &&
+            !Number.isNaN(setDate.getTime()) &&
+            (agentNames.length > 0 || salesmanNames.length > 0)
+                ? `${agentNames.join(' & ') || 'Agent'} – ${salesmanNames.join(' & ') || 'Salesman'}: Set ${shortDate(setDate)} (${setDate.toLocaleDateString('en-US', { weekday: 'long' })}), ${time(validAppointment)}–${appointmentEnd ? time(appointmentEnd) : ''}.`
+                : '';
+
+        return [
+            {
+                key: 'heading' as const,
+                label: 'Confirmed lead heading',
+                value: validAppointment
+                    ? `CONFIRMED LEAD ${time(validAppointment)}`
+                    : 'CONFIRMED LEAD',
+            },
+            {
+                key: 'customer' as const,
+                label: 'Customer name',
+                value: selected.customer_name?.toUpperCase() ?? '',
+            },
+            { key: 'address' as const, label: 'Address', value: address },
+            {
+                key: 'phones' as const,
+                label: 'Phone numbers',
+                value: phones.join('\n'),
+            },
+            {
+                key: 'email' as const,
+                label: 'Email',
+                value: selected.email ?? '',
+            },
+            {
+                key: 'project' as const,
+                label: 'Project and telemarketer notes',
+                value: project,
+            },
+            {
+                key: 'confirmation' as const,
+                label: 'Confirmation note',
+                value: confirmation,
+            },
+            {
+                key: 'appointment' as const,
+                label: 'Agent, salesman, and appointment',
+                value: assignment,
+            },
+        ].filter((section) => section.value.trim() !== '');
+    }, [selected]);
+
+    const smsTemplateText = useMemo(
+        () =>
+            smsTemplateSections
+                .filter((section) =>
+                    smsTemplateFields.includes(section.key),
+                )
+                .map((section) => section.value.trim())
+                .join('\n\n'),
+        [smsTemplateFields, smsTemplateSections],
+    );
+
+    const openSmsTemplate = () => {
+        setSmsTemplateFields(
+            smsTemplateSections.map((section) => section.key),
+        );
+        setSmsTemplateOpen(true);
+    };
+
+    const copySmsTemplate = async () => {
+        if (!smsTemplateText) return;
+
+        try {
+            await navigator.clipboard.writeText(smsTemplateText);
+            setSmsTemplateOpen(false);
+            notify({
+                title: 'Lead message copied',
+                message:
+                    'The selected lead information is ready to paste into SMS.',
+                tone: 'success',
+            });
+        } catch {
+            notify({
+                title: 'Could not copy message',
+                message:
+                    'Your browser blocked clipboard access. Select and copy the preview manually.',
+                tone: 'warning',
+            });
+        }
+    };
+
     const selectLead = (lead: Lead) => {
         const latestTelemarketerNote = latestNoteBody(lead, 'telemarketer');
+        const latestConfirmationNote = latestNoteBody(lead, 'confirmation');
+        const latestDispatchNote = latestNoteBody(lead, 'dispatch');
+        const latestAppointmentResultNote = latestNoteBody(
+            lead,
+            'appointment_result',
+        );
         setSelectedId(lead.id);
         setAppointmentResultDraft(lead.appointment_result ?? '');
         setSalesmanOneDraft(String(lead.salesman_one?.salesman_id ?? ''));
@@ -847,11 +1051,14 @@ export default function LeadsShop({
         telemarketerNoteForm.setData('body', latestTelemarketerNote);
         setLoadedTelemarketerNote(latestTelemarketerNote);
         telemarketerNoteForm.clearErrors();
-        confirmationNoteForm.reset();
+        confirmationNoteForm.setData('body', latestConfirmationNote);
+        setLoadedConfirmationNote(latestConfirmationNote);
         confirmationNoteForm.clearErrors();
-        dispatchNoteForm.reset();
+        dispatchNoteForm.setData('body', latestDispatchNote);
+        setLoadedDispatchNote(latestDispatchNote);
         dispatchNoteForm.clearErrors();
-        appointmentResultNoteForm.reset();
+        appointmentResultNoteForm.setData('body', latestAppointmentResultNote);
+        setLoadedAppointmentResultNote(latestAppointmentResultNote);
         appointmentResultNoteForm.clearErrors();
         form.setData({
             customer_name: lead.customer_name,
@@ -915,7 +1122,8 @@ export default function LeadsShop({
     };
 
     const saveConfirmationNote = () => {
-        if (!selected || !confirmationNoteForm.data.body.trim()) {
+        const body = confirmationNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedConfirmationNote.trim()) {
             return;
         }
 
@@ -923,13 +1131,17 @@ export default function LeadsShop({
             `/lead-workflow/leads-shop/${selected.id}/notes`,
             {
                 preserveScroll: true,
-                onSuccess: () => confirmationNoteForm.reset(),
+                onSuccess: () => {
+                    confirmationNoteForm.setData('body', body);
+                    setLoadedConfirmationNote(body);
+                },
             },
         );
     };
 
     const saveDispatchNote = () => {
-        if (!selected || !dispatchNoteForm.data.body.trim()) {
+        const body = dispatchNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedDispatchNote.trim()) {
             return;
         }
 
@@ -937,13 +1149,17 @@ export default function LeadsShop({
             `/lead-workflow/leads-shop/${selected.id}/notes`,
             {
                 preserveScroll: true,
-                onSuccess: () => dispatchNoteForm.reset(),
+                onSuccess: () => {
+                    dispatchNoteForm.setData('body', body);
+                    setLoadedDispatchNote(body);
+                },
             },
         );
     };
 
     const saveAppointmentResultNote = () => {
-        if (!selected || !appointmentResultNoteForm.data.body.trim()) {
+        const body = appointmentResultNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedAppointmentResultNote.trim()) {
             return;
         }
 
@@ -951,7 +1167,10 @@ export default function LeadsShop({
             `/lead-workflow/leads-shop/${selected.id}/notes`,
             {
                 preserveScroll: true,
-                onSuccess: () => appointmentResultNoteForm.reset(),
+                onSuccess: () => {
+                    appointmentResultNoteForm.setData('body', body);
+                    setLoadedAppointmentResultNote(body);
+                },
             },
         );
     };
@@ -1075,6 +1294,58 @@ export default function LeadsShop({
         selected?.notes.filter(
             (note) => note.note_type === 'appointment_result',
         ) ?? [];
+    const expandedNote = expandedNoteType
+        ? {
+              telemarketer: {
+                  title: 'Telemarketer notes',
+                  value: telemarketerNoteForm.data.body,
+                  setValue: (value: string) =>
+                      telemarketerNoteForm.setData('body', value),
+                  save: saveTelemarketerNote,
+                  processing: telemarketerNoteForm.processing,
+                  unchanged:
+                      telemarketerNoteForm.data.body.trim() ===
+                      loadedTelemarketerNote.trim(),
+                  error: telemarketerNoteForm.errors.body,
+              },
+              confirmation: {
+                  title: 'Confirmation notes',
+                  value: confirmationNoteForm.data.body,
+                  setValue: (value: string) =>
+                      confirmationNoteForm.setData('body', value),
+                  save: saveConfirmationNote,
+                  processing: confirmationNoteForm.processing,
+                  unchanged:
+                      confirmationNoteForm.data.body.trim() ===
+                      loadedConfirmationNote.trim(),
+                  error: confirmationNoteForm.errors.body,
+              },
+              dispatch: {
+                  title: 'Dispatch notes',
+                  value: dispatchNoteForm.data.body,
+                  setValue: (value: string) =>
+                      dispatchNoteForm.setData('body', value),
+                  save: saveDispatchNote,
+                  processing: dispatchNoteForm.processing,
+                  unchanged:
+                      dispatchNoteForm.data.body.trim() ===
+                      loadedDispatchNote.trim(),
+                  error: dispatchNoteForm.errors.body,
+              },
+              appointment_result: {
+                  title: 'Appointment result notes',
+                  value: appointmentResultNoteForm.data.body,
+                  setValue: (value: string) =>
+                      appointmentResultNoteForm.setData('body', value),
+                  save: saveAppointmentResultNote,
+                  processing: appointmentResultNoteForm.processing,
+                  unchanged:
+                      appointmentResultNoteForm.data.body.trim() ===
+                      loadedAppointmentResultNote.trim(),
+                  error: appointmentResultNoteForm.errors.body,
+              },
+          }[expandedNoteType]
+        : null;
     const displayedHistory =
         historyType === 'all'
             ? (selected?.notes ?? [])
@@ -1442,9 +1713,12 @@ export default function LeadsShop({
                             <span>Customer</span>
                             <span>City</span>
                             <span>
-                                {queue?.dateField === 'appointment_at'
+                                {(queue?.dateField ?? 'appointment_at') === 'appointment_at'
                                     ? 'Appointment'
                                     : 'Created'}
+                            </span>
+                            <span className="lead-browser__attempts-heading">
+                                Attempts
                             </span>
                         </div>
                         <div className="lead-browser__list">
@@ -1483,13 +1757,18 @@ export default function LeadsShop({
                                     </span>
                                     <span>{lead.city}</span>
                                     <span>
-                                        {queue?.dateField === 'appointment_at'
+                                        {(queue?.dateField ?? 'appointment_at') === 'appointment_at'
                                             ? lead.appointment_at
                                                 ? formatAppointmentDate(
                                                       lead.appointment_at,
                                                   )
                                                 : 'No appointment'
                                             : formatDate(lead.created_at)}
+                                    </span>
+                                    <span className="lead-browser-row__attempts">
+                                        {(lead.ring_central_calls?.length ??
+                                            0) +
+                                            (newCallAttempts[lead.id] ?? 0)}
                                     </span>
                                 </button>
                             ))}
@@ -1932,9 +2211,6 @@ export default function LeadsShop({
                                                     </option>
                                                     <option value="Salesman Sent">
                                                         Salesman Sent
-                                                    </option>
-                                                    <option value="Sold">
-                                                        Sold
                                                     </option>
                                                     <option value="Sold and Cancel">
                                                         Sold and Cancel
@@ -2430,9 +2706,6 @@ export default function LeadsShop({
                                                                                 Salesman
                                                                                 Sent
                                                                             </option>
-                                                                            <option value="Sold">
-                                                                                Sold
-                                                                            </option>
                                                                             <option value="Sold and Cancel">
                                                                                 Sold
                                                                                 and
@@ -2535,6 +2808,17 @@ export default function LeadsShop({
                                                                     >
                                                                         <Save />
                                                                     </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="lead-inline-save lead-inline-sms"
+                                                                        onClick={
+                                                                            openSmsTemplate
+                                                                        }
+                                                                        aria-label="Create SMS copy for this lead"
+                                                                        title="Select lead details to copy"
+                                                                    >
+                                                                        <MessageCircle />
+                                                                    </button>
                                                                 </div>
                                                             </span>
                                                         </div>
@@ -2631,9 +2915,20 @@ export default function LeadsShop({
                                             </div>
                                         </article>
 
-                                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes">
+                                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--telemarketer">
                                             <div className="lead-note-heading">
                                                 <h3>Telemarketer notes</h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedNoteType(
+                                                            'telemarketer',
+                                                        )
+                                                    }
+                                                    title="Open large note editor"
+                                                >
+                                                    <Maximize2 /> Expand
+                                                </button>
                                                 <button
                                                     type="button"
                                                     onClick={() =>
@@ -2693,9 +2988,20 @@ export default function LeadsShop({
                                                 </button>
                                             </div>
                                         </article>
-                                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes">
+                                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--confirmation">
                                             <div className="lead-note-heading">
                                                 <h3>Confirmation notes</h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedNoteType(
+                                                            'confirmation',
+                                                        )
+                                                    }
+                                                    title="Open large note editor"
+                                                >
+                                                    <Maximize2 /> Expand
+                                                </button>
                                                 <button
                                                     type="button"
                                                     onClick={() =>
@@ -2740,7 +3046,9 @@ export default function LeadsShop({
                                                     type="button"
                                                     disabled={
                                                         confirmationNoteForm.processing ||
-                                                        !confirmationNoteForm.data.body.trim()
+                                                        !confirmationNoteForm.data.body.trim() ||
+                                                        confirmationNoteForm.data.body.trim() ===
+                                                            loadedConfirmationNote.trim()
                                                     }
                                                     onClick={
                                                         saveConfirmationNote
@@ -2762,9 +3070,20 @@ export default function LeadsShop({
                                             'kit',
                                         ].includes(queue?.status ?? '') && (
                                             <>
-                                                <article className="lead-detail-card lead-detail-card--notes lead-live-notes">
+                                                <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--dispatch">
                                                     <div className="lead-note-heading">
                                                         <h3>Dispatch notes</h3>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setExpandedNoteType(
+                                                                    'dispatch',
+                                                                )
+                                                            }
+                                                            title="Open large note editor"
+                                                        >
+                                                            <Maximize2 /> Expand
+                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={() =>
@@ -2800,7 +3119,9 @@ export default function LeadsShop({
                                                             type="button"
                                                             disabled={
                                                                 dispatchNoteForm.processing ||
-                                                                !dispatchNoteForm.data.body.trim()
+                                                                !dispatchNoteForm.data.body.trim() ||
+                                                                dispatchNoteForm.data.body.trim() ===
+                                                                    loadedDispatchNote.trim()
                                                             }
                                                             onClick={
                                                                 saveDispatchNote
@@ -2812,12 +3133,24 @@ export default function LeadsShop({
                                                 </article>
                                                 {queue?.status ===
                                                     'dispatched' && (
-                                                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes">
+                                                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result">
                                                         <div className="lead-note-heading">
                                                             <h3>
                                                                 Appointment
                                                                 result notes
                                                             </h3>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setExpandedNoteType(
+                                                                        'appointment_result',
+                                                                    )
+                                                                }
+                                                                title="Open large note editor"
+                                                            >
+                                                                <Maximize2 />{' '}
+                                                                Expand
+                                                            </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() =>
@@ -2854,7 +3187,9 @@ export default function LeadsShop({
                                                                 type="button"
                                                                 disabled={
                                                                     appointmentResultNoteForm.processing ||
-                                                                    !appointmentResultNoteForm.data.body.trim()
+                                                                    !appointmentResultNoteForm.data.body.trim() ||
+                                                                    appointmentResultNoteForm.data.body.trim() ===
+                                                                        loadedAppointmentResultNote.trim()
                                                                 }
                                                                 onClick={
                                                                     saveAppointmentResultNote
@@ -2902,6 +3237,83 @@ export default function LeadsShop({
                         </div>
                     </section>
                 </div>
+
+                {expandedNoteType && expandedNote && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-expanded-note-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setExpandedNoteType(null);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-expanded-note">
+                            <header>
+                                <div>
+                                    <span>
+                                        <Maximize2 />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-expanded-note-title">
+                                            {expandedNote.title}
+                                        </h2>
+                                        <p>
+                                            {selected.customer_name} · Lead #
+                                            {selected.id}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setExpandedNoteType(null)}
+                                    aria-label="Close large note editor"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-expanded-note__editor">
+                                <textarea
+                                    autoFocus
+                                    value={expandedNote.value}
+                                    onChange={(event) =>
+                                        expandedNote.setValue(
+                                            event.target.value,
+                                        )
+                                    }
+                                    placeholder={`Write ${expandedNote.title.toLowerCase()}…`}
+                                />
+                                {expandedNote.error && (
+                                    <em>{expandedNote.error}</em>
+                                )}
+                            </div>
+                            <footer className="lead-expanded-note__actions">
+                                <button
+                                    type="button"
+                                    onClick={() => setExpandedNoteType(null)}
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={
+                                        expandedNote.processing ||
+                                        !expandedNote.value.trim() ||
+                                        expandedNote.unchanged
+                                    }
+                                    onClick={() => expandedNote.save()}
+                                >
+                                    <Save />
+                                    {expandedNote.processing
+                                        ? 'Saving…'
+                                        : 'Save note'}
+                                </button>
+                            </footer>
+                        </section>
+                    </div>
+                )}
 
                 {saleModalOpen && selected && (
                     <div
@@ -3256,6 +3668,130 @@ export default function LeadsShop({
                                     </div>
                                 )}
                             </div>
+                        </section>
+                    </div>
+                )}
+
+                {smsTemplateOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-sms-template-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setSmsTemplateOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-sms-template">
+                            <header>
+                                <div>
+                                    <span>
+                                        <MessageCircle />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-sms-template-title">
+                                            Copy lead message
+                                        </h2>
+                                        <p>
+                                            Choose the information to include
+                                            for {selected.customer_name}.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSmsTemplateOpen(false)}
+                                    aria-label="Close SMS template"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-sms-template__body">
+                                <div className="lead-sms-template__choices">
+                                    <div className="lead-sms-template__select-actions">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setSmsTemplateFields(
+                                                    smsTemplateSections.map(
+                                                        (section) =>
+                                                            section.key,
+                                                    ),
+                                                )
+                                            }
+                                        >
+                                            Select all
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setSmsTemplateFields([])
+                                            }
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                    {smsTemplateSections.map((section) => (
+                                        <label key={section.key}>
+                                            <input
+                                                type="checkbox"
+                                                checked={smsTemplateFields.includes(
+                                                    section.key,
+                                                )}
+                                                onChange={() =>
+                                                    setSmsTemplateFields(
+                                                        (current) =>
+                                                            current.includes(
+                                                                section.key,
+                                                            )
+                                                                ? current.filter(
+                                                                      (key) =>
+                                                                          key !==
+                                                                          section.key,
+                                                                  )
+                                                                : [
+                                                                      ...current,
+                                                                      section.key,
+                                                                  ],
+                                                    )
+                                                }
+                                            />
+                                            <span>
+                                                <strong>
+                                                    {section.label}
+                                                </strong>
+                                                <small>{section.value}</small>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <label className="lead-sms-template__preview">
+                                    <span>Message preview</span>
+                                    <textarea
+                                        readOnly
+                                        value={smsTemplateText}
+                                        aria-label="SMS message preview"
+                                    />
+                                </label>
+                            </div>
+                            <footer className="lead-sms-template__actions">
+                                <button
+                                    type="button"
+                                    onClick={() => setSmsTemplateOpen(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={copySmsTemplate}
+                                    disabled={!smsTemplateText}
+                                >
+                                    <MessageCircle />
+                                    Copy message
+                                </button>
+                            </footer>
                         </section>
                     </div>
                 )}

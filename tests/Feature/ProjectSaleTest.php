@@ -87,11 +87,10 @@ test('accepting a sale creates a related project', function () {
     ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
     $lead->update(['salesman_1_id' => $salesman->salesman_id]);
 
-    $this->actingAs($account)
+    $response = $this->actingAs($account)
         ->post(route('lead-workflow.leads-shop.sale', $lead), [
             'amount' => 12500.50,
-        ])
-        ->assertRedirect();
+        ]);
 
     $this->assertDatabaseHas('projects', [
         'lead_id' => $lead->id,
@@ -103,6 +102,9 @@ test('accepting a sale creates a related project', function () {
         ->status->toBe('project')
         ->appointment_result->toBe('Sold')
         ->project->not->toBeNull();
+    $response->assertRedirect(route('management.projects', [
+        'project' => $lead->project->id,
+    ]));
     $this->assertDatabaseHas('project_sales', [
         'project_id' => $lead->project->id,
         'type' => 'original',
@@ -119,6 +121,19 @@ test('accepting a sale creates a related project', function () {
             ->where('projects.0.lead.company.prefix', 'PC')
             ->where('projects.0.lead.customer_name', 'Project Customer'),
         );
+});
+
+test('sold appointment results must use the sale workflow', function () {
+    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+
+    $this->actingAs($account)
+        ->patch(route('lead-workflow.leads-shop.appointment-result.update', $lead), [
+            'appointment_result' => 'Sold',
+        ])
+        ->assertSessionHasErrors('appointment_result');
+
+    expect($lead->refresh()->appointment_result)->not->toBe('Sold');
+    $this->assertDatabaseMissing('projects', ['lead_id' => $lead->id]);
 });
 
 test('project referral sales can be added edited and deleted', function () {

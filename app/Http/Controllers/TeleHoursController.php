@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\Lead;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,18 +13,29 @@ use Inertia\Response;
 
 class TeleHoursController extends Controller
 {
+    private const LUNCH_STATUS_ID = '43069';
+
     public function __invoke(Request $request): Response
     {
         $timezone = $this->timezone($request->string('timezone')->toString());
         $minimum = CarbonImmutable::parse(config('services.calltools.sync_start_date'), $timezone)->startOfDay();
         $today = CarbonImmutable::today($timezone);
-        $selectedDate = $this->date($request->string('date')->toString(), $today, $timezone)->max($minimum);
-        $from = $selectedDate->startOfDay()->utc();
-        $to = $selectedDate->endOfDay()->utc();
+        $selectedFrom = $this->date($request->string('from')->toString() ?: $request->string('date')->toString(), $today, $timezone)->max($minimum);
+        $selectedTo = $this->date($request->string('to')->toString(), $selectedFrom, $timezone)->max($selectedFrom)->min($today);
+        $isRange = ! $selectedFrom->isSameDay($selectedTo);
+        $from = $selectedFrom->startOfDay()->utc();
+        $to = $selectedTo->endOfDay()->utc();
         $agentId = $request->integer('agent') ?: null;
+        $leadCounts = Lead::query()
+            ->whereBetween('created_at', [$from, $to])
+            ->whereNotNull('agent_id')
+            ->selectRaw('agent_id, count(*) as total')
+            ->groupBy('agent_id')
+            ->pluck('total', 'agent_id');
 
         $agents = Agent::query()->orderBy('agent_name')->get(['agent_id', 'agent_name', 'account_id', 'calltools_user_id']);
         $appUserIds = $agents->pluck('calltools_user_id')->filter();
+        $lunchSeconds = $this->lunchSeconds($appUserIds, $from, $to);
 
         $loginDays = collect();
         $logs = collect();
@@ -72,7 +84,7 @@ class TeleHoursController extends Controller
                 $shift->agent_name = $agent?->agent_name;
             });
 
-            if ($selectedDate->isSameDay($today) && Schema::hasTable('calltools_agent_daily_metrics')) {
+            if ($selectedTo->isSameDay($today) && Schema::hasTable('calltools_agent_daily_metrics')) {
                 $liveStatuses = DB::table('calltools_agent_daily_metrics')
                     ->where('logged_in', true)
                     ->whereBetween('logged_in_since', [$from, $to])
@@ -104,9 +116,12 @@ class TeleHoursController extends Controller
             }
 
             $loginDays = $shifts
-                ->groupBy(fn ($shift) => $shift->app_user_id.'|'.CarbonImmutable::parse($shift->started_at, 'UTC')->setTimezone($timezone)->toDateString())
-                ->map(function ($sessions) use ($timezone): object {
-                    $first = $sessions->sortBy('started_at')->first();
+                ->groupBy(fn ($shift) => $isRange
+                    ? (string) $shift->app_user_id
+                    : $shift->app_user_id.'|'.CarbonImmutable::parse($shift->started_at, 'UTC')->setTimezone($timezone)->toDateString())
+                ->map(function ($sessions) use ($timezone, $leadCounts, $lunchSeconds, $isRange, $selectedFrom, $selectedTo): object {
+                    $ordered = $sessions->sortBy('started_at')->values();
+                    $first = $ordered->first();
                     $hasOpenSession = $sessions->contains(
                         fn (object $session): bool => $session->stopped_at === null,
                     );
@@ -118,11 +133,15 @@ class TeleHoursController extends Controller
                         'app_user_id' => $first->app_user_id,
                         'agent_id' => $first->agent_id,
                         'agent_name' => $first->agent_name,
-                        'shift_date' => CarbonImmutable::parse($first->started_at, 'UTC')->setTimezone($timezone)->toDateString(),
+                        'shift_date' => $isRange
+                            ? $selectedFrom->toDateString().' – '.$selectedTo->toDateString()
+                            : CarbonImmutable::parse($first->started_at, 'UTC')->setTimezone($timezone)->toDateString(),
                         'first_login_at' => $sessions->min('started_at'),
                         'last_logout_at' => $lastLogout,
                         'logged_seconds' => (int) $sessions->sum('duration_seconds'),
+                        'lunch_seconds' => (int) ($lunchSeconds[(string) $first->app_user_id] ?? 0),
                         'sessions' => $sessions->count(),
+                        'leads_sent' => (int) ($leadCounts[$first->agent_id] ?? 0),
                     ];
                 })
                 ->sortBy([['shift_date', 'desc'], ['agent_name', 'asc']])
@@ -134,16 +153,20 @@ class TeleHoursController extends Controller
                 : $agents;
 
             $loginDays = $visibleAgents
-                ->map(function (Agent $agent) use ($loginDaysByAgent, $selectedDate): object {
+                ->map(function (Agent $agent) use ($loginDaysByAgent, $selectedFrom, $selectedTo, $isRange, $leadCounts, $lunchSeconds): object {
                     return $loginDaysByAgent->get($agent->agent_id) ?? (object) [
                         'app_user_id' => $agent->calltools_user_id,
                         'agent_id' => $agent->agent_id,
                         'agent_name' => $agent->agent_name,
-                        'shift_date' => $selectedDate->toDateString(),
+                        'shift_date' => $isRange
+                            ? $selectedFrom->toDateString().' – '.$selectedTo->toDateString()
+                            : $selectedFrom->toDateString(),
                         'first_login_at' => null,
                         'last_logout_at' => null,
                         'logged_seconds' => 0,
+                        'lunch_seconds' => (int) ($lunchSeconds[(string) $agent->calltools_user_id] ?? 0),
                         'sessions' => 0,
+                        'leads_sent' => (int) ($leadCounts[$agent->agent_id] ?? 0),
                     ];
                 })
                 ->values();
@@ -155,7 +178,13 @@ class TeleHoursController extends Controller
             'agentOptions' => $agents->map(fn (Agent $agent) => ['id' => $agent->agent_id, 'name' => $agent->agent_name]),
             'callLogs' => $logs,
             'dispositions' => $dispositions,
-            'filters' => ['date' => $selectedDate->toDateString(), 'agent' => $agentId, 'timezone' => $timezone],
+            'filters' => [
+                'from' => $selectedFrom->toDateString(),
+                'to' => $selectedTo->toDateString(),
+                'agent' => $agentId,
+                'timezone' => $timezone,
+            ],
+            'isRange' => $isRange,
             'sync' => Schema::hasTable('calltools_sync_states') ? DB::table('calltools_sync_states')->pluck('value', 'key') : [],
             'activityCoverage' => Schema::hasTable('calltools_user_login_shifts')
                 ? $this->loginCoverage($timezone)
@@ -187,5 +216,26 @@ class TeleHoursController extends Controller
         }
 
         return (string) config('services.calltools.report_timezone', 'Asia/Manila');
+    }
+
+    private function lunchSeconds(mixed $appUserIds, CarbonImmutable $from, CarbonImmutable $to): mixed
+    {
+        if (! Schema::hasTable('calltools_agent_status_intervals')) {
+            return collect();
+        }
+
+        return DB::table('calltools_agent_status_intervals')
+            ->where('status_id', self::LUNCH_STATUS_ID)
+            ->whereIn('app_user_id', $appUserIds)
+            ->where('started_at', '<=', $to)
+            ->where(fn ($query) => $query->whereNull('ended_at')->orWhere('ended_at', '>=', $from))
+            ->get(['app_user_id', 'started_at', 'ended_at'])
+            ->groupBy('app_user_id')
+            ->map(fn ($rows): int => (int) $rows->sum(function ($row) use ($from, $to): int {
+                $start = CarbonImmutable::parse($row->started_at, 'UTC')->max($from);
+                $end = ($row->ended_at ? CarbonImmutable::parse($row->ended_at, 'UTC') : now('UTC'))->min($to);
+
+                return $end->greaterThan($start) ? $start->diffInSeconds($end) : 0;
+            }));
     }
 }

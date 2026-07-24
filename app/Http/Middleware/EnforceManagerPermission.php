@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ManagerAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -35,6 +36,13 @@ class EnforceManagerPermission
         };
         $level = $profile?->permissions()->where('module', $module)->value('access_level') ?? 'none';
         $allowed = $request->isMethod('GET') ? in_array($level, ['view', 'edit'], true) : $level === 'edit';
+        if (! $allowed && $request->isMethod('GET') && $module === 'dashboard') {
+            $fallback = ManagerAccess::firstAllowedPath($user);
+
+            if ($fallback && $fallback !== '/dashboard') {
+                return redirect($fallback);
+            }
+        }
         abort_unless($allowed, 403, 'You do not have permission to access this section.');
 
         return $next($request);

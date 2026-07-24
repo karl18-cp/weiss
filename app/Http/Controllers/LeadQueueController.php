@@ -19,6 +19,7 @@ class LeadQueueController extends Controller
         return Inertia::render('lead-workflow/booking-board', [
             'leads' => Lead::query()
                 ->whereIn('status', ['confirmed', 'dispatched'])
+                ->whereNotNull('appointment_at')
                 ->with([
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',

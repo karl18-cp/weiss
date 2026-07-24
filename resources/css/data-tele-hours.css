@@ -1,0 +1,50 @@
+.data-hours-page { min-height: 100vh; background: linear-gradient(145deg, #fffaff, #fdf1ff); }
+.data-hours-add { display: inline-flex; height: 2.4rem; align-items: center; gap: .4rem; margin-left: .25rem; border: 0; border-radius: .55rem; padding: 0 .9rem; background: #a321b2; color: #fff; font-size: .78rem; font-weight: 800; cursor: pointer; }
+.data-hours-add svg { width: 19px; }
+.data-hours-filter { display: flex; align-items: end; gap: .6rem; margin-top: .8rem; padding: .7rem .85rem; border: 1px solid #e9d7ed; border-radius: .75rem; background: #fff; }
+.data-hours-filter label { display: grid; gap: .3rem; color: #738198; font-size: .72rem; font-weight: 800; }
+.data-hours-filter label > div { display: flex; height: 2.4rem; align-items: center; gap: .45rem; padding: 0 .65rem; border: 1px solid #ddd5e3; border-radius: .55rem; }
+.data-hours-filter label svg { width: 16px; color: #a321b2; }
+.data-hours-filter input { min-width: 9.5rem; border: 0; outline: 0; font-size: .84rem; font-weight: 650; }
+.data-hours-filter button { height: 2.4rem; padding: 0 .95rem; border: 0; border-radius: .55rem; color: #fff; background: #a321b2; font-size: .78rem; font-weight: 800; cursor: pointer; }
+.data-hours-filter .data-hours-today { border: 1px solid #c92bd9; color: #a321b2; background: #fff; }
+.data-hours-filter p { margin: 0 0 .55rem auto; color: #7f728e; font-size: .82rem; }
+.data-hours-card { margin-top: .8rem; overflow: hidden; border: 1px solid #dcd3eb; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(41, 24, 70, .05); }
+.data-hours-card-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; }
+.data-hours-card-title > div { display: flex; align-items: center; gap: .8rem; }
+.data-hours-card-title svg { width: 25px; color: #8c2bc1; }
+.data-hours-card-title h2 { margin: 0; font-size: 1.05rem; }
+.data-hours-card-title span, .data-hours-card-title > strong { color: #706582; font-size: .8rem; }
+.data-hours-table-wrap { width: 100%; max-height: calc(100vh - 390px); overflow: auto; }
+.data-hours-table-wrap table { width: 100%; min-width: 1260px; border-collapse: collapse; }
+.data-hours-table-wrap th { position: sticky; top: 0; z-index: 1; padding: .72rem .85rem; background: #faf4fc; color: #8a249c; text-align: left; font-size: .7rem; text-transform: uppercase; }
+.data-hours-table-wrap td { padding: .72rem .85rem; border-top: 1px solid #eee8f3; color: #302640; font-size: .83rem; white-space: nowrap; }
+.data-hours-table-wrap tbody tr:hover { background: #fcf9fd; }
+.data-hours-total { color: #8e25bd !important; font-weight: 800; }
+.data-hours-override { display: block; margin-top: .15rem; color: #8e25bd; font-size: .62rem; font-weight: 800; text-transform: uppercase; }
+.data-hours-empty { padding: 3rem !important; text-align: center; }
+.data-hours-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgba(17, 10, 28, .64); }
+.data-hours-modal { width: min(520px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; border-radius: 14px; background: #fff; box-shadow: 0 24px 80px rgba(0,0,0,.3); }
+.data-hours-modal header { display: flex; justify-content: space-between; padding: 1rem 1.1rem; border-bottom: 1px solid #eee8f3; }
+.data-hours-modal h2 { margin: 0; font-size: 1.18rem; }
+.data-hours-modal p { margin: .25rem 0 0; color: #746b7f; font-size: .84rem; }
+.data-hours-modal header button { border: 0; background: transparent; cursor: pointer; }
+.data-hours-modal form { display: grid; gap: .75rem; padding: 1rem 1.1rem; }
+.data-hours-agent-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
+.data-hours-agent-picker legend { display: flex; width: 100%; justify-content: space-between; color: #372b46; font-size: .96rem; font-weight: 800; }
+.data-hours-agent-picker legend span { color: #9226ad; font-size: .82rem; }
+.data-hours-agent-actions { display: flex; gap: .5rem; margin: .55rem 0; }
+.data-hours-agent-actions button { border: 0; padding: .25rem .2rem; color: #9024a9; background: transparent; font-size: .78rem; font-weight: 800; cursor: pointer; }
+.data-hours-agent-options { display: grid; max-height: 150px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem; overflow-y: auto; padding: .3rem; border: 1px solid #d8cde1; border-radius: 9px; background: #fcf9fd; }
+.data-hours-agent-options label { display: flex; min-width: 0; align-items: center; gap: .45rem; padding: .45rem .55rem; border: 1px solid transparent; border-radius: 7px; background: #fff; cursor: pointer; }
+.data-hours-agent-options label.is-selected { border-color: #d483e2; color: #851e99; background: #fbecfd; }
+.data-hours-agent-options input { width: 14px !important; height: 14px; flex: none; padding: 0; accent-color: #a321b2; }
+.data-hours-agent-options span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.data-hours-modal label { display: grid; gap: .3rem; color: #372b46; font-size: .82rem; font-weight: 750; }
+.data-hours-modal input, .data-hours-modal select, .data-hours-modal textarea { width: 100%; box-sizing: border-box; border: 1px solid #cfc4dc; border-radius: 8px; padding: .6rem .7rem; background: #fff; color: #21172c; font-size: .82rem; font-weight: 550; }
+.data-hours-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.data-hours-modal small { min-height: 1em; color: #bd253c; }
+.data-hours-modal footer { display: flex; justify-content: flex-end; gap: .75rem; margin-top: .25rem; }
+.data-hours-modal footer button { border: 1px solid #a82ac1; border-radius: 8px; padding: .58rem .8rem; background: #fff; color: #8d219f; font-size: .8rem; font-weight: 800; cursor: pointer; }
+.data-hours-modal footer button[type=submit] { background: #9825b7; color: #fff; }
+@media (max-width: 700px) { .data-hours-add { width: 100%; justify-content: center; margin-left: 0; } .data-hours-filter { align-items: stretch; flex-direction: column; } .data-hours-filter p { margin: .25rem 0 0; } .data-hours-card-title { align-items: flex-start; flex-direction: column; } .data-hours-fields, .data-hours-agent-options { grid-template-columns: 1fr; } }

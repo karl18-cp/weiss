@@ -225,8 +225,18 @@
 
 .tele-hours-login-table {
     display: grid;
-    grid-template-columns: 8rem minmax(10rem, 1.3fr) 12rem 12rem 8rem 6rem;
-    min-width: 60rem;
+    grid-template-columns: 7.5rem minmax(10rem, 1.2fr) 12rem 12rem 7rem 7rem 7rem 6rem;
+    min-width: 72rem;
+}
+.tele-hours-session-boundary {
+    display: none;
+}
+.tele-hours-login-table.is-range {
+    grid-template-columns: minmax(12rem, 1.5fr) repeat(3, minmax(8rem, 1fr));
+    min-width: 42rem;
+}
+.tele-hours-login-table.is-range .tele-hours-day-only {
+    display: none;
 }
 .tele-hours-call-table {
     display: grid;

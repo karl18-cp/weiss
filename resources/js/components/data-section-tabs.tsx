@@ -7,10 +7,11 @@ const dataTabs = [
     { label: 'Contracts', href: null },
     { label: 'Payables', href: '/lead-workflow/data/payables' },
     { label: 'Receivables', href: '/lead-workflow/data/receivables' },
+    { label: 'Tele Report', href: '/lead-workflow/data/tele-hours' },
 ] as const;
 
 type DataSection =
-    'Tele Leads' | 'Vendor Invoices' | 'Payables' | 'Receivables' | 'Projects';
+    'Tele Leads' | 'Vendor Invoices' | 'Payables' | 'Receivables' | 'Tele Report' | 'Projects';
 
 function DriveIcon() {
     return (
