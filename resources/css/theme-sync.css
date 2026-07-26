@@ -160,6 +160,212 @@ html.dark .crm-app-content :is(.border-slate-200, .border-gray-200) {
     border-color: #2b3c54 !important;
 }
 
+/*
+ * Complete legacy surface coverage. Most CRM screens pre-date the appearance
+ * setting and use feature-specific class names rather than shared utilities.
+ */
+html.dark .crm-app-content :is(
+    .crm-dashboard-kpis article,
+    .crm-dashboard-card,
+    .crm-dashboard-search,
+    .agents-form-panel,
+    .agents-workspace,
+    .companies-form-panel,
+    .companies-workspace,
+    .contractors-form-panel,
+    .contractors-workspace,
+    .products-card,
+    .products-form-card,
+    .managers-form-panel,
+    .managers-workspace,
+    .directory-navigation,
+    .directory-section-content,
+    .workflow-queue-header,
+    .workflow-queue-list,
+    .workflow-queue-detail,
+    .workflow-queue-fields,
+    .workflow-queue-actions,
+    .lead-browser,
+    .lead-browser-filters,
+    .lead-detail,
+    .lead-detail-card,
+    .lead-side-card,
+    .lead-recordings-list,
+    .booking-board-detail,
+    .booking-board-summary,
+    .booking-timeline__content,
+    .lead-data-card,
+    .lead-data-table,
+    .quality-control-card,
+    .quality-control-detail,
+    .tele-hours-card,
+    .data-hours-card,
+    .data-hours-filter,
+    .accounting-register-card,
+    .vendor-invoices-card,
+    .project-card,
+    .project-detail,
+    .project-summary,
+    .project-panel,
+    .project-table,
+    .ringcentral-dialer
+) {
+    color: #e6edf7 !important;
+    border-color: #2b3c54 !important;
+    background: #101b2c !important;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 18%) !important;
+}
+
+html.dark .crm-app-content :is(
+    .crm-dashboard-booking a,
+    .crm-dashboard-workflow > div > a,
+    .agent-list-item,
+    .company-list-item,
+    .contractor-list-item,
+    .product-row,
+    .manager-item,
+    .workflow-queue-list-item,
+    .lead-browser-row,
+    .booking-timeline__row,
+    .quality-control-list-item,
+    .data-hours-agent-options label
+) {
+    color: #dce6f4 !important;
+    border-color: #2b3c54 !important;
+    background: #0c1727 !important;
+}
+
+html.dark .crm-app-content :is(
+    .agent-list-item,
+    .company-list-item,
+    .contractor-list-item,
+    .product-row,
+    .manager-item,
+    .workflow-queue-list-item,
+    .lead-browser-row,
+    .quality-control-list-item
+):hover {
+    background: #16253b !important;
+}
+
+html.dark .crm-app-content :is(
+    .agent-list-item,
+    .company-list-item,
+    .contractor-list-item,
+    .product-row,
+    .manager-item,
+    .workflow-queue-list-item,
+    .lead-browser-row,
+    .quality-control-list-item
+).is-active,
+html.dark .crm-app-content :is(
+    .agent-list-item,
+    .company-list-item,
+    .contractor-list-item,
+    .product-row,
+    .manager-item,
+    .workflow-queue-list-item,
+    .lead-browser-row,
+    .quality-control-list-item
+)[aria-current='true'] {
+    color: #f4f8ff !important;
+    border-color: #3578e5 !important;
+    background: #173765 !important;
+}
+
+/* Dashboard: retain category colors while making all copy readable. */
+html.dark .crm-dashboard-kpis article {
+    background: linear-gradient(145deg, #142238, #0e1929) !important;
+}
+
+html.dark .crm-dashboard-kpis article :is(span, small, p),
+html.dark .crm-dashboard-card :is(span, small, p) {
+    color: #9fb0c8 !important;
+}
+
+html.dark .crm-dashboard-kpis article :is(strong, b),
+html.dark .crm-dashboard-card :is(strong, b) {
+    color: #f5f8fd !important;
+}
+
+html.dark .crm-dashboard-kpis header i {
+    color: #75a7ff !important;
+    background: #1b3153 !important;
+}
+
+html.dark .crm-dashboard-priority a {
+    color: #dce6f4 !important;
+    border-color: #2d405b !important;
+    background: #142238 !important;
+}
+
+html.dark .crm-dashboard-priority a :is(span, strong) {
+    color: inherit !important;
+}
+
+html.dark .crm-dashboard-card :is(progress, [class*='track']) {
+    color: #4a8cff;
+    background: #27364a !important;
+}
+
+/* Tables and tabular grids are used by Data, Projects, Accounting and QC. */
+html.dark .crm-app-content tbody,
+html.dark .crm-app-content tbody tr,
+html.dark .crm-app-content tbody td {
+    color: #d9e3f1 !important;
+    border-color: #293a52 !important;
+    background-color: #0f1a2a !important;
+}
+
+html.dark .crm-app-content tbody tr:hover td {
+    background-color: #16253b !important;
+}
+
+/* Dialogs are often mounted at the end of the CRM root. */
+html.dark .crm-app-content :is(
+    .lead-note-modal__card,
+    .lead-sale-modal__card,
+    .lead-recordings-modal,
+    .lead-import-modal,
+    .data-hours-modal,
+    .system-modal,
+    [role='dialog']
+) {
+    color: #e6edf7 !important;
+    border-color: #33445d !important;
+    background: #101b2c !important;
+}
+
+html.dark .crm-app-content :is(
+    .lead-note-modal__card,
+    .lead-sale-modal__card,
+    .lead-recordings-modal,
+    .lead-import-modal,
+    .data-hours-modal,
+    .system-modal,
+    [role='dialog']
+) :is(header, footer) {
+    color: #e6edf7 !important;
+    border-color: #293a52 !important;
+    background: #101b2c !important;
+}
+
+/* Search results and popovers sit above otherwise-correct dark screens. */
+html.dark .lead-global-search__results {
+    color: #e6edf7;
+    border-color: #33445d;
+    background: #101b2c;
+}
+
+html.dark .lead-global-search__results button {
+    color: #dce6f4;
+}
+
+html.dark .lead-global-search__results button:hover,
+html.dark .lead-global-search__results button:focus-visible {
+    background: #1a2b44;
+}
+
 /* Preserve real-world visual colors inside maps, recordings, and media. */
 html.dark .crm-app-content :is(
     img,
