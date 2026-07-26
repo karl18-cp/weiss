@@ -3,6 +3,16 @@
 .salesmen-form {
     max-width: 48rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.salesmen-form > label,
+.salesmen-form > .module-permissions {
+    align-self: start;
+}
+
+.salesmen-form > .module-permissions {
+    grid-column: 1 / -1;
 }
 
 .salesmen-form .agents-form-actions {
@@ -15,6 +25,10 @@
     }
 
     .salesmen-form .agents-form-actions {
+        grid-column: auto;
+    }
+
+    .salesmen-form > .module-permissions {
         grid-column: auto;
     }
 }

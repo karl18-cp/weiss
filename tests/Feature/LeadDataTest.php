@@ -185,7 +185,7 @@ test('data accounting registers aggregate receivables and payables from all proj
             ->where('transactions.data.0.reference_number', 'CH#200'));
 });
 
-test('booking board contains only confirmed and dispatched leads', function () {
+test('booking board contains only dispatched leads', function () {
     $admin = dataAdmin();
     $confirmed = dataLead(['status' => 'confirmed']);
     $dispatched = $confirmed->replicate();
@@ -201,7 +201,23 @@ test('booking board contains only confirmed and dispatched leads', function () {
         ->get(route('lead-workflow.booking-board'))
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/booking-board')
-            ->has('leads', 2)
-            ->where('leads.0.status', 'confirmed')
-            ->where('leads.1.status', 'dispatched'));
+            ->has('leads', 1)
+            ->where('leads.0.status', 'dispatched'));
+});
+
+test('toss leads have their own workflow queue', function () {
+    $admin = dataAdmin();
+    $fresh = dataLead(['status' => 'fresh']);
+    $toss = $fresh->replicate();
+    $toss->customer_name = 'TOSS Customer';
+    $toss->status = 'toss';
+    $toss->save();
+
+    $this->actingAs($admin)
+        ->get(route('lead-workflow.toss-leads'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/toss-leads')
+            ->has('leads', 1)
+            ->where('leads.0.id', $toss->id)
+            ->where('leads.0.status', 'toss'));
 });

@@ -12,6 +12,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/agents.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
 import ModulePermissionsEditor, {
     type PermissionAccess,
@@ -20,7 +21,7 @@ import ModulePermissionsEditor, {
 type Agent = {
     agent_id: number;
     agent_name: string;
-    account: { acc_id: number; username: string } | null;
+    account: { acc_id: number; username: string; suspended_at: string | null } | null;
     company: { com_id: number; company: string } | null;
     permissions: { module: string; access_level: PermissionAccess }[];
 };
@@ -47,6 +48,7 @@ export default function Agents({
         company_id: '',
         username: '',
         password: '',
+        suspended: false,
         permissions: blankPermissions,
     });
 
@@ -67,6 +69,7 @@ export default function Agents({
             company_id: '',
             username: '',
             password: '',
+            suspended: false,
             permissions: blankPermissions,
         });
         form.clearErrors();
@@ -79,6 +82,7 @@ export default function Agents({
             company_id: String(agent.company?.com_id ?? ''),
             username: agent.account?.username ?? '',
             password: '',
+            suspended: Boolean(agent.account?.suspended_at),
             permissions: {
                 ...blankPermissions,
                 ...Object.fromEntries(
@@ -320,6 +324,13 @@ export default function Agents({
                                     <small>{form.errors.password}</small>
                                 )}
                             </label>
+                            <AccountStatusControl
+                                suspended={form.data.suspended}
+                                disabled={!form.data.username.trim()}
+                                onChange={(suspended) =>
+                                    form.setData('suspended', suspended)
+                                }
+                            />
                             <ModulePermissionsEditor
                                 roleLabel="agent"
                                 modules={permissionModules}

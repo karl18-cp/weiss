@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         Schema::table('agents', fn (Blueprint $table) => $table->string('calltools_user_id', 191)->nullable()->collation('utf8mb4_unicode_ci')->change());
         Schema::table('calltools_calls', function (Blueprint $table): void {
             $table->string('contact_id', 191)->nullable()->collation('utf8mb4_unicode_ci')->change();

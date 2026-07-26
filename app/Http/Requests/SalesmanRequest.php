@@ -28,6 +28,7 @@ class SalesmanRequest extends FormRequest
                 Rule::requiredIf($this->filled('username') && ! $salesman?->account_id),
                 'nullable', 'string', 'min:8', 'max:255',
             ],
+            'suspended' => ['sometimes', 'boolean'],
             'permissions' => ['required', 'array'],
             'permissions.*' => ['required', Rule::in(['none', 'view', 'edit'])],
         ];

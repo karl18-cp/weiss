@@ -13,10 +13,11 @@ class ManagerAccess
         'lead_card' => 'Lead Card', 'leads_shop' => 'Leads Shop',
         'confirm_leads' => 'Confirm Leads', 'dispatch_leads' => 'Dispatch Leads',
         'reschedule' => 'Reschedule', 'rehash' => 'Rehash', '555' => '555',
-        'la' => 'LA', 'his' => 'HIS', 'keep_in_touch' => 'Keep in Touch',
+        'la' => 'LA', 'his' => 'HIS', 'toss_leads' => 'TOSS Leads', 'keep_in_touch' => 'Keep in Touch',
         'data' => 'Data', 'booking_board' => 'Booking Board', 'tele_hours' => 'Tele Report',
         'quality_control' => 'Quality Control', 'projects' => 'Projects',
         'contacts_users' => 'Contacts & Users',
+        'full_phone_numbers' => 'View Full Phone Numbers',
     ];
 
     public const MODULE_PATHS = [
@@ -30,6 +31,7 @@ class ManagerAccess
         '555' => '/lead-workflow/555',
         'la' => '/lead-workflow/la',
         'his' => '/lead-workflow/his',
+        'toss_leads' => '/lead-workflow/toss-leads',
         'keep_in_touch' => '/lead-workflow/keep-in-touch',
         'data' => '/lead-workflow/data',
         'booking_board' => '/lead-workflow/booking-board',

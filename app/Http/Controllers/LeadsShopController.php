@@ -17,6 +17,7 @@ use App\Models\LeadNote;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Salesman;
+use App\Support\PhoneNumberVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,11 +28,34 @@ use Inertia\Response;
 
 class LeadsShopController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $requestedLeadId = $request->integer('lead') ?: null;
+
+        if ($requestedLeadId && $request->user()?->role === 'salesman') {
+            $salesmanId = $request->user()->salesman?->salesman_id;
+
+            abort_unless(
+                $salesmanId && Lead::query()
+                    ->whereKey($requestedLeadId)
+                    ->where(function ($query) use ($salesmanId): void {
+                        $query->where('salesman_1_id', $salesmanId)
+                            ->orWhere('salesman_2_id', $salesmanId);
+                    })
+                    ->exists(),
+                404,
+            );
+        }
+
         return Inertia::render('lead-workflow/leads-shop', [
             'leads' => Lead::query()
-                ->inLeadsShop()
+                ->where(function ($query) use ($requestedLeadId): void {
+                    $query->whereIn('status', Lead::LEADS_SHOP_STATUSES)
+                        ->when(
+                            $requestedLeadId,
+                            fn ($query) => $query->orWhere('id', $requestedLeadId),
+                        );
+                })
                 ->with([
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',
@@ -72,6 +96,9 @@ class LeadsShopController extends Controller
     {
         DB::transaction(function () use ($request, $lead): void {
             $data = $request->validated();
+            if (! PhoneNumberVisibility::canView($request->user())) {
+                unset($data['primary_number'], $data['secondary_number'], $data['mobile_number']);
+            }
             $reassignedAgentId = (int) $data['agent_id'];
             unset($data['agent_id']);
             $previousSalesmen = [
@@ -89,6 +116,18 @@ class LeadsShopController extends Controller
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead updated.']);
+
+        return back();
+    }
+
+    public function destroy(Request $request, Lead $lead): RedirectResponse
+    {
+        abort_unless($request->user()?->role === 'admin', 403);
+        abort_if($lead->project()->exists(), 422, 'Project leads cannot be deleted.');
+
+        $lead->delete();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Sample lead deleted.']);
 
         return back();
     }

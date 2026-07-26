@@ -72,6 +72,7 @@ class HandleInertiaRequests extends Middleware
                     '555' => $sum(['555']),
                     'la' => $sum(['la']),
                     'his' => $sum(['his']),
+                    'toss_leads' => $sum(['toss']),
                     'keep_in_touch' => $sum(['kit', 'kit_ng', 'kit_toss', 'kit_cb']),
                 ];
             },

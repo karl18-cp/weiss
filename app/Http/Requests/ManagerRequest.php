@@ -23,6 +23,7 @@ class ManagerRequest extends FormRequest
             'username' => ['required', 'string', 'max:255', Rule::unique('accounts', 'username')->ignore($accountId, 'acc_id')],
             'phone' => ['required', 'string', 'max:30'],
             'password' => [$manager ? 'nullable' : 'required', 'string', 'min:8', 'max:255'],
+            'suspended' => ['sometimes', 'boolean'],
             'company_ids' => ['required', 'array', 'min:1'],
             'company_ids.*' => ['required', 'integer', 'distinct', 'exists:companies,com_id'],
             'manager_types' => ['required', 'array', 'min:1'],

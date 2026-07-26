@@ -60,4 +60,9 @@ return [
         'created_by' => env('CALLTOOLS_CREATED_BY_ACCOUNT_ID'),
     ],
 
+    'maptiler' => [
+        'api_key' => env('MAPTILER_API_KEY'),
+        'browser_key' => env('MAPTILER_BROWSER_KEY'),
+    ],
+
 ];

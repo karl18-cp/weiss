@@ -19,3 +19,7 @@ Schedule::command('calltools:sync-login-shifts --pages=2')
 Schedule::command('ringcentral:sync-recordings')
     ->everyMinute()
     ->withoutOverlapping(5);
+
+Schedule::command('leads:geocode --all --limit=25')
+    ->everyMinute()
+    ->withoutOverlapping(5);

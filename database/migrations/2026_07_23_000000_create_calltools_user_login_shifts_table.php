@@ -10,8 +10,14 @@ return new class extends Migration
     {
         Schema::create('calltools_user_login_shifts', function (Blueprint $table): void {
             $table->id();
-            $table->string('calltools_id', 191)->collation('utf8mb4_unicode_ci')->unique();
-            $table->string('app_user_id', 191)->collation('utf8mb4_unicode_ci')->index();
+            $calltoolsId = $table->string('calltools_id', 191);
+            $appUserId = $table->string('app_user_id', 191);
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                $calltoolsId->collation('utf8mb4_unicode_ci');
+                $appUserId->collation('utf8mb4_unicode_ci');
+            }
+            $calltoolsId->unique();
+            $appUserId->index();
             $table->dateTime('started_at')->index();
             $table->dateTime('stopped_at')->nullable()->index();
             $table->unsignedInteger('duration_seconds')->default(0);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PhoneNumberVisibility;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -13,14 +14,29 @@ use Illuminate\Support\Facades\Schema;
 #[Fillable([
     'customer_name', 'marital_status', 'primary_number', 'secondary_number',
     'mobile_number', 'address', 'zip_code', 'city', 'county', 'state', 'email',
-    'years_in_house', 'product_id', 'appointment_at', 'appointment_result', 'telemarketer_notes',
+    'latitude', 'longitude', 'geocoding_status', 'geocoded_at',
+    'years_in_house', 'product_id', 'appointment_at', 'appointment_duration_minutes',
+    'appointment_result', 'telemarketer_notes',
     'company_id', 'source', 'agent_id', 'agent_2_id', 'rep', 'salesman_1_id', 'salesman_2_id',
     'created_by', 'status', 'confirmation_notes',
     'calltools_contact_id', 'calltools_campaign_name',
 ])]
 class Lead extends Model
 {
-    public const LEADS_SHOP_STATUSES = ['fresh', 'raw', 'cb', 'naov', 'toss'];
+    public const LEADS_SHOP_STATUSES = ['fresh', 'raw', 'cb', 'naov'];
+
+    public function toArray(): array
+    {
+        $data = parent::toArray();
+
+        if (! PhoneNumberVisibility::canView()) {
+            foreach (['primary_number', 'secondary_number', 'mobile_number'] as $field) {
+                $data[$field] = PhoneNumberVisibility::mask($data[$field] ?? null);
+            }
+        }
+
+        return $data;
+    }
 
     public function scopeInLeadsShop(Builder $query): Builder
     {
@@ -91,7 +107,13 @@ class Lead extends Model
 
     protected function casts(): array
     {
-        return ['appointment_at' => 'datetime'];
+        return [
+            'appointment_at' => 'datetime',
+            'appointment_duration_minutes' => 'integer',
+            'latitude' => 'float',
+            'longitude' => 'float',
+            'geocoded_at' => 'datetime',
+        ];
     }
 
     protected static function booted(): void
@@ -115,6 +137,15 @@ class Lead extends Model
         });
 
         static::updated(function (Lead $lead): void {
+            if ($lead->wasChanged(['address', 'city', 'state', 'zip_code'])) {
+                $lead->forceFill([
+                    'latitude' => null,
+                    'longitude' => null,
+                    'geocoding_status' => 'pending',
+                    'geocoded_at' => null,
+                ])->saveQuietly();
+            }
+
             if (! $lead->wasChanged('status') || ! Schema::hasTable('lead_movements')) {
                 return;
             }

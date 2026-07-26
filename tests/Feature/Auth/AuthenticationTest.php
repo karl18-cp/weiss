@@ -40,6 +40,41 @@ test('users can not authenticate with invalid password', function () {
     $this->assertGuest();
 });
 
+test('suspended accounts cannot authenticate and receive a clear message', function () {
+    $account = Account::create([
+        'username' => 'suspended@example.com',
+        'password' => 'password',
+        'role' => 'agent',
+        'suspended_at' => now(),
+    ]);
+
+    $response = $this->post(route('login.store'), [
+        'username' => $account->username,
+        'password' => 'password',
+    ]);
+
+    $this->assertGuest();
+    $response->assertSessionHasErrors([
+        'username' => 'Your account is suspended. Please contact an administrator.',
+    ]);
+});
+
+test('already signed in suspended accounts are logged out', function () {
+    $account = Account::create([
+        'username' => 'suspended-session@example.com',
+        'password' => 'password',
+        'role' => 'agent',
+        'suspended_at' => now(),
+    ]);
+
+    $this->actingAs($account)
+        ->get('/dashboard')
+        ->assertRedirect(route('login'))
+        ->assertSessionHasErrors('username');
+
+    $this->assertGuest();
+});
+
 test('users can logout', function () {
     $account = Account::create([
         'username' => 'logout@example.com',

@@ -17,7 +17,7 @@ class ManagerController extends Controller
     public function index(): Response
     {
         return Inertia::render('management/managers', [
-            'managers' => Manager::query()->with(['account:acc_id,username', 'company:com_id,company', 'companies:com_id,company', 'permissions'])->orderBy('manager_name')->get(),
+            'managers' => Manager::query()->with(['account:acc_id,username,suspended_at', 'company:com_id,company', 'companies:com_id,company', 'permissions'])->orderBy('manager_name')->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'managerTypes' => ManagerAccess::TYPES,
             'permissionModules' => ManagerAccess::MODULES,
@@ -28,7 +28,12 @@ class ManagerController extends Controller
     {
         DB::transaction(function () use ($request) {
             $data = $request->validated();
-            $account = Account::query()->create(['username' => $data['username'], 'password' => $data['password'], 'role' => 'manager']);
+            $account = Account::query()->create([
+                'username' => $data['username'],
+                'password' => $data['password'],
+                'role' => 'manager',
+                'suspended_at' => ($data['suspended'] ?? false) ? now() : null,
+            ]);
             $manager = Manager::query()->create(['account_id' => $account->acc_id, 'manager_name' => $data['manager_name'], 'phone' => $data['phone'], 'company_id' => $data['company_ids'][0], 'manager_types' => $data['manager_types']]);
             $manager->companies()->sync($data['company_ids']);
             $this->syncPermissions($manager, $data['permissions']);
@@ -42,7 +47,13 @@ class ManagerController extends Controller
     {
         DB::transaction(function () use ($request, $manager) {
             $data = $request->validated();
-            $accountData = ['username' => $data['username'], 'role' => 'manager'];
+            $accountData = [
+                'username' => $data['username'],
+                'role' => 'manager',
+                'suspended_at' => array_key_exists('suspended', $data)
+                    ? ($data['suspended'] ? ($manager->account->suspended_at ?? now()) : null)
+                    : $manager->account->suspended_at,
+            ];
             if (! empty($data['password'])) {
                 $accountData['password'] = $data['password'];
             }

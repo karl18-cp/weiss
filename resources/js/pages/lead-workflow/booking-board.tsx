@@ -1,454 +1,626 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link } from "@inertiajs/react";
 import {
-    Building2,
-    CalendarDays,
-    CheckCircle2,
-    Clock3,
-    MapPin,
-    Phone,
-    Search,
-    Truck,
-    UserRound,
-    Users,
-} from 'lucide-react';
-import { useMemo, useState } from 'react';
-import '@/../css/booking-board.css';
-import { RingCentralCallButton } from '@/components/ringcentral-call-button';
-import { appointmentDate, appointmentDateKey } from '@/lib/appointment-date';
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  MapPin,
+  Navigation,
+  Search,
+  UserRound,
+} from "lucide-react";
+import type { CSSProperties } from "react";
+import { useMemo, useState } from "react";
+import Map, { Marker, NavigationControl, Popup } from "react-map-gl/maplibre";
+import "maplibre-gl/dist/maplibre-gl.css";
+import "@/../css/booking-board.css";
+import { appointmentDate, appointmentDateKey } from "@/lib/appointment-date";
 
-type BookingLead = {
-    id: number;
-    customer_name: string;
-    primary_number: string;
-    mobile_number: string | null;
-    email: string | null;
-    address: string;
-    city: string;
-    state: string;
-    zip_code: string;
-    appointment_at: string;
-    status: 'confirmed' | 'dispatched';
-    source: string;
-    confirmation_notes: string | null;
-    telemarketer_notes: string;
-    company: { company: string; prefix: string } | null;
-    product: { product_name: string } | null;
-    agent: { agent_name: string } | null;
-    second_agent: { agent_name: string } | null;
-    salesman_one: { salesman_name: string } | null;
-    salesman_two: { salesman_name: string } | null;
-    notes: {
-        id: number;
-        note_type: string;
-        body: string;
-        created_at: string;
-    }[];
+type Salesman = {
+  salesman_id: number;
+  salesman_name: string;
 };
 
-const dayFormatter = new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
+type BookingLead = {
+  id: number;
+  customer_name: string;
+  primary_number: string;
+  mobile_number: string | null;
+  email: string | null;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  latitude: number | null;
+  longitude: number | null;
+  appointment_at: string;
+  appointment_duration_minutes: number;
+  status: "confirmed" | "dispatched";
+  source: string;
+  confirmation_notes: string | null;
+  telemarketer_notes: string;
+  company: { company: string; prefix: string } | null;
+  product: { product_name: string } | null;
+  agent: { agent_name: string } | null;
+  second_agent: { agent_name: string } | null;
+  salesman_one: Salesman | null;
+  salesman_two: Salesman | null;
+  notes: {
+    id: number;
+    note_type: string;
+    body: string;
+    created_at: string;
+  }[];
+};
+
+type ViewMode = "daily" | "weekly" | "monthly";
+
+type BookingBoardProps = {
+  leads: BookingLead[];
+  salesmen: Salesman[];
+  map: { key: string | null; styleUrl: string };
+  viewerRole: string;
+};
+
+const START_HOUR = 6;
+const END_HOUR = 22;
+const HOUR_WIDTH = 90;
+const SALESMAN_COLORS = [
+  "#2563eb",
+  "#0f9f8f",
+  "#d97706",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+  "#db2777",
+  "#4d7c0f",
+];
+
+const longDateFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
 });
 
-const longDateFormatter = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
+const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
 });
 
-const timeFormatter = new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
 });
-
-const dateKey = appointmentDateKey;
 
 const fullAddress = (lead: BookingLead) =>
-    `${lead.address}, ${lead.city}, ${lead.state} ${lead.zip_code}`;
+  `${lead.address}, ${lead.city}, ${lead.state} ${lead.zip_code}`;
 
-export default function BookingBoard({ leads }: { leads: BookingLead[] }) {
-    const [search, setSearch] = useState('');
-    const [status, setStatus] = useState<'all' | BookingLead['status']>('all');
-    const [selectedDate, setSelectedDate] = useState<string>('all');
-    const [selectedId, setSelectedId] = useState<number | null>(
-        leads[0]?.id ?? null,
-    );
+const appleMapsUrl = (lead: BookingLead) =>
+  `https://maps.apple.com/?daddr=${encodeURIComponent(fullAddress(lead))}&dirflg=d`;
 
-    const dateOptions = useMemo(
-        () =>
-            Array.from(
-                new Set(leads.map((lead) => dateKey(lead.appointment_at))),
-            ),
-        [leads],
-    );
-    const filtered = useMemo(() => {
-        const query = search.trim().toLowerCase();
+const localDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-        return leads.filter((lead) => {
-            const matchesStatus = status === 'all' || lead.status === status;
-            const matchesDate =
-                selectedDate === 'all' ||
-                dateKey(lead.appointment_at) === selectedDate;
-            const matchesSearch = [
-                lead.customer_name,
-                lead.address,
-                lead.city,
-                lead.company?.company,
-                lead.company?.prefix,
-                lead.product?.product_name,
-                lead.agent?.agent_name,
-                lead.salesman_one?.salesman_name,
-            ]
-                .join(' ')
-                .toLowerCase()
-                .includes(query);
+  return `${year}-${month}-${day}`;
+};
 
-            return matchesStatus && matchesDate && matchesSearch;
-        });
-    }, [leads, search, selectedDate, status]);
-    const selected =
-        filtered.find((lead) => lead.id === selectedId) ?? filtered[0] ?? null;
-    const todayKey = dateKey(new Date().toISOString());
-    const todayCount = leads.filter(
-        (lead) => dateKey(lead.appointment_at) === todayKey,
-    ).length;
-    const confirmedCount = leads.filter(
-        (lead) => lead.status === 'confirmed',
-    ).length;
-    const dispatchedCount = leads.filter(
-        (lead) => lead.status === 'dispatched',
-    ).length;
-    const latestNote = selected
-        ? [...selected.notes].sort(
-              (first, second) =>
-                  new Date(second.created_at).getTime() -
-                  new Date(first.created_at).getTime(),
-          )[0]?.body ||
-          selected.confirmation_notes ||
-          selected.telemarketer_notes
-        : '';
+const dateFromKey = (key: string) => new Date(`${key}T12:00:00`);
 
+const changeDate = (key: string, days: number) => {
+  const date = dateFromKey(key);
+  date.setDate(date.getDate() + days);
+
+  return localDateKey(date);
+};
+
+const salesmanColor = (id: number | null, salesmen: Salesman[]) => {
+  const index = id
+    ? Math.max(
+        0,
+        salesmen.findIndex((salesman) => salesman.salesman_id === id),
+      )
+    : salesmen.length;
+
+  return SALESMAN_COLORS[index % SALESMAN_COLORS.length];
+};
+
+function BookingMap({
+  leads,
+  selected,
+  onSelect,
+  mapConfig,
+  salesmen,
+}: {
+  leads: BookingLead[];
+  selected: BookingLead | null;
+  onSelect: (id: number) => void;
+  mapConfig: BookingBoardProps["map"];
+  salesmen: Salesman[];
+}) {
+  const mappedLeads = useMemo(
+    () =>
+      leads.filter(
+        (lead) =>
+          Number.isFinite(lead.latitude) && Number.isFinite(lead.longitude),
+      ),
+    [leads],
+  );
+  const camera = useMemo(() => {
+    if (mappedLeads.length === 0) {
+      return { longitude: -118.2437, latitude: 34.0522, zoom: 8 };
+    }
+
+    const longitudes = mappedLeads.map((lead) => Number(lead.longitude));
+    const latitudes = mappedLeads.map((lead) => Number(lead.latitude));
+    const longitudeSpan = Math.max(...longitudes) - Math.min(...longitudes);
+    const latitudeSpan = Math.max(...latitudes) - Math.min(...latitudes);
+    const span = Math.max(longitudeSpan, latitudeSpan);
+    const zoom =
+      mappedLeads.length === 1
+        ? 12
+        : span > 5
+          ? 5
+          : span > 2
+            ? 6
+            : span > 1
+              ? 7
+              : span > 0.5
+                ? 8
+                : span > 0.2
+                  ? 9
+                  : span > 0.08
+                    ? 10
+                    : 11;
+
+    return {
+      longitude: (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
+      latitude: (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+      zoom,
+    };
+  }, [mappedLeads]);
+  const cameraKey =
+    mappedLeads.map((lead) => lead.id).join("-") || "no-mapped-leads";
+
+  if (!mapConfig.key) {
     return (
-        <>
-            <Head title="Booking Board" />
-            <main className="booking-board-page">
-                <header className="booking-board-heading">
-                    <div>
-                        <span>Lead workflow</span>
-                        <h1>Booking Board</h1>
-                        <p>
-                            Confirmed and dispatched appointments in one
-                            schedule.
-                        </p>
-                    </div>
-                    <div className="booking-board-stats">
-                        <div>
-                            <CalendarDays />
-                            <span>
-                                <strong>{todayCount}</strong>
-                                Today
-                            </span>
-                        </div>
-                        <div>
-                            <CheckCircle2 />
-                            <span>
-                                <strong>{confirmedCount}</strong>
-                                Confirmed
-                            </span>
-                        </div>
-                        <div>
-                            <Truck />
-                            <span>
-                                <strong>{dispatchedCount}</strong>
-                                Dispatched
-                            </span>
-                        </div>
-                    </div>
-                </header>
+      <div className="booking-map-message">
+        <MapPin />
+        <strong>Browser map key not configured</strong>
+        <span>
+          Add MAPTILER_BROWSER_KEY to the server environment and clear
+          Laravel&apos;s configuration cache.
+        </span>
+      </div>
+    );
+  }
 
-                <section className="booking-board-toolbar">
-                    <label>
-                        <Search />
-                        <input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search customer, address, company, product, or team…"
-                        />
-                    </label>
-                    <div>
-                        {(['all', 'confirmed', 'dispatched'] as const).map(
-                            (option) => (
-                                <button
-                                    type="button"
-                                    key={option}
-                                    className={
-                                        status === option ? 'is-active' : ''
-                                    }
-                                    onClick={() => setStatus(option)}
-                                >
-                                    {option === 'all' ? 'All bookings' : option}
-                                </button>
-                            ),
-                        )}
-                    </div>
-                </section>
+  return (
+    <Map
+      key={cameraKey}
+      initialViewState={camera}
+      mapStyle={`${mapConfig.styleUrl}?key=${mapConfig.key}`}
+      cooperativeGestures
+    >
+      <NavigationControl position="top-right" showCompass={false} />
+      {mappedLeads.map((lead) => {
+        const salesmanId =
+          lead.salesman_one?.salesman_id ??
+          lead.salesman_two?.salesman_id ??
+          null;
 
-                <div className="booking-board-dates">
-                    <button
-                        type="button"
-                        className={selectedDate === 'all' ? 'is-active' : ''}
-                        onClick={() => setSelectedDate('all')}
-                    >
-                        <strong>All dates</strong>
-                        <span>{leads.length} bookings</span>
-                    </button>
-                    {dateOptions.map((option) => {
-                        const count = leads.filter(
-                            (lead) => dateKey(lead.appointment_at) === option,
-                        ).length;
+        return (
+          <Marker
+            key={lead.id}
+            longitude={Number(lead.longitude)}
+            latitude={Number(lead.latitude)}
+            anchor="bottom"
+            onClick={(event) => {
+              event.originalEvent.stopPropagation();
+              onSelect(lead.id);
+            }}
+          >
+            <button
+              type="button"
+              className={`booking-map-pin ${
+                selected?.id === lead.id ? "is-selected" : ""
+              }`}
+              style={
+                {
+                  "--pin-color": salesmanColor(salesmanId, salesmen),
+                } as CSSProperties
+              }
+              aria-label={`Open ${lead.customer_name}`}
+            >
+              <MapPin />
+            </button>
+          </Marker>
+        );
+      })}
+      {selected?.latitude != null && selected.longitude != null && (
+        <Popup
+          longitude={Number(selected.longitude)}
+          latitude={Number(selected.latitude)}
+          anchor="bottom"
+          offset={34}
+          closeButton={false}
+          closeOnClick={false}
+        >
+          <div className="booking-map-popup">
+            <strong>{selected.customer_name}</strong>
+            <span>
+              {timeFormatter.format(appointmentDate(selected.appointment_at))}
+            </span>
+            <small>{fullAddress(selected)}</small>
+          </div>
+        </Popup>
+      )}
+    </Map>
+  );
+}
+
+export default function BookingBoard({
+  leads,
+  salesmen,
+  map,
+  viewerRole,
+}: BookingBoardProps) {
+  const today = localDateKey(new Date());
+  const firstDate = leads[0]
+    ? appointmentDateKey(leads[0].appointment_at)
+    : today;
+  const [selectedDate, setSelectedDate] = useState(
+    leads.some((lead) => appointmentDateKey(lead.appointment_at) === today)
+      ? today
+      : firstDate,
+  );
+  const [view, setView] = useState<ViewMode>("daily");
+  const [search, setSearch] = useState("");
+  const [selectedSalesman, setSelectedSalesman] = useState<number | "all">(
+    "all",
+  );
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedDateValue = dateFromKey(selectedDate);
+
+  const periodLeads = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const selected = dateFromKey(selectedDate);
+    const weekStart = new Date(selected);
+    weekStart.setDate(selected.getDate() - selected.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    return leads.filter((lead) => {
+      const date = appointmentDate(lead.appointment_at);
+      const inPeriod =
+        view === "daily"
+          ? appointmentDateKey(lead.appointment_at) === selectedDate
+          : view === "weekly"
+            ? date >= weekStart && date < weekEnd
+            : date.getMonth() === selected.getMonth() &&
+              date.getFullYear() === selected.getFullYear();
+      const salesmanIds = [
+        lead.salesman_one?.salesman_id,
+        lead.salesman_two?.salesman_id,
+      ];
+      const matchesSalesman =
+        selectedSalesman === "all" || salesmanIds.includes(selectedSalesman);
+      const matchesSearch = [
+        lead.customer_name,
+        lead.address,
+        lead.city,
+        lead.product?.product_name,
+        lead.company?.company,
+        lead.salesman_one?.salesman_name,
+        lead.salesman_two?.salesman_name,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+
+      return inPeriod && matchesSalesman && matchesSearch;
+    });
+  }, [leads, search, selectedDate, selectedSalesman, view]);
+
+  const dayLeads = useMemo(
+    () =>
+      periodLeads.filter(
+        (lead) => appointmentDateKey(lead.appointment_at) === selectedDate,
+      ),
+    [periodLeads, selectedDate],
+  );
+  const selected = periodLeads.find((lead) => lead.id === selectedId) ?? null;
+  const mappedCount = periodLeads.filter(
+    (lead) => lead.latitude != null && lead.longitude != null,
+  ).length;
+  const timelineSalesmen = useMemo(() => {
+    const rows = salesmen.filter(
+      (salesman) =>
+        selectedSalesman === "all" || salesman.salesman_id === selectedSalesman,
+    );
+    const hasUnassigned = dayLeads.some(
+      (lead) => !lead.salesman_one && !lead.salesman_two,
+    );
+
+    return [
+      ...rows.map((salesman) => ({
+        id: salesman.salesman_id,
+        name: salesman.salesman_name,
+      })),
+      ...(hasUnassigned ? [{ id: null, name: "Unassigned" }] : []),
+    ];
+  }, [dayLeads, salesmen, selectedSalesman]);
+
+  const movePeriod = (direction: -1 | 1) => {
+    const amount = view === "daily" ? 1 : view === "weekly" ? 7 : 30;
+    setSelectedDate(changeDate(selectedDate, amount * direction));
+    setSelectedId(null);
+  };
+
+  const periodTitle =
+    view === "daily"
+      ? longDateFormatter.format(selectedDateValue)
+      : view === "weekly"
+        ? `Week of ${shortDateFormatter.format(selectedDateValue)}`
+        : new Intl.DateTimeFormat("en-US", {
+            month: "long",
+            year: "numeric",
+          }).format(selectedDateValue);
+
+  return (
+    <>
+      <Head title="Booking Board" />
+      <main className="booking-board-page">
+        <header className="booking-board-heading">
+          <div>
+            <span>Lead workflow</span>
+            <h1>Booking Board</h1>
+            <p>
+              {viewerRole === "salesman"
+                ? "Your assigned appointments and lead locations."
+                : "Every salesman, appointment, and assigned lead location."}
+            </p>
+          </div>
+          <div className="booking-board-summary">
+            <span>
+              <CalendarDays />
+              <strong>{periodLeads.length}</strong> appointments
+            </span>
+            <span>
+              <MapPin />
+              <strong>{mappedCount}</strong> mapped
+            </span>
+          </div>
+        </header>
+
+        <section className="booking-board-map">
+          <BookingMap
+            leads={periodLeads}
+            selected={selected}
+            onSelect={setSelectedId}
+            mapConfig={map}
+            salesmen={salesmen}
+          />
+          <div className="booking-map-legend">
+            {salesmen.map((salesman) => (
+              <button
+                key={salesman.salesman_id}
+                type="button"
+                onClick={() =>
+                  setSelectedSalesman((current) =>
+                    current === salesman.salesman_id
+                      ? "all"
+                      : salesman.salesman_id,
+                  )
+                }
+                className={
+                  selectedSalesman === salesman.salesman_id ? "is-selected" : ""
+                }
+              >
+                <i
+                  style={{
+                    background: salesmanColor(salesman.salesman_id, salesmen),
+                  }}
+                />
+                {salesman.salesman_name}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="booking-board-controls">
+          <label>
+            <Search />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search bookings..."
+            />
+          </label>
+          <div className="booking-date-control">
+            <button type="button" onClick={() => movePeriod(-1)}>
+              <ChevronLeft />
+            </button>
+            <button
+              type="button"
+              className="booking-date-control__today"
+              onClick={() => setSelectedDate(today)}
+            >
+              Today
+            </button>
+            <strong>{periodTitle}</strong>
+            <button type="button" onClick={() => movePeriod(1)}>
+              <ChevronRight />
+            </button>
+          </div>
+          <div className="booking-view-control">
+            {(["daily", "weekly", "monthly"] as const).map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={view === option ? "is-selected" : ""}
+                onClick={() => setView(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="booking-timeline">
+          <div className="booking-timeline__scroll">
+            <div
+              className="booking-timeline__content"
+              style={
+                {
+                  "--timeline-width": `${(END_HOUR - START_HOUR) * HOUR_WIDTH}px`,
+                  "--hour-width": `${HOUR_WIDTH}px`,
+                } as CSSProperties
+              }
+            >
+              <div className="booking-timeline__header">
+                <div className="booking-timeline__corner">Salesman</div>
+                <div className="booking-timeline__hours">
+                  {Array.from(
+                    { length: END_HOUR - START_HOUR },
+                    (_, index) => START_HOUR + index,
+                  ).map((hour) => (
+                    <span key={hour}>
+                      {new Intl.DateTimeFormat("en-US", {
+                        hour: "numeric",
+                      }).format(new Date(2026, 0, 1, hour))}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {timelineSalesmen.map((salesman) => {
+                const appointments = dayLeads.filter((lead) =>
+                  salesman.id === null
+                    ? !lead.salesman_one && !lead.salesman_two
+                    : [
+                        lead.salesman_one?.salesman_id,
+                        lead.salesman_two?.salesman_id,
+                      ].includes(salesman.id),
+                );
+                const color = salesmanColor(salesman.id, salesmen);
+
+                return (
+                  <div
+                    className="booking-timeline__row"
+                    key={salesman.id ?? "unassigned"}
+                  >
+                    <div className="booking-salesman">
+                      <i style={{ background: color }} />
+                      <span>
+                        <strong>{salesman.name}</strong>
+                        <small>{appointments.length} appointments</small>
+                      </span>
+                    </div>
+                    <div className="booking-time-track">
+                      {appointments.map((lead) => {
+                        const date = appointmentDate(lead.appointment_at);
+                        const startMinutes =
+                          date.getHours() * 60 +
+                          date.getMinutes() -
+                          START_HOUR * 60;
+                        const left =
+                          (Math.max(0, startMinutes) / 60) * HOUR_WIDTH;
+                        const width =
+                          (Math.max(
+                            30,
+                            lead.appointment_duration_minutes || 60,
+                          ) /
+                            60) *
+                          HOUR_WIDTH;
 
                         return (
-                            <button
-                                type="button"
-                                key={option}
-                                className={
-                                    selectedDate === option ? 'is-active' : ''
-                                }
-                                onClick={() => setSelectedDate(option)}
-                            >
-                                <strong>
-                                    {dayFormatter.format(
-                                        new Date(`${option}T00:00:00`),
-                                    )}
-                                </strong>
-                                <span>
-                                    {count}{' '}
-                                    {count === 1 ? 'booking' : 'bookings'}
-                                </span>
-                            </button>
+                          <button
+                            type="button"
+                            key={lead.id}
+                            className={`booking-appointment is-${lead.status} ${
+                              selected?.id === lead.id ? "is-selected" : ""
+                            }`}
+                            style={
+                              {
+                                left,
+                                width,
+                                "--appointment-color": color,
+                              } as CSSProperties
+                            }
+                            onClick={() => setSelectedId(lead.id)}
+                            title={`${timeFormatter.format(date)} — ${lead.customer_name}`}
+                          >
+                            <strong>{lead.customer_name}</strong>
+                            <span>
+                              {timeFormatter.format(date)} · {lead.city}
+                            </span>
+                          </button>
                         );
-                    })}
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              {timelineSalesmen.length === 0 && (
+                <div className="booking-timeline-empty">
+                  No salesmen match this view.
                 </div>
+              )}
+            </div>
+          </div>
+        </section>
 
-                <div className="booking-board-workspace">
-                    <section className="booking-board-agenda">
-                        <header>
-                            <div>
-                                <h2>Appointment agenda</h2>
-                                <span>{filtered.length} shown</span>
-                            </div>
-                            <span>Sorted by appointment time</span>
-                        </header>
-                        <div className="booking-board-agenda__list">
-                            {filtered.map((lead) => (
-                                <button
-                                    type="button"
-                                    key={lead.id}
-                                    className={
-                                        selected?.id === lead.id
-                                            ? 'is-selected'
-                                            : ''
-                                    }
-                                    onClick={() => setSelectedId(lead.id)}
-                                >
-                                    <time>
-                                        <strong>
-                                            {timeFormatter.format(
-                                                appointmentDate(
-                                                    lead.appointment_at,
-                                                ),
-                                            )}
-                                        </strong>
-                                        <span>
-                                            {dayFormatter.format(
-                                                appointmentDate(
-                                                    lead.appointment_at,
-                                                ),
-                                            )}
-                                        </span>
-                                    </time>
-                                    <span
-                                        className={`booking-board-status is-${lead.status}`}
-                                    >
-                                        {lead.status}
-                                    </span>
-                                    <div>
-                                        <strong>{lead.customer_name}</strong>
-                                        <span>
-                                            <MapPin /> {lead.city}, {lead.state}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <strong>
-                                            {lead.product?.product_name ||
-                                                'No product'}
-                                        </strong>
-                                        <span>
-                                            {lead.company?.prefix ||
-                                                lead.company?.company ||
-                                                'No company'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <strong>
-                                            {lead.salesman_one?.salesman_name ||
-                                                'No salesman'}
-                                        </strong>
-                                        <span>Assigned salesman</span>
-                                    </div>
-                                </button>
-                            ))}
-                            {filtered.length === 0 && (
-                                <div className="booking-board-empty">
-                                    <CalendarDays />
-                                    <strong>No matching bookings</strong>
-                                    <span>
-                                        Try another date, status, or search.
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    </section>
-
-                    <aside className="booking-board-detail">
-                        {!selected ? (
-                            <div className="booking-board-detail__empty">
-                                <CalendarDays />
-                                <strong>Select a booking</strong>
-                                <span>
-                                    Appointment details will appear here.
-                                </span>
-                            </div>
-                        ) : (
-                            <>
-                                <header>
-                                    <div>
-                                        <span
-                                            className={`booking-board-status is-${selected.status}`}
-                                        >
-                                            {selected.status}
-                                        </span>
-                                        <h2>{selected.customer_name}</h2>
-                                        <p>
-                                            Lead #{selected.id} ·{' '}
-                                            {selected.company?.prefix ||
-                                                selected.company?.company ||
-                                                'No company'}
-                                        </p>
-                                    </div>
-                                    <Link
-                                        href={
-                                            selected.status === 'confirmed'
-                                                ? '/lead-workflow/confirm-leads'
-                                                : '/lead-workflow/dispatch-leads'
-                                        }
-                                    >
-                                        Open workflow
-                                    </Link>
-                                </header>
-
-                                <div className="booking-board-appointment">
-                                    <CalendarDays />
-                                    <div>
-                                        <span>Appointment</span>
-                                        <strong>
-                                            {longDateFormatter.format(
-                                                new Date(
-                                                    appointmentDate(
-                                                        selected.appointment_at,
-                                                    ),
-                                                ),
-                                            )}
-                                        </strong>
-                                        <small>
-                                            {timeFormatter.format(
-                                                new Date(
-                                                    appointmentDate(
-                                                        selected.appointment_at,
-                                                    ),
-                                                ),
-                                            )}
-                                        </small>
-                                    </div>
-                                </div>
-
-                                <div className="booking-board-info-grid">
-                                    <div>
-                                        <MapPin />
-                                        <span>Service address</span>
-                                        <strong>{fullAddress(selected)}</strong>
-                                    </div>
-                                    <div>
-                                        <Phone />
-                                        <span>Primary phone</span>
-                                        <strong>
-                                            {selected.primary_number}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <Building2 />
-                                        <span>Company / product</span>
-                                        <strong>
-                                            {selected.company?.prefix || '—'} ·{' '}
-                                            {selected.product?.product_name ||
-                                                'No product'}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <UserRound />
-                                        <span>Agent</span>
-                                        <strong>
-                                            {selected.agent?.agent_name || '—'}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <Users />
-                                        <span>Sales team</span>
-                                        <strong>
-                                            {[
-                                                selected.salesman_one
-                                                    ?.salesman_name,
-                                                selected.salesman_two
-                                                    ?.salesman_name,
-                                            ]
-                                                .filter(Boolean)
-                                                .join(' & ') || 'Unassigned'}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <Clock3 />
-                                        <span>Lead source</span>
-                                        <strong>{selected.source}</strong>
-                                    </div>
-                                </div>
-
-                                <section className="booking-board-note">
-                                    <span>Latest workflow note</span>
-                                    <p>{latestNote || 'No notes available.'}</p>
-                                </section>
-
-                                <footer>
-                                    <RingCentralCallButton
-                                        leadId={selected.id}
-                                        phone={selected.primary_number}
-                                    >
-                                        <Phone /> Call customer
-                                    </RingCentralCallButton>
-                                    <a
-                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress(selected))}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                    >
-                                        <MapPin /> Google Maps
-                                    </a>
-                                </footer>
-                            </>
-                        )}
-                    </aside>
-                </div>
-            </main>
-        </>
-    );
+        {selected && (
+          <aside className="booking-selection">
+            <button
+              type="button"
+              className="booking-selection__close"
+              onClick={() => setSelectedId(null)}
+            >
+              ×
+            </button>
+            <div>
+              <span className={`booking-status is-${selected.status}`}>
+                {selected.status}
+              </span>
+              <h2>{selected.customer_name}</h2>
+              <p>
+                <Clock3 />
+                {timeFormatter.format(appointmentDate(selected.appointment_at))}
+                <MapPin />
+                {fullAddress(selected)}
+              </p>
+            </div>
+            <div className="booking-selection__team">
+              <UserRound />
+              <span>
+                <strong>
+                  {selected.salesman_one?.salesman_name ?? "Unassigned"}
+                </strong>
+                {selected.salesman_two && (
+                  <small>with {selected.salesman_two.salesman_name}</small>
+                )}
+              </span>
+            </div>
+            <div className="booking-selection__actions">
+              <a
+                className="booking-selection__apple-maps"
+                href={appleMapsUrl(selected)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Navigation />
+                Apple Maps
+              </a>
+              <Link href={`/lead-workflow/leads-shop?lead=${selected.id}`}>
+                Open lead
+              </Link>
+            </div>
+          </aside>
+        )}
+      </main>
+    </>
+  );
 }

@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/salesmen.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
 import ModulePermissionsEditor, {
     type PermissionAccess,
@@ -22,7 +23,7 @@ type Salesman = {
     salesman_id: number;
     salesman_name: string;
     phone: string | null;
-    account: { acc_id: number; username: string } | null;
+    account: { acc_id: number; username: string; suspended_at: string | null } | null;
     company: { com_id: number; company: string } | null;
     permissions: { module: string; access_level: PermissionAccess }[];
 };
@@ -50,6 +51,7 @@ export default function Salesmen({
         company_id: '',
         username: '',
         password: '',
+        suspended: false,
         permissions: blankPermissions,
     });
 
@@ -74,6 +76,7 @@ export default function Salesmen({
             company_id: '',
             username: '',
             password: '',
+            suspended: false,
             permissions: blankPermissions,
         });
         form.clearErrors();
@@ -87,6 +90,7 @@ export default function Salesmen({
             company_id: String(salesman.company?.com_id ?? ''),
             username: salesman.account?.username ?? '',
             password: '',
+            suspended: Boolean(salesman.account?.suspended_at),
             permissions: {
                 ...blankPermissions,
                 ...Object.fromEntries(
@@ -350,6 +354,13 @@ export default function Salesmen({
                                     <small>{form.errors.phone}</small>
                                 )}
                             </label>
+                            <AccountStatusControl
+                                suspended={form.data.suspended}
+                                disabled={!form.data.username.trim()}
+                                onChange={(suspended) =>
+                                    form.setData('suspended', suspended)
+                                }
+                            />
                             <ModulePermissionsEditor
                                 roleLabel="salesman"
                                 modules={permissionModules}

@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         Schema::table('calltools_disposition_definitions', function (Blueprint $table): void {
             $table->string('external_id', 191)->collation('utf8mb4_unicode_ci')->change();
         });
@@ -15,6 +19,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         Schema::table('calltools_disposition_definitions', function (Blueprint $table): void {
             $table->string('external_id', 191)->collation('utf8mb4_general_ci')->change();
         });

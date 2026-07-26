@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\RingCentralService;
+use App\Support\PhoneNumberVisibility;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -14,6 +15,8 @@ class RingCentralCallController extends Controller
         Request $request,
         RingCentralService $ringCentral,
     ): JsonResponse {
+        abort_unless(PhoneNumberVisibility::canView($request->user()), 403);
+
         $validated = $request->validate([
             'phone' => ['required', 'string', 'max:30', 'regex:/^[0-9+().\s-]+$/'],
         ]);

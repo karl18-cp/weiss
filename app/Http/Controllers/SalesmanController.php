@@ -17,7 +17,7 @@ class SalesmanController extends Controller
     public function index(): Response
     {
         return Inertia::render('management/salesmen', [
-            'salesmen' => Salesman::query()->with(['account:acc_id,username', 'company:com_id,company', 'permissions'])->orderBy('salesman_name')->get(),
+            'salesmen' => Salesman::query()->with(['account:acc_id,username,suspended_at', 'company:com_id,company', 'permissions'])->orderBy('salesman_name')->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'permissionModules' => ManagerAccess::MODULES,
         ]);
@@ -84,6 +84,7 @@ class SalesmanController extends Controller
             'username' => $data['username'],
             'password' => $data['password'],
             'role' => 'salesman',
+            'suspended_at' => ($data['suspended'] ?? false) ? now() : null,
         ]);
     }
 
@@ -96,7 +97,13 @@ class SalesmanController extends Controller
 
         if (! $account) return $this->createAccount($data);
 
-        $updates = ['username' => $data['username'], 'role' => 'salesman'];
+        $updates = [
+            'username' => $data['username'],
+            'role' => 'salesman',
+            'suspended_at' => array_key_exists('suspended', $data)
+                ? ($data['suspended'] ? ($account->suspended_at ?? now()) : null)
+                : $account->suspended_at,
+        ];
         if (! empty($data['password'])) $updates['password'] = $data['password'];
         $account->update($updates);
 

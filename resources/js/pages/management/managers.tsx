@@ -13,6 +13,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/managers.css';
 import DirectoryNavigation from '@/components/directory-navigation';
+import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
 
 type Access = 'none' | 'view' | 'edit';
@@ -21,7 +22,7 @@ type Manager = {
     manager_name: string;
     phone: string;
     manager_types: string[];
-    account: { acc_id: number; username: string };
+    account: { acc_id: number; username: string; suspended_at: string | null };
     company: { com_id: number; company: string } | null;
     companies: { com_id: number; company: string }[];
     permissions: { module: string; access_level: Access }[];
@@ -50,6 +51,7 @@ export default function Managers({
         username: '',
         phone: '',
         password: '',
+        suspended: false,
         company_ids: [] as string[],
         manager_types: [] as string[],
         permissions: blankPermissions,
@@ -78,6 +80,7 @@ export default function Managers({
             username: '',
             phone: '',
             password: '',
+            suspended: false,
             company_ids: [],
             manager_types: [],
             permissions: blankPermissions,
@@ -91,6 +94,7 @@ export default function Managers({
             username: manager.account.username,
             phone: manager.phone,
             password: '',
+            suspended: Boolean(manager.account.suspended_at),
             company_ids: manager.companies.map((company) => String(company.com_id)),
             manager_types: manager.manager_types,
             permissions: {
@@ -313,6 +317,12 @@ export default function Managers({
                                     <em>{form.errors.password}</em>
                                 </label>
                             </div>
+                            <AccountStatusControl
+                                suspended={form.data.suspended}
+                                onChange={(suspended) =>
+                                    form.setData('suspended', suspended)
+                                }
+                            />
                             <section className="manager-companies">
                                 <h3><Building2 /> Assigned companies</h3>
                                 <p>Select one or more companies this manager is assigned to.</p>

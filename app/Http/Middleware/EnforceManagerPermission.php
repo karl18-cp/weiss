@@ -56,6 +56,7 @@ class EnforceManagerPermission
             'lead-workflow/confirm-leads' => 'confirm_leads', 'lead-workflow/dispatch-leads' => 'dispatch_leads',
             'lead-workflow/reschedule' => 'reschedule', 'lead-workflow/rehash' => 'rehash',
             'lead-workflow/555' => '555', 'lead-workflow/la' => 'la', 'lead-workflow/his' => 'his',
+            'lead-workflow/toss-leads' => 'toss_leads',
             'lead-workflow/keep-in-touch' => 'keep_in_touch', 'lead-workflow/data' => 'data',
             'lead-workflow/booking-board' => 'booking_board', 'lead-workflow/tele-hours' => 'tele_hours',
             'management/quality-control' => 'quality_control', 'management/projects' => 'projects',

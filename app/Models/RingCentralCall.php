@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PhoneNumberVisibility;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -35,5 +36,17 @@ class RingCentralCall extends Model
             'matched_at' => 'datetime',
             'recorded_at' => 'datetime',
         ];
+    }
+
+    public function toArray(): array
+    {
+        $data = parent::toArray();
+
+        if (! PhoneNumberVisibility::canView()) {
+            $data['phone_number'] = PhoneNumberVisibility::mask($this->phone_number);
+            $data['normalized_phone'] = PhoneNumberVisibility::mask($this->normalized_phone);
+        }
+
+        return $data;
     }
 }

@@ -17,7 +17,7 @@ class AgentController extends Controller
     public function index(): Response
     {
         return Inertia::render('management/agents', [
-            'agents' => Agent::query()->with(['account:acc_id,username', 'company:com_id,company', 'permissions'])->orderBy('agent_name')->get(),
+            'agents' => Agent::query()->with(['account:acc_id,username,suspended_at', 'company:com_id,company', 'permissions'])->orderBy('agent_name')->get(),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'permissionModules' => ManagerAccess::MODULES,
         ]);
@@ -82,6 +82,7 @@ class AgentController extends Controller
             'username' => $data['username'],
             'password' => $data['password'],
             'role' => $role,
+            'suspended_at' => ($data['suspended'] ?? false) ? now() : null,
         ]);
     }
 
@@ -94,7 +95,13 @@ class AgentController extends Controller
 
         if (! $account) return $this->createAccount($data, $role);
 
-        $updates = ['username' => $data['username'], 'role' => $role];
+        $updates = [
+            'username' => $data['username'],
+            'role' => $role,
+            'suspended_at' => array_key_exists('suspended', $data)
+                ? ($data['suspended'] ? ($account->suspended_at ?? now()) : null)
+                : $account->suspended_at,
+        ];
         if (! empty($data['password'])) $updates['password'] = $data['password'];
         $account->update($updates);
 

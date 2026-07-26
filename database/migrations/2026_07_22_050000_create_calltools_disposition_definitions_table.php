@@ -10,7 +10,11 @@ return new class extends Migration
     {
         Schema::create('calltools_disposition_definitions', function (Blueprint $table): void {
             $table->id();
-            $table->string('external_id', 191)->collation('utf8mb4_unicode_ci')->unique();
+            $externalId = $table->string('external_id', 191);
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                $externalId->collation('utf8mb4_unicode_ci');
+            }
+            $externalId->unique();
             $table->string('name');
             $table->string('button_color', 30)->nullable();
             $table->string('text_color', 30)->nullable();

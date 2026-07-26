@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
-#[Fillable(['username', 'password', 'role'])]
+#[Fillable(['username', 'password', 'role', 'suspended_at'])]
 #[Hidden(['password'])]
 class Account extends Authenticatable
 {
@@ -48,6 +48,7 @@ class Account extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'suspended_at' => 'datetime',
         ];
     }
 }

@@ -10,8 +10,12 @@ return new class extends Migration
     {
         Schema::create('calltools_agent_status_intervals', function (Blueprint $table): void {
             $table->id();
-            $table->string('app_user_id', 191)->collation('utf8mb4_unicode_ci');
-            $table->string('status_id', 191)->collation('utf8mb4_unicode_ci');
+            $appUserId = $table->string('app_user_id', 191);
+            $statusId = $table->string('status_id', 191);
+            if (Schema::getConnection()->getDriverName() === 'mysql') {
+                $appUserId->collation('utf8mb4_unicode_ci');
+                $statusId->collation('utf8mb4_unicode_ci');
+            }
             $table->dateTime('started_at');
             $table->dateTime('ended_at')->nullable();
             $table->timestamps();

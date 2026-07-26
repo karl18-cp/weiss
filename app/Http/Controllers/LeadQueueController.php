@@ -8,18 +8,37 @@ use App\Models\Lead;
 use App\Models\LeadAgentAssignment;
 use App\Models\Product;
 use App\Models\Salesman;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class LeadQueueController extends Controller
 {
-    public function bookingBoard(): Response
+    public function bookingBoard(Request $request): Response
     {
+        $user = $request->user();
+        $salesmanId = $user?->role === 'salesman'
+            ? $user->salesman?->salesman_id
+            : null;
+
+        if ($user?->role === 'salesman') {
+            abort_unless($salesmanId, 403, 'Your account is not linked to a salesman profile.');
+        }
+
+        $leadQuery = Lead::query()
+            ->where('status', 'dispatched')
+            ->whereNotNull('appointment_at');
+
+        if ($user?->role === 'salesman') {
+            $leadQuery->where(function ($query) use ($salesmanId): void {
+                $query->where('salesman_1_id', $salesmanId)
+                    ->orWhere('salesman_2_id', $salesmanId);
+            });
+        }
+
         return Inertia::render('lead-workflow/booking-board', [
-            'leads' => Lead::query()
-                ->whereIn('status', ['confirmed', 'dispatched'])
-                ->whereNotNull('appointment_at')
+            'leads' => $leadQuery
                 ->with([
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',
@@ -35,6 +54,18 @@ class LeadQueueController extends Controller
                 ->orderBy('appointment_at')
                 ->orderBy('id')
                 ->get(),
+            'salesmen' => Salesman::query()
+                ->when(
+                    $user?->role === 'salesman',
+                    fn ($query) => $query->whereKey($salesmanId),
+                )
+                ->orderBy('salesman_name')
+                ->get(['salesman_id', 'salesman_name']),
+            'map' => [
+                'key' => config('services.maptiler.browser_key'),
+                'styleUrl' => 'https://api.maptiler.com/maps/streets-v2/style.json',
+            ],
+            'viewerRole' => $user?->role,
         ]);
     }
 
@@ -71,6 +102,11 @@ class LeadQueueController extends Controller
     public function his(): Response
     {
         return $this->renderQueue('lead-workflow/his', 'his');
+    }
+
+    public function toss(): Response
+    {
+        return $this->renderQueue('lead-workflow/toss-leads', 'toss');
     }
 
     public function keepInTouch(): Response
