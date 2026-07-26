@@ -3,8 +3,6 @@
 @import 'tw-animate-css';
 
 @import './responsive.css';
-@import './theme-sync.css';
-@import './theme-generated.css';
 
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';

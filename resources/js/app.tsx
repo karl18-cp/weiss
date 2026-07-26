@@ -1,7 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import { SystemModalProvider } from '@/components/system-modal-provider';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { initializeTheme } from '@/hooks/use-appearance';
 import AppLayout from '@/layouts/app-layout';
 import AuthLoginLayout from '@/layouts/auth/auth-login-layout';
 import AuthLayout from '@/layouts/auth-layout';
@@ -37,6 +36,3 @@ createInertiaApp({
         color: '#4B5563',
     },
 });
-
-// This will set light / dark mode on load...
-initializeTheme();
