@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { Phone, PhoneCall, PhoneOff, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import '../../css/ringcentral-dialer.css';
 
 type RingCentralCallButtonProps = {
     phone: string;
@@ -11,56 +13,59 @@ type RingCentralCallButtonProps = {
 };
 
 type PreparedCall = {
-    dial_mode: 'browser_widget' | 'secure_ringout';
-    masked_phone?: string;
+    dial_mode: 'secure_ringout';
+    call_id?: string;
+    display_phone?: string;
     message?: string;
     call_status?: string;
+    caller_status?: string;
+    callee_status?: string;
+};
+
+type CallPanel = {
+    callId?: string;
+    displayPhone: string;
+    message: string;
+    status: string;
+    tone: 'active' | 'success' | 'error';
+};
+
+const finalStatuses = new Set([
+    'Success',
+    'Finished',
+    'NoAnswer',
+    'Busy',
+    'Rejected',
+    'GenericError',
+]);
+
+const statusTone = (status: string): CallPanel['tone'] => {
+    if (['Success', 'Finished'].includes(status)) return 'success';
+    if (
+        ['NoAnswer', 'Busy', 'Rejected', 'GenericError', 'Failed'].includes(
+            status,
+        )
+    ) {
+        return 'error';
+    }
+
+    return 'active';
 };
 
 export function RingCentralCallButton({
-    phone,
     phoneSlot,
     leadId,
     children,
     className,
-    title = 'Call with RingCentral',
+    title = 'Call with Weiss Secure Dialer',
 }: RingCentralCallButtonProps) {
     const [opening, setOpening] = useState(false);
-    const [secureCall, setSecureCall] = useState<{
-        maskedPhone: string;
-        message: string;
-        status: string;
-    } | null>(null);
-
-    const callWithRingCentral = () => {
-        if (typeof window.RCAdapter?.clickToCall === 'function') {
-            window.RCAdapter.clickToCall(phone, true);
-
-            return true;
-        }
-
-        const frame = document.querySelector<HTMLIFrameElement>(
-            '#rc-widget-adapter-frame',
-        );
-
-        if (frame?.contentWindow) {
-            frame.contentWindow.postMessage(
-                {
-                    type: 'rc-adapter-new-call',
-                    phoneNumber: phone,
-                    toCall: true,
-                },
-                '*',
-            );
-
-            return true;
-        }
-
-        return false;
-    };
+    const [callPanel, setCallPanel] = useState<CallPanel | null>(null);
 
     const prepareCall = async (): Promise<PreparedCall> => {
-        if (!leadId) return { dial_mode: 'browser_widget' };
+        if (!leadId) {
+            throw new Error('This call must be connected to a saved lead.');
+        }
 
         const token = document
             .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
@@ -95,47 +100,69 @@ export function RingCentralCallButton({
         return payload;
     };
 
+    useEffect(() => {
+        if (!callPanel?.callId || finalStatuses.has(callPanel.status)) return;
+
+        const poll = window.setInterval(async () => {
+            try {
+                const response = await fetch(
+                    `/integrations/ringcentral/calls/${encodeURIComponent(callPanel.callId!)}`,
+                    {
+                        credentials: 'same-origin',
+                        headers: { Accept: 'application/json' },
+                    },
+                );
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) return;
+
+                const status = payload.call_status ?? 'In progress';
+                setCallPanel((current) =>
+                    current
+                        ? {
+                              ...current,
+                              status,
+                              tone: statusTone(status),
+                          }
+                        : null,
+                );
+
+                if (finalStatuses.has(status)) window.clearInterval(poll);
+            } catch {
+                // A later poll will retry after a transient network failure.
+            }
+        }, 2500);
+
+        return () => window.clearInterval(poll);
+    }, [callPanel?.callId, callPanel?.status]);
+
     const startCall = async () => {
         if (opening) return;
 
         setOpening(true);
         try {
             const call = await prepareCall();
-
-            if (call.dial_mode === 'secure_ringout') {
-                setSecureCall({
-                    maskedPhone: call.masked_phone ?? '*******',
-                    message:
-                        call.message ??
-                        'Answer your configured phone to connect.',
-                    status: call.call_status ?? 'In progress',
-                });
-
-                return;
-            }
+            const status = call.call_status ?? 'In progress';
+            setCallPanel({
+                callId: call.call_id,
+                displayPhone: call.display_phone ?? '*******',
+                message:
+                    call.message ??
+                    'Answer your configured phone to connect.',
+                status,
+                tone: statusTone(status),
+            });
         } catch (error) {
-            window.alert(
-                error instanceof Error
-                    ? error.message
-                    : 'The call could not be started. Please check your connection and try again.',
-            );
-
-            return;
+            setCallPanel({
+                displayPhone: 'Call not connected',
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : 'The call could not be started. Please try again.',
+                status: 'Failed',
+                tone: 'error',
+            });
         } finally {
             setOpening(false);
-        }
-
-        if (!callWithRingCentral()) {
-            setOpening(true);
-            window.setTimeout(() => {
-                setOpening(false);
-
-                if (!callWithRingCentral()) {
-                    window.alert(
-                        'The RingCentral browser phone is still loading. Please try again in a moment.',
-                    );
-                }
-            }, 1200);
         }
     };
 
@@ -147,42 +174,48 @@ export function RingCentralCallButton({
                 onClick={startCall}
                 disabled={opening}
                 aria-label={title}
-                title={opening ? 'Opening RingCentral…' : title}
+                title={opening ? 'Connecting call…' : title}
             >
                 {children}
             </button>
 
-            {secureCall && (
-                <div
-                    className="fixed right-4 bottom-4 z-[100] w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
-                    role="status"
-                    aria-live="polite"
-                >
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <p className="text-xs font-bold tracking-wider text-blue-600 uppercase">
-                                Secure RingCentral call
-                            </p>
-                            <p className="mt-1 text-lg font-bold text-slate-900">
-                                {secureCall.maskedPhone}
-                            </p>
+            {callPanel && (
+                <aside className="rc-dialer" role="status" aria-live="polite">
+                    <header>
+                        <div className="rc-dialer__brand">
+                            <PhoneCall aria-hidden="true" />
+                            Weiss Secure Dialer
                         </div>
                         <button
                             type="button"
-                            onClick={() => setSecureCall(null)}
-                            className="rounded-lg px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100"
+                            onClick={() => setCallPanel(null)}
                             aria-label="Close call panel"
                         >
-                            ×
+                            <X aria-hidden="true" />
                         </button>
+                    </header>
+
+                    <div
+                        className={`rc-dialer__status rc-dialer__status--${callPanel.tone}`}
+                    >
+                        <span className="rc-dialer__status-icon">
+                            {callPanel.tone === 'error' ? (
+                                <PhoneOff aria-hidden="true" />
+                            ) : (
+                                <Phone aria-hidden="true" />
+                            )}
+                        </span>
+                        <div>
+                            <strong>{callPanel.displayPhone}</strong>
+                            <p>{callPanel.message}</p>
+                        </div>
                     </div>
-                    <p className="mt-3 text-sm text-slate-600">
-                        {secureCall.message}
-                    </p>
-                    <div className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
-                        Status: {secureCall.status}
-                    </div>
-                </div>
+
+                    <footer>
+                        <span>RingCentral connection</span>
+                        <strong>{callPanel.status}</strong>
+                    </footer>
+                </aside>
             )}
         </>
     );

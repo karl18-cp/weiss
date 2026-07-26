@@ -55,10 +55,6 @@ class RingCentralCallIntentController extends Controller
             'initiated_at' => now()->utc(),
         ]);
 
-        if (PhoneNumberVisibility::canView($user)) {
-            return response()->json(['id' => $call->id, 'dial_mode' => 'browser_widget'], 201);
-        }
-
         try {
             $ringOut = $ringCentral->ringOut($phone);
             $call->update([
@@ -85,9 +81,14 @@ class RingCentralCallIntentController extends Controller
         return response()->json([
             'id' => $call->id,
             'dial_mode' => 'secure_ringout',
-            'masked_phone' => PhoneNumberVisibility::mask($phone),
+            'call_id' => data_get($ringOut, 'id'),
+            'display_phone' => PhoneNumberVisibility::canView($user)
+                ? $phone
+                : PhoneNumberVisibility::mask($phone),
             'message' => 'RingCentral is calling your configured phone. Answer it to connect to the customer.',
             'call_status' => data_get($ringOut, 'status.callStatus', 'In progress'),
+            'caller_status' => data_get($ringOut, 'status.callerStatus'),
+            'callee_status' => data_get($ringOut, 'status.calleeStatus'),
         ], 201);
     }
 }
