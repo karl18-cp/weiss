@@ -149,6 +149,7 @@ export type LeadsShopProps = {
     listTitle: string;
     dateLabel: string;
     dateField: "created_at" | "appointment_at";
+    sortDirection?: "asc" | "desc";
     statusFilters?: [string, string][];
   };
 };
@@ -845,13 +846,26 @@ export default function LeadsShop({
         const dateField = queue?.dateField ?? "created_at";
         const firstTime = first[dateField]
           ? new Date(first[dateField] as string).getTime()
-          : 0;
+          : Number.POSITIVE_INFINITY;
         const secondTime = second[dateField]
           ? new Date(second[dateField] as string).getTime()
-          : 0;
+          : Number.POSITIVE_INFINITY;
+        const missingTime =
+          queue?.sortDirection === "asc"
+            ? Number.POSITIVE_INFINITY
+            : Number.NEGATIVE_INFINITY;
+        const firstSortableTime =
+          Number.isNaN(firstTime) || !first[dateField]
+            ? missingTime
+            : firstTime;
+        const secondSortableTime =
+          Number.isNaN(secondTime) || !second[dateField]
+            ? missingTime
+            : secondTime;
         const dateDifference =
-          (Number.isNaN(secondTime) ? 0 : secondTime) -
-          (Number.isNaN(firstTime) ? 0 : firstTime);
+          queue?.sortDirection === "asc"
+            ? firstSortableTime - secondSortableTime
+            : secondSortableTime - firstSortableTime;
 
         return dateDifference || second.id - first.id;
       });
@@ -866,6 +880,7 @@ export default function LeadsShop({
     productFilter,
     agentFilter,
     queue?.dateField,
+    queue?.sortDirection,
   ]);
 
   const clearListFilters = () => {

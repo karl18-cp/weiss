@@ -12,6 +12,7 @@ export default function ConfirmLeads(props: LeadsShopProps) {
         listTitle: "Waiting for confirmation",
         dateLabel: "Appointment dates",
         dateField: "appointment_at",
+        sortDirection: "asc",
       }}
     />
   );

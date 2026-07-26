@@ -12,6 +12,7 @@ export default function DispatchLeads(props: LeadsShopProps) {
         listTitle: "Waiting for dispatch",
         dateLabel: "Appointment dates",
         dateField: "appointment_at",
+        sortDirection: "asc",
       }}
     />
   );
