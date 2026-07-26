@@ -104,7 +104,9 @@ test('salesmen only receive their assigned bookings', function () {
             ->where('leads.0.customer_name', 'Visible Customer')
             ->where('leads.1.customer_name', 'Secondary Customer')
             ->has('salesmen', 1)
-            ->where('salesmen.0.salesman_id', $assigned->salesman_id));
+            ->where('salesmen.0.salesman_id', $assigned->salesman_id)
+            ->where('viewerRole', 'salesman')
+            ->where('viewerSalesmanId', $assigned->salesman_id));
 });
 
 test('salesman accounts without a linked profile cannot see unassigned bookings', function () {

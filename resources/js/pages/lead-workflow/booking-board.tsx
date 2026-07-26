@@ -60,6 +60,7 @@ type BookingBoardProps = {
   salesmen: Salesman[];
   map: { key: string | null; styleUrl: string };
   viewerRole: string;
+  viewerSalesmanId: number | null;
 };
 
 const START_HOUR = 6;
@@ -266,13 +267,28 @@ export default function BookingBoard({
   salesmen,
   map,
   viewerRole,
+  viewerSalesmanId,
 }: BookingBoardProps) {
+  const visibleLeads = useMemo(
+    () =>
+      viewerRole !== "salesman" || viewerSalesmanId === null
+        ? leads
+        : leads.filter((lead) =>
+            [
+              lead.salesman_one?.salesman_id,
+              lead.salesman_two?.salesman_id,
+            ].includes(viewerSalesmanId),
+          ),
+    [leads, viewerRole, viewerSalesmanId],
+  );
   const today = localDateKey(new Date());
-  const firstDate = leads[0]
-    ? appointmentDateKey(leads[0].appointment_at)
+  const firstDate = visibleLeads[0]
+    ? appointmentDateKey(visibleLeads[0].appointment_at)
     : today;
   const [selectedDate, setSelectedDate] = useState(
-    leads.some((lead) => appointmentDateKey(lead.appointment_at) === today)
+    visibleLeads.some(
+      (lead) => appointmentDateKey(lead.appointment_at) === today,
+    )
       ? today
       : firstDate,
   );
@@ -292,7 +308,7 @@ export default function BookingBoard({
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
 
-    return leads.filter((lead) => {
+    return visibleLeads.filter((lead) => {
       const date = appointmentDate(lead.appointment_at);
       const inPeriod =
         view === "daily"
@@ -322,7 +338,7 @@ export default function BookingBoard({
 
       return inPeriod && matchesSalesman && matchesSearch;
     });
-  }, [leads, search, selectedDate, selectedSalesman, view]);
+  }, [visibleLeads, search, selectedDate, selectedSalesman, view]);
 
   const dayLeads = useMemo(
     () =>
@@ -376,7 +392,11 @@ export default function BookingBoard({
         <header className="booking-board-heading">
           <div>
             <span>Lead workflow</span>
-            <h1>Booking Board</h1>
+            <h1>
+              {viewerRole === "salesman"
+                ? "My Booking Board"
+                : "Booking Board"}
+            </h1>
             <p>
               {viewerRole === "salesman"
                 ? "Your assigned appointments and lead locations."
@@ -403,8 +423,9 @@ export default function BookingBoard({
             mapConfig={map}
             salesmen={salesmen}
           />
-          <div className="booking-map-legend">
-            {salesmen.map((salesman) => (
+          {viewerRole !== "salesman" && (
+            <div className="booking-map-legend">
+              {salesmen.map((salesman) => (
               <button
                 key={salesman.salesman_id}
                 type="button"
@@ -426,8 +447,9 @@ export default function BookingBoard({
                 />
                 {salesman.salesman_name}
               </button>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="booking-board-controls">
@@ -481,7 +503,9 @@ export default function BookingBoard({
               }
             >
               <div className="booking-timeline__header">
-                <div className="booking-timeline__corner">Salesman</div>
+                <div className="booking-timeline__corner">
+                  {viewerRole === "salesman" ? "My Schedule" : "Salesman"}
+                </div>
                 <div className="booking-timeline__hours">
                   {Array.from(
                     { length: END_HOUR - START_HOUR },

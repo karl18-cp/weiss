@@ -66,6 +66,7 @@ class LeadQueueController extends Controller
                 'styleUrl' => 'https://api.maptiler.com/maps/streets-v2/style.json',
             ],
             'viewerRole' => $user?->role,
+            'viewerSalesmanId' => $salesmanId,
         ]);
     }
 
