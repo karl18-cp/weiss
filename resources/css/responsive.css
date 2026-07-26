@@ -10,6 +10,25 @@ body {
     overflow-x: hidden;
 }
 
+.mobile-sidebar-trigger {
+    position: fixed !important;
+    top: max(0.75rem, env(safe-area-inset-top)) !important;
+    left: max(0.75rem, env(safe-area-inset-left)) !important;
+    z-index: 1000 !important;
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    border: 1px solid rgb(255 255 255 / 25%) !important;
+    border-radius: 0.75rem !important;
+    color: #fff !important;
+    background: #1f63e9 !important;
+    box-shadow: 0 8px 24px rgb(15 40 90 / 28%) !important;
+}
+
+.mobile-sidebar-trigger svg {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
 img,
 svg {
     max-width: 100%;
@@ -53,6 +72,15 @@ textarea {
 }
 
 @media (max-width: 900px) {
+    .crm-app-content {
+        min-height: 100dvh;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        padding-top: calc(3.75rem + env(safe-area-inset-top));
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+    }
+
     .companies-page,
     .products-page,
     .contractors-page,
@@ -88,6 +116,12 @@ textarea {
     .lead-card-side {
         width: 100%;
         min-width: 0;
+    }
+}
+
+@media (min-width: 768px) {
+    .mobile-sidebar-trigger {
+        display: none !important;
     }
 }
 

@@ -12,9 +12,13 @@ export default function AppSidebarLayout({
             <AppSidebar />
             <AppContent
                 variant="sidebar"
-                className="h-svh overflow-hidden"
+                className="crm-app-content h-dvh overflow-x-hidden overflow-y-auto md:h-svh md:overflow-hidden"
             >
-                <SidebarTrigger className="fixed top-3 left-3 z-50 bg-white shadow-sm md:hidden" />
+                <SidebarTrigger
+                    className="mobile-sidebar-trigger md:hidden"
+                    aria-label="Open navigation menu"
+                    title="Open navigation menu"
+                />
                 {children}
             </AppContent>
         </AppShell>

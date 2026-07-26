@@ -31,6 +31,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useCurrentUrl } from "@/hooks/use-current-url";
 import { dashboard, logout } from "@/routes";
@@ -175,10 +176,12 @@ function NavigationSection({
   label,
   items,
   counts = {},
+  onNavigate,
 }: {
   label: string;
   items: SidebarItem[];
   counts?: Record<string, number>;
+  onNavigate?: () => void;
 }) {
   const { currentUrl, isCurrentUrl } = useCurrentUrl();
 
@@ -213,7 +216,7 @@ function NavigationSection({
                 className="crm-sidebar__item"
                 tooltip={item.title}
               >
-                <Link href={item.href}>{content}</Link>
+                <Link href={item.href} onClick={onNavigate}>{content}</Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           );
@@ -224,6 +227,7 @@ function NavigationSection({
 }
 
 export function AppSidebar() {
+  const { isMobile, setOpenMobile } = useSidebar();
   const { auth, workflowCounts } = usePage<{
     auth: Auth;
     workflowCounts: Record<string, number>;
@@ -251,6 +255,9 @@ export function AppSidebar() {
   );
 
   const handleLogout = () => router.flushAll();
+  const closeMobileNavigation = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
   return (
     <Sidebar collapsible="icon" className="crm-sidebar">
@@ -279,11 +286,16 @@ export function AppSidebar() {
             label="Lead Workflow"
             items={filteredWorkflow}
             counts={workflowCounts}
+            onNavigate={closeMobileNavigation}
           />
         )}
 
         {filteredManagement.length > 0 && (
-          <NavigationSection label="Management" items={filteredManagement} />
+          <NavigationSection
+            label="Management"
+            items={filteredManagement}
+            onNavigate={closeMobileNavigation}
+          />
         )}
 
         {
@@ -298,7 +310,7 @@ export function AppSidebar() {
                   className="crm-sidebar__item"
                   tooltip="Settings"
                 >
-                  <Link href={profile()} prefetch>
+                  <Link href={profile()} prefetch onClick={closeMobileNavigation}>
                     <Settings />
                     <span>Settings</span>
                   </Link>
