@@ -72,8 +72,7 @@ test('restricted users can dial a lead without submitting its phone number', fun
     $response->assertCreated()
         ->assertJson([
             'dial_mode' => 'secure_ringout',
-            'call_id' => 'secure-call-123',
-            'display_phone' => '*******567',
+            'masked_phone' => '*******567',
             'call_status' => 'InProgress',
         ])
         ->assertJsonMissing(['phone' => '(555) 123-4567']);
@@ -83,7 +82,7 @@ test('restricted users can dial a lead without submitting its phone number', fun
         ->telephony_session_id->toBe('secure-call-123');
 });
 
-test('authorized users use the secure dialer and may see the full display number', function () {
+test('authorized users keep using the browser widget without starting ringout', function () {
     $admin = Account::query()->create([
         'username' => 'ringcentral-admin',
         'password' => 'password',
@@ -97,13 +96,7 @@ test('authorized users use the secure dialer and may see the full display number
     $ringCentral->shouldReceive('normalizePhoneNumber')
         ->once()
         ->andReturn('+15559876543');
-    $ringCentral->shouldReceive('ringOut')
-        ->once()
-        ->with('5559876543')
-        ->andReturn([
-            'id' => 'admin-secure-call-456',
-            'status' => ['callStatus' => 'InProgress'],
-        ]);
+    $ringCentral->shouldNotReceive('ringOut');
     $this->app->instance(RingCentralService::class, $ringCentral);
 
     $this->actingAs($admin)
@@ -111,11 +104,7 @@ test('authorized users use the secure dialer and may see the full display number
             'phone_slot' => 'mobile',
         ])
         ->assertCreated()
-        ->assertJson([
-            'dial_mode' => 'secure_ringout',
-            'call_id' => 'admin-secure-call-456',
-            'display_phone' => '5559876543',
-        ]);
+        ->assertJson(['dial_mode' => 'browser_widget']);
 });
 
 test('salesmen cannot dial leads that are not assigned to them', function () {
