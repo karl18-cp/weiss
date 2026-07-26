@@ -1,0 +1,184 @@
+/*
+ * Shared appearance synchronization for the authenticated CRM.
+ * Legacy feature styles use fixed light colors; these semantic overrides keep
+ * every screen aligned with the root `.dark` class managed by useAppearance.
+ */
+
+.crm-app-content {
+    color: #172033;
+    background-color: #f4f7fb;
+}
+
+html.dark .crm-app-content {
+    color: #e6edf7;
+    background-color: #08111f;
+    color-scheme: dark;
+}
+
+html.dark .crm-app-content :is(
+    [class$='-page'],
+    [class*='-page ']
+) {
+    color: #e6edf7 !important;
+    background-color: #08111f !important;
+}
+
+html.dark .crm-app-content :is(
+    [class*='workspace'],
+    [class*='panel'],
+    [class*='card'],
+    [class*='content'],
+    [class*='detail'],
+    [class*='summary'],
+    [class*='directory'],
+    [class*='history'],
+    [class*='timeline'],
+    [class*='table'],
+    [class*='list'],
+    [class*='modal'],
+    [class*='drawer'],
+    [class*='toolbar'],
+    [class*='filters'],
+    [class*='permissions']
+) {
+    border-color: #26364d !important;
+}
+
+html.dark .crm-app-content :is(
+    section,
+    article,
+    form,
+    aside,
+    header,
+    footer,
+    nav,
+    table,
+    thead,
+    tbody,
+    tr,
+    td,
+    th,
+    div
+)[class*='panel'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    form,
+    aside,
+    table,
+    div
+)[class*='card'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    aside,
+    div
+)[class*='content'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    aside,
+    div
+)[class*='detail'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    aside,
+    div
+)[class*='summary'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    aside,
+    div
+)[class*='directory'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    div
+)[class*='history'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    div
+)[class*='timeline'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    div
+)[class*='modal'],
+html.dark .crm-app-content :is(
+    section,
+    article,
+    div
+)[class*='drawer'] {
+    color: #e6edf7 !important;
+    background-color: #101b2c !important;
+}
+
+html.dark .crm-app-content :is(input, select, textarea) {
+    border-color: #33445d !important;
+    color: #e6edf7 !important;
+    background-color: #0c1727 !important;
+}
+
+html.dark .crm-app-content :is(input, textarea)::placeholder {
+    color: #7889a2 !important;
+}
+
+html.dark .crm-app-content :is(h1, h2, h3, h4, h5, h6, label, legend),
+html.dark .crm-app-content :is(strong, b) {
+    color: #f3f7fc;
+}
+
+html.dark .crm-app-content :is(p, small, time) {
+    color: #9daac0;
+}
+
+html.dark .crm-app-content :is(table, thead, tbody, tr, th, td) {
+    border-color: #293a52 !important;
+}
+
+html.dark .crm-app-content :is(thead, th) {
+    color: #cbd6e6 !important;
+    background-color: #152238 !important;
+}
+
+html.dark .crm-app-content :is(.bg-white, .bg-slate-50, .bg-gray-50) {
+    background-color: #101b2c !important;
+}
+
+html.dark .crm-app-content :is(.text-slate-900, .text-gray-900) {
+    color: #f3f7fc !important;
+}
+
+html.dark .crm-app-content :is(.text-slate-600, .text-slate-500, .text-gray-600, .text-gray-500) {
+    color: #9daac0 !important;
+}
+
+html.dark .crm-app-content :is(.border-slate-200, .border-gray-200) {
+    border-color: #2b3c54 !important;
+}
+
+/* Preserve real-world visual colors inside maps, recordings, and media. */
+html.dark .crm-app-content :is(
+    img,
+    video,
+    canvas,
+    iframe,
+    audio,
+    .maplibregl-map,
+    .maplibregl-canvas
+) {
+    color-scheme: normal;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .crm-app-content,
+    .crm-app-content :is(input, select, textarea, section, article) {
+        transition:
+            color 160ms ease,
+            background-color 160ms ease,
+            border-color 160ms ease;
+    }
+}
