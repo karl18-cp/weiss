@@ -33,6 +33,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         ->name('salesman.booking-board');
     Route::get('salesman/leads', [SalesmanPortalController::class, 'leads'])
         ->name('salesman.leads');
+    Route::post('salesman/leads/{lead}/appointment-result-notes', [SalesmanPortalController::class, 'storeAppointmentResultNote'])
+        ->name('salesman.leads.appointment-result-notes.store');
     Route::get('lead-search', LeadSearchController::class)->name('lead-search');
     Route::post('integrations/ringcentral/calls', RingCentralCallController::class)
         ->middleware('throttle:10,1')

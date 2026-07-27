@@ -324,6 +324,75 @@
     text-transform: uppercase;
 }
 
+.salesman-appointment-result {
+    margin-top: 1rem;
+    padding: 0.85rem;
+    border: 1px solid #dce5f1;
+    border-radius: 0.8rem;
+    background: #f8fafc;
+}
+
+.salesman-appointment-result h3 {
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.salesman-appointment-result > p {
+    margin-top: 0.25rem;
+    color: #718096;
+    font-size: 0.66rem;
+}
+
+.salesman-appointment-result textarea {
+    width: 100%;
+    min-height: 6rem;
+    margin-top: 0.65rem;
+    resize: vertical;
+    border: 1px solid #ccd7e5;
+    border-radius: 0.65rem;
+    padding: 0.7rem;
+    color: #172033;
+    background: #fff;
+    font: inherit;
+    font-size: 0.75rem;
+}
+
+.salesman-appointment-result textarea:focus {
+    border-color: #2868e5;
+    outline: 3px solid rgb(40 104 229 / 12%);
+}
+
+.salesman-appointment-result > small {
+    display: block;
+    margin-top: 0.3rem;
+    color: #dc2626;
+    font-size: 0.62rem;
+}
+
+.salesman-appointment-result button {
+    display: flex;
+    min-height: 2.7rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: 0.6rem;
+    border-radius: 0.65rem;
+    color: #fff;
+    background: #2868e5;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
+.salesman-appointment-result button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.salesman-appointment-result button svg {
+    width: 0.9rem;
+}
+
 .salesman-lead-detail__actions {
     display: grid;
     grid-template-columns: repeat(2, 1fr);

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Lead;
+use App\Models\LeadNote;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,5 +49,36 @@ class SalesmanPortalController extends Controller
                 'name' => $user->salesman->salesman_name,
             ],
         ]);
+    }
+
+    public function storeAppointmentResultNote(Request $request, Lead $lead): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user?->role === 'salesman', 403);
+
+        $salesmanId = $user->salesman?->salesman_id;
+        abort_unless($salesmanId, 403, 'Your account is not linked to a salesman profile.');
+        abort_unless(
+            $lead->salesman_1_id === $salesmanId || $lead->salesman_2_id === $salesmanId,
+            403
+        );
+
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        LeadNote::query()->create([
+            'lead_id' => $lead->id,
+            'note_type' => 'appointment_result',
+            'body' => $validated['body'],
+            'created_by' => $user->getAuthIdentifier(),
+        ]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Appointment result note saved.',
+        ]);
+
+        return back();
     }
 }

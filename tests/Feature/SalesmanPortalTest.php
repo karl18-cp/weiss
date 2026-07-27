@@ -3,6 +3,7 @@
 use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Lead;
+use App\Models\LeadNote;
 use App\Models\Salesman;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -73,4 +74,68 @@ test('non-salesman accounts cannot open the salesman portal', function () {
     $this->actingAs($admin)
         ->get(route('salesman.leads'))
         ->assertForbidden();
+});
+
+test('salesmen can add appointment result notes only to assigned leads', function () {
+    $agentAccount = Account::query()->create([
+        'username' => 'result-note-agent@example.com',
+        'password' => 'password',
+        'role' => 'agent',
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Result Note Agent',
+        'account_id' => $agentAccount->acc_id,
+    ]);
+    $account = Account::query()->create([
+        'username' => 'result-note-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    $salesman = Salesman::query()->create([
+        'salesman_name' => 'Result Note Salesman',
+        'account_id' => $account->acc_id,
+    ]);
+    $other = Salesman::query()->create(['salesman_name' => 'Other Salesman']);
+
+    $makeLead = fn (string $name, int $salesmanId): Lead => Lead::query()->create([
+        'customer_name' => $name,
+        'marital_status' => 'Single',
+        'primary_number' => '555-0100',
+        'address' => '100 Main Street',
+        'zip_code' => '90001',
+        'city' => 'Los Angeles',
+        'county' => 'Los Angeles',
+        'state' => 'CA',
+        'years_in_house' => 5,
+        'appointment_at' => now()->addDay(),
+        'telemarketer_notes' => 'Portal test',
+        'source' => 'Test',
+        'agent_id' => $agent->agent_id,
+        'salesman_1_id' => $salesmanId,
+        'created_by' => $account->acc_id,
+        'status' => 'dispatched',
+    ]);
+
+    $assigned = $makeLead('Assigned Result Lead', $salesman->salesman_id);
+    $notAssigned = $makeLead('Other Result Lead', $other->salesman_id);
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $assigned), [
+            'body' => 'Customer requested a follow-up estimate.',
+        ])
+        ->assertRedirect();
+
+    expect(LeadNote::query()
+        ->where('lead_id', $assigned->id)
+        ->where('note_type', 'appointment_result')
+        ->where('body', 'Customer requested a follow-up estimate.')
+        ->exists())->toBeTrue();
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $notAssigned), [
+            'body' => 'This must not be saved.',
+        ])
+        ->assertForbidden();
+
+    expect(LeadNote::query()->where('lead_id', $notAssigned->id)->exists())->toBeFalse();
 });

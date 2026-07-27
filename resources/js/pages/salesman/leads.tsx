@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import {
     Building2,
     CalendarClock,
@@ -8,6 +8,7 @@ import {
     Package,
     Phone,
     Search,
+    Save,
     UserRound,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -75,6 +76,19 @@ export default function SalesmanLeads({
         );
     }, [leads, search]);
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
+    const noteForm = useForm({ body: '' });
+
+    const saveAppointmentResultNote = () => {
+        if (!selected) return;
+
+        noteForm.post(
+            `/salesman/leads/${selected.id}/appointment-result-notes`,
+            {
+                preserveScroll: true,
+                onSuccess: () => noteForm.reset(),
+            },
+        );
+    };
 
     return (
         <>
@@ -217,6 +231,41 @@ export default function SalesmanLeads({
                                 ) : (
                                     <p>No notes have been added.</p>
                                 )}
+                            </section>
+
+                            <section className="salesman-appointment-result">
+                                <h3>Appointment result notes</h3>
+                                <p>
+                                    Add the outcome of your visit or any
+                                    follow-up information.
+                                </p>
+                                <textarea
+                                    value={noteForm.data.body}
+                                    onChange={(event) =>
+                                        noteForm.setData(
+                                            'body',
+                                            event.target.value,
+                                        )
+                                    }
+                                    placeholder="Type the appointment result…"
+                                    rows={4}
+                                />
+                                {noteForm.errors.body && (
+                                    <small>{noteForm.errors.body}</small>
+                                )}
+                                <button
+                                    type="button"
+                                    disabled={
+                                        noteForm.processing ||
+                                        noteForm.data.body.trim() === ''
+                                    }
+                                    onClick={saveAppointmentResultNote}
+                                >
+                                    <Save />
+                                    {noteForm.processing
+                                        ? 'Saving…'
+                                        : 'Save result note'}
+                                </button>
                             </section>
 
                             <div className="salesman-lead-detail__actions">
