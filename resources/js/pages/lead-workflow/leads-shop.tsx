@@ -51,6 +51,9 @@ export type Lead = {
   state: string;
   email: string | null;
   years_in_house: number;
+  house_age: number | null;
+  needs_financing: boolean | null;
+  house_value: string | null;
   appointment_at: string | null;
   appointment_result: string | null;
   telemarketer_notes: string;
@@ -167,6 +170,9 @@ const emptyLeadForm = {
   state: "",
   email: "",
   years_in_house: "",
+  house_age: "",
+  needs_financing: "",
+  house_value: "",
   product_id: "",
   appointment_at: "",
   appointment_result: "",
@@ -191,6 +197,10 @@ const leadFormData = (lead: Lead) => ({
   state: lead.state,
   email: lead.email ?? "",
   years_in_house: String(lead.years_in_house),
+  house_age: lead.house_age == null ? "" : String(lead.house_age),
+  needs_financing:
+    lead.needs_financing == null ? "" : lead.needs_financing ? "1" : "0",
+  house_value: lead.house_value ?? "",
   product_id: String(lead.product?.prod_id ?? ""),
   appointment_at: appointmentInputValue(lead.appointment_at ?? ""),
   appointment_result: lead.appointment_result ?? "",
@@ -1194,6 +1204,14 @@ export default function LeadsShop({
       {
         preserveScroll: true,
         onSuccess: () => router.flushAll(),
+        onError: (errors) =>
+          notify({
+            title: "Lead information incomplete",
+            message:
+              String(errors.status ?? "") ||
+              "Complete the homeowner qualification fields first.",
+            tone: "warning",
+          }),
       },
     );
   };
@@ -2010,6 +2028,51 @@ export default function LeadsShop({
                       )}
                     </label>
                     <label>
+                      <span>House age</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.data.house_age}
+                        onChange={(event) =>
+                          form.setData("house_age", event.target.value)
+                        }
+                      />
+                      {form.errors.house_age && (
+                        <em>{form.errors.house_age}</em>
+                      )}
+                    </label>
+                    <label>
+                      <span>Needs financing?</span>
+                      <select
+                        value={form.data.needs_financing}
+                        onChange={(event) =>
+                          form.setData("needs_financing", event.target.value)
+                        }
+                      >
+                        <option value="">Select an answer</option>
+                        <option value="1">Yes</option>
+                        <option value="0">No</option>
+                      </select>
+                      {form.errors.needs_financing && (
+                        <em>{form.errors.needs_financing}</em>
+                      )}
+                    </label>
+                    <label>
+                      <span>House value</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.data.house_value}
+                        onChange={(event) =>
+                          form.setData("house_value", event.target.value)
+                        }
+                      />
+                      {form.errors.house_value && (
+                        <em>{form.errors.house_value}</em>
+                      )}
+                    </label>
+                    <label>
                       <span>Product</span>
                       <select
                         value={form.data.product_id}
@@ -2177,6 +2240,39 @@ export default function LeadsShop({
                         <div>
                           <span>Years in house</span>
                           <strong>{selected.years_in_house}</strong>
+                        </div>
+                        <div>
+                          <span>House age</span>
+                          <strong>
+                            {selected.house_age == null
+                              ? "—"
+                              : `${selected.house_age} years`}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Needs financing?</span>
+                          <strong>
+                            {selected.needs_financing == null
+                              ? "—"
+                              : selected.needs_financing
+                                ? "Yes"
+                                : "No"}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>House value</span>
+                          <strong>
+                            {selected.house_value == null
+                              ? "—"
+                              : Number(selected.house_value).toLocaleString(
+                                  "en-US",
+                                  {
+                                    style: "currency",
+                                    currency: "USD",
+                                    maximumFractionDigits: 0,
+                                  },
+                                )}
+                          </strong>
                         </div>
                         <div className="lead-detail-field--wide">
                           <span>Address</span>

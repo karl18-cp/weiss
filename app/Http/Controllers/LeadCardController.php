@@ -30,6 +30,7 @@ class LeadCardController extends Controller
             $lead = Lead::query()->create([
                 ...$request->validated(),
                 'source' => 'CallTools',
+                'crm_qualification_completed_at' => now(),
                 'created_by' => $request->user()->getAuthIdentifier(),
             ]);
 

@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Schema;
     'customer_name', 'marital_status', 'primary_number', 'secondary_number',
     'mobile_number', 'address', 'zip_code', 'city', 'county', 'state', 'email',
     'latitude', 'longitude', 'geocoding_status', 'geocoded_at',
-    'years_in_house', 'product_id', 'appointment_at', 'appointment_duration_minutes',
+    'years_in_house', 'house_age', 'needs_financing', 'house_value',
+    'crm_qualification_completed_at', 'product_id', 'appointment_at', 'appointment_duration_minutes',
     'appointment_result', 'telemarketer_notes',
     'company_id', 'source', 'agent_id', 'agent_2_id', 'rep', 'salesman_1_id', 'salesman_2_id',
     'created_by', 'status', 'confirmation_notes',
@@ -110,6 +111,9 @@ class Lead extends Model
     {
         return [
             'appointment_at' => 'datetime',
+            'needs_financing' => 'boolean',
+            'house_value' => 'decimal:2',
+            'crm_qualification_completed_at' => 'datetime',
             'appointment_duration_minutes' => 'integer',
             'latitude' => 'float',
             'longitude' => 'float',

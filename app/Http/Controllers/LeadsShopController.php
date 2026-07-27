@@ -109,6 +109,7 @@ class LeadsShopController extends Controller
             $lead->update([
                 ...$data,
                 'source' => 'CallTools',
+                'crm_qualification_completed_at' => now(),
             ]);
 
             $this->recordSalesmanChanges($request, $lead, $previousSalesmen);
@@ -147,7 +148,25 @@ class LeadsShopController extends Controller
 
     public function updateStatus(LeadStatusRequest $request, Lead $lead): RedirectResponse
     {
-        $lead->update($request->validated());
+        $status = $request->validated('status');
+        $leavingLeadsShop = in_array($lead->status, Lead::LEADS_SHOP_STATUSES, true)
+            && ! in_array($status, Lead::LEADS_SHOP_STATUSES, true);
+
+        if ($leavingLeadsShop && (
+            ! $lead->crm_qualification_completed_at
+            || ! $lead->marital_status
+            || $lead->marital_status === 'Unknown'
+            || $lead->years_in_house === null
+            || $lead->house_age === null
+            || $lead->needs_financing === null
+            || $lead->house_value === null
+        )) {
+            throw ValidationException::withMessages([
+                'status' => 'Complete the homeowner qualification fields before moving this lead out of Leads Shop.',
+            ]);
+        }
+
+        $lead->update(['status' => $status]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead status updated.']);
 

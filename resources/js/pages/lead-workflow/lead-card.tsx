@@ -33,6 +33,9 @@ const emptyLead = {
     state: 'CA',
     email: '',
     years_in_house: '',
+    house_age: '',
+    needs_financing: '',
+    house_value: '',
     product_id: '',
     appointment_at: '',
     telemarketer_notes: '',
@@ -534,6 +537,41 @@ export default function LeadCard({
                                 'years_in_house',
                                 'Years in house',
                                 '0',
+                                undefined,
+                                'number',
+                            )}
+                            {input(
+                                'house_age',
+                                'How old is the house?',
+                                'Age in years',
+                                <House />,
+                                'number',
+                            )}
+                            <label className="lead-field">
+                                <span>Do you need financing?</span>
+                                <div className="lead-input">
+                                    <select
+                                        value={form.data.needs_financing}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'needs_financing',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">Select an answer</option>
+                                        <option value="1">Yes</option>
+                                        <option value="0">No</option>
+                                    </select>
+                                </div>
+                                {form.errors.needs_financing && (
+                                    <em>{form.errors.needs_financing}</em>
+                                )}
+                            </label>
+                            {input(
+                                'house_value',
+                                'House value',
+                                'Estimated value',
                                 undefined,
                                 'number',
                             )}

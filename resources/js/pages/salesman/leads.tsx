@@ -3,6 +3,8 @@ import {
     Building2,
     CalendarClock,
     ChevronRight,
+    CircleDollarSign,
+    House,
     MapPin,
     Navigation,
     Package,
@@ -26,6 +28,11 @@ type SalesmanLead = {
     appointment_at: string | null;
     status: string;
     source: string;
+    marital_status: string;
+    years_in_house: number;
+    house_age: number | null;
+    needs_financing: boolean | null;
+    house_value: string | null;
     company: { company: string } | null;
     product: { product_name: string } | null;
     agent: { agent_name: string } | null;
@@ -209,6 +216,43 @@ export default function SalesmanLeads({
                                         <small>Assigned by</small>
                                         <strong>
                                             {selected.agent?.agent_name ?? '—'}
+                                        </strong>
+                                    </span>
+                                </div>
+                                <div>
+                                    <House />
+                                    <span>
+                                        <small>Home details</small>
+                                        <strong>
+                                            {selected.marital_status} ·{' '}
+                                            {selected.years_in_house} years in
+                                            house ·{' '}
+                                            {selected.house_age == null
+                                                ? 'House age unavailable'
+                                                : `${selected.house_age}-year-old house`}
+                                        </strong>
+                                    </span>
+                                </div>
+                                <div>
+                                    <CircleDollarSign />
+                                    <span>
+                                        <small>Financing and value</small>
+                                        <strong>
+                                            {selected.needs_financing == null
+                                                ? 'Financing unavailable'
+                                                : selected.needs_financing
+                                                  ? 'Needs financing'
+                                                  : 'No financing needed'}
+                                            {' · '}
+                                            {selected.house_value == null
+                                                ? 'Value unavailable'
+                                                : Number(
+                                                      selected.house_value,
+                                                  ).toLocaleString('en-US', {
+                                                      style: 'currency',
+                                                      currency: 'USD',
+                                                      maximumFractionDigits: 0,
+                                                  })}
                                         </strong>
                                     </span>
                                 </div>

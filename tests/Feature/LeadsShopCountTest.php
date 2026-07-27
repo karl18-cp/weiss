@@ -99,7 +99,7 @@ test('a requested dispatched booking is loaded and selected in the leads shop', 
         );
 });
 
-test('salesmen cannot open dispatched bookings assigned to someone else', function () {
+test('salesmen are redirected away from the full CRM leads shop', function () {
     $agentAccount = Account::query()->create([
         'username' => 'booking-link-agent',
         'password' => 'password',
@@ -142,7 +142,7 @@ test('salesmen cannot open dispatched bookings assigned to someone else', functi
 
     $this->actingAs($salesmanAccount)
         ->get(route('lead-workflow.leads-shop', ['lead' => $lead->id]))
-        ->assertForbidden();
+        ->assertRedirect(route('salesman.booking-board'));
 });
 
 test('lead status changes record where it moved and who moved it', function () {
@@ -167,7 +167,7 @@ test('lead status changes record where it moved and who moved it', function () {
     $agent = Agent::query()->create(['agent_name' => 'Movement Agent']);
     $lead = Lead::query()->create([
         'customer_name' => 'Moving Lead',
-        'marital_status' => 'Unknown',
+        'marital_status' => 'Married',
         'primary_number' => '+15550000001',
         'address' => '2 Test Street',
         'zip_code' => '00000',
@@ -175,6 +175,10 @@ test('lead status changes record where it moved and who moved it', function () {
         'county' => 'Test County',
         'state' => 'CA',
         'years_in_house' => 0,
+        'house_age' => 25,
+        'needs_financing' => true,
+        'house_value' => 650000,
+        'crm_qualification_completed_at' => now(),
         'product_id' => $product->prod_id,
         'appointment_at' => now(),
         'telemarketer_notes' => '',
@@ -197,6 +201,40 @@ test('lead status changes record where it moved and who moved it', function () {
         ->and($movement->from_status)->toBe('fresh')
         ->and($movement->to_status)->toBe('confirmed')
         ->and($movement->moved_by)->toBe($mover->acc_id);
+});
+
+test('an incomplete calltools lead cannot leave leads shop', function () {
+    $account = Account::query()->create([
+        'username' => 'incomplete-lead-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => 'Incomplete Lead Agent']);
+    $lead = Lead::query()->create([
+        'customer_name' => 'Incomplete CallTools Lead',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000007',
+        'address' => '7 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'appointment_at' => now(),
+        'telemarketer_notes' => '',
+        'source' => 'CallTools',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'fresh',
+    ]);
+
+    $this->actingAs($account)
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), [
+            'status' => 'confirmed',
+        ])
+        ->assertSessionHasErrors('status');
+
+    expect($lead->fresh()->status)->toBe('fresh');
 });
 
 test('admins can permanently delete sample leads', function () {
