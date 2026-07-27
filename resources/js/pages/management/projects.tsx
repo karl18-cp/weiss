@@ -100,6 +100,7 @@ type ProjectDocument = {
 
 type Project = {
     id: number;
+    project_number: string | null;
     amount: string;
     status: string;
     created_at: string;
@@ -237,6 +238,11 @@ export default function Projects({
     const [selectedDocumentKey, setSelectedDocumentKey] = useState<
         string | null
     >(null);
+    const [editingProjectDetails, setEditingProjectDetails] = useState(false);
+    const projectDetailsForm = useForm({
+        project_number: '',
+        status: 'new',
+    });
     const [saleModal, setSaleModal] = useState<{
         mode: 'create' | 'edit';
         sale: ProjectSale | null;
@@ -332,6 +338,10 @@ export default function Projects({
     );
 
     const projectNumber = (project: Project) => {
+        if (project.project_number?.trim()) {
+            return project.project_number;
+        }
+
         const prefix = project.lead.company?.prefix?.trim() || 'PROJECT';
 
         return `${prefix}-${String(project.id).padStart(5, '0')}`;
@@ -417,6 +427,32 @@ export default function Projects({
         setSelectedInvoiceId(null);
         setSelectedAccountingId(null);
         setSelectedDocumentKey(null);
+        setEditingProjectDetails(false);
+        projectDetailsForm.setData({
+            project_number: projectNumber(project),
+            status: project.status || 'new',
+        });
+        projectDetailsForm.clearErrors();
+    };
+
+    const beginProjectDetailsEdit = () => {
+        if (!selected) return;
+
+        projectDetailsForm.setData({
+            project_number: projectNumber(selected),
+            status: selected.status || 'new',
+        });
+        projectDetailsForm.clearErrors();
+        setEditingProjectDetails(true);
+    };
+
+    const saveProjectDetails = () => {
+        if (!selected) return;
+
+        projectDetailsForm.put(`/management/projects/${selected.id}`, {
+            preserveScroll: true,
+            onSuccess: () => setEditingProjectDetails(false),
+        });
     };
 
     const noteByType = (project: Project, type: string) =>
@@ -2530,6 +2566,23 @@ export default function Projects({
                                             new Date(selected.created_at),
                                         )}
                                     </small>
+                                    <button
+                                        type="button"
+                                        className="project-add-sale"
+                                        onClick={
+                                            editingProjectDetails
+                                                ? saveProjectDetails
+                                                : beginProjectDetailsEdit
+                                        }
+                                        disabled={projectDetailsForm.processing}
+                                    >
+                                        <Pencil />
+                                        {projectDetailsForm.processing
+                                            ? 'Saving…'
+                                            : editingProjectDetails
+                                              ? 'Save details'
+                                              : 'Edit details'}
+                                    </button>
                                 </div>
                             </header>
 
@@ -2607,9 +2660,38 @@ export default function Projects({
                                     <div className="project-overview-grid">
                                         <div>
                                             <small>Project number</small>
-                                            <strong>
-                                                {projectNumber(selected)}
-                                            </strong>
+                                            {editingProjectDetails ? (
+                                                <>
+                                                    <input
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data
+                                                                .project_number
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'project_number',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                    {projectDetailsForm.errors
+                                                        .project_number && (
+                                                        <em>
+                                                            {
+                                                                projectDetailsForm
+                                                                    .errors
+                                                                    .project_number
+                                                            }
+                                                        </em>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <strong>
+                                                    {projectNumber(selected)}
+                                                </strong>
+                                            )}
                                         </div>
                                         <div>
                                             <small>Company</small>
@@ -2644,9 +2726,49 @@ export default function Projects({
                                         </div>
                                         <div>
                                             <small>Status</small>
-                                            <strong className="is-blue">
-                                                {selected.status || 'new'}
-                                            </strong>
+                                            {editingProjectDetails ? (
+                                                <>
+                                                    <select
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data.status
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'status',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="new">
+                                                            New
+                                                        </option>
+                                                        <option value="progress">
+                                                            Progress
+                                                        </option>
+                                                        <option value="completed">
+                                                            Completed
+                                                        </option>
+                                                        <option value="canceled">
+                                                            Canceled
+                                                        </option>
+                                                    </select>
+                                                    {projectDetailsForm.errors
+                                                        .status && (
+                                                        <em>
+                                                            {
+                                                                projectDetailsForm
+                                                                    .errors.status
+                                                            }
+                                                        </em>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <strong className="is-blue">
+                                                    {selected.status || 'new'}
+                                                </strong>
+                                            )}
                                         </div>
                                     </div>
                                 </article>

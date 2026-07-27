@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['lead_id', 'amount', 'status', 'created_by'])]
+#[Fillable(['project_number', 'lead_id', 'amount', 'status', 'created_by'])]
 class Project extends Model
 {
     public function lead(): BelongsTo

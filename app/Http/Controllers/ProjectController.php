@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProjectAccountingTransactionRequest;
+use App\Http\Requests\ProjectDetailsRequest;
 use App\Http\Requests\ProjectInvoiceRequest;
 use App\Http\Requests\ProjectInvoiceStatusRequest;
 use App\Http\Requests\ProjectSaleRequest;
@@ -61,6 +62,15 @@ class ProjectController extends Controller
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Referral sale added.']);
+
+        return back();
+    }
+
+    public function updateDetails(ProjectDetailsRequest $request, Project $project): RedirectResponse
+    {
+        $project->update($request->validated());
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Project details updated.']);
 
         return back();
     }

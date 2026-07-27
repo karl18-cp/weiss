@@ -88,6 +88,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
     Route::prefix('management')->name('management.')->group(function () {
         Route::get('quality-control', [QualityControlController::class, 'index'])->name('quality-control');
         Route::get('projects', [ProjectController::class, 'index'])->name('projects');
+        Route::put('projects/{project}', [ProjectController::class, 'updateDetails'])->name('projects.update');
         Route::post('projects/{project}/sales', [ProjectController::class, 'storeReferral'])->name('projects.sales.store');
         Route::put('projects/{project}/sales/{sale}', [ProjectController::class, 'updateSale'])->name('projects.sales.update');
         Route::delete('projects/{project}/sales/{sale}', [ProjectController::class, 'destroySale'])->name('projects.sales.destroy');
