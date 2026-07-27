@@ -400,6 +400,18 @@ function BlankLeadDetail({ queueStatus }: { queueStatus?: string }) {
               <span>Years in house</span>
               <strong>—</strong>
             </div>
+            <div>
+              <span>House age</span>
+              <strong>—</strong>
+            </div>
+            <div>
+              <span>Needs financing?</span>
+              <strong>—</strong>
+            </div>
+            <div>
+              <span>House value</span>
+              <strong>—</strong>
+            </div>
             <div className="lead-detail-field--wide">
               <span>Address</span>
               <strong>
