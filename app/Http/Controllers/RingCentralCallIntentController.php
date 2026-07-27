@@ -5,11 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\RingCentralCall;
 use App\Services\RingCentralService;
-use App\Support\PhoneNumberVisibility;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use RuntimeException;
-use Throwable;
 use Illuminate\Validation\ValidationException;
 
 class RingCentralCallIntentController extends Controller
@@ -55,39 +52,10 @@ class RingCentralCallIntentController extends Controller
             'initiated_at' => now()->utc(),
         ]);
 
-        if (PhoneNumberVisibility::canView($user)) {
-            return response()->json(['id' => $call->id, 'dial_mode' => 'browser_widget'], 201);
-        }
-
-        try {
-            $ringOut = $ringCentral->ringOut($phone);
-            $call->update([
-                'telephony_session_id' => data_get($ringOut, 'id'),
-                'result' => data_get($ringOut, 'status.callStatus', 'InProgress'),
-            ]);
-        } catch (RuntimeException $exception) {
-            $call->update(['result' => 'Failed']);
-            report($exception);
-
-            return response()->json(
-                ['message' => $exception->getMessage()],
-                str_contains($exception->getMessage(), 'not configured') ? 503 : 502,
-            );
-        } catch (Throwable $exception) {
-            $call->update(['result' => 'Failed']);
-            report($exception);
-
-            return response()->json([
-                'message' => 'The call could not be started. Please try again.',
-            ], 502);
-        }
-
         return response()->json([
             'id' => $call->id,
-            'dial_mode' => 'secure_ringout',
-            'masked_phone' => PhoneNumberVisibility::mask($phone),
-            'message' => 'RingCentral is calling your configured phone. Answer it to connect to the customer.',
-            'call_status' => data_get($ringOut, 'status.callStatus', 'In progress'),
+            'dial_mode' => 'browser_widget',
+            'phone' => $phone,
         ], 201);
     }
 }

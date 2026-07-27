@@ -31,7 +31,7 @@ function secureRingCentralLead(Account $creator, array $overrides = []): Lead
     ]);
 }
 
-test('restricted users can dial a lead without submitting its phone number', function () {
+test('restricted users temporarily dial through the browser widget', function () {
     $account = Account::query()->create([
         'username' => 'restricted-ringcentral-agent',
         'password' => 'password',
@@ -54,13 +54,7 @@ test('restricted users can dial a lead without submitting its phone number', fun
         ->once()
         ->with('(555) 123-4567')
         ->andReturn('+15551234567');
-    $ringCentral->shouldReceive('ringOut')
-        ->once()
-        ->with('(555) 123-4567')
-        ->andReturn([
-            'id' => 'secure-call-123',
-            'status' => ['callStatus' => 'InProgress'],
-        ]);
+    $ringCentral->shouldNotReceive('ringOut');
     $this->app->instance(RingCentralService::class, $ringCentral);
 
     $response = $this->actingAs($account)
@@ -71,15 +65,12 @@ test('restricted users can dial a lead without submitting its phone number', fun
 
     $response->assertCreated()
         ->assertJson([
-            'dial_mode' => 'secure_ringout',
-            'masked_phone' => '*******567',
-            'call_status' => 'InProgress',
-        ])
-        ->assertJsonMissing(['phone' => '(555) 123-4567']);
+            'dial_mode' => 'browser_widget',
+            'phone' => '(555) 123-4567',
+        ]);
 
     expect(RingCentralCall::query()->first())
-        ->phone_number->toBe('(555) 123-4567')
-        ->telephony_session_id->toBe('secure-call-123');
+        ->phone_number->toBe('(555) 123-4567');
 });
 
 test('authorized users keep using the browser widget without starting ringout', function () {
