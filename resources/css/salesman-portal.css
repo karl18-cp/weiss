@@ -368,51 +368,102 @@
     touch-action: pan-y;
 }
 
-.salesman-portal .booking-timeline__content {
-    width: 100%;
-    min-width: 0;
+.booking-vertical__heading {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding: 0.75rem;
+    border-bottom: 1px solid #dce4ef;
+    color: #64748b;
+    background: #f8fafc;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
 }
 
-.salesman-portal .booking-timeline__header,
-.salesman-portal .booking-timeline__row {
+.booking-vertical__body {
+    display: grid;
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+}
+
+.booking-vertical__times {
+    background: #f8fafc;
+}
+
+.booking-vertical__times span {
+    display: block;
+    height: 72px;
+    padding: 0.55rem 0.45rem;
+    border-right: 1px solid #dce4ef;
+    border-bottom: 1px solid #e4eaf1;
+    color: #526076;
+    font-size: 0.6rem;
+    font-weight: 750;
+    text-align: right;
+}
+
+.booking-vertical__track {
+    position: relative;
+    height: 1152px;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 71px,
+        #e4eaf1 71px,
+        #e4eaf1 72px
+    );
+}
+
+.booking-vertical__track::after {
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 35px,
+        rgb(226 232 240 / 55%) 35px,
+        rgb(226 232 240 / 55%) 36px
+    );
+    content: "";
+    pointer-events: none;
+}
+
+.booking-vertical__track .booking-appointment {
+    right: 0.65rem;
+    left: 0.65rem;
+    width: auto !important;
+    min-height: 2.7rem;
+    max-height: none;
+}
+
+.booking-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    align-items: center;
+    justify-items: center;
+    padding: 1rem;
+    background: rgb(15 23 42 / 45%);
+    backdrop-filter: blur(3px);
+}
+
+.booking-selection.booking-selection--modal {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    width: min(31rem, 100%);
+    max-height: min(80dvh, 38rem);
     grid-template-columns: 1fr;
 }
 
-.salesman-portal .booking-timeline__hours {
-    display: none;
-}
-
-.salesman-portal .booking-timeline__corner,
-.salesman-portal .booking-salesman {
-    position: static;
+.booking-selection--modal .booking-selection__team {
     border-right: 0;
 }
 
-.salesman-portal .booking-time-track {
+.booking-selection--modal .booking-selection__actions {
     display: grid;
-    gap: 0.6rem;
-    overflow: visible;
-    padding: 0.7rem;
-    background-image: none;
-}
-
-.salesman-portal .booking-time-track::after {
-    display: none;
-}
-
-.salesman-portal .booking-appointment {
-    position: relative;
-    top: auto;
-    left: auto !important;
-    width: 100% !important;
-    max-width: none;
-    height: auto;
-    min-height: 4rem;
-}
-
-.salesman-portal .booking-appointment strong,
-.salesman-portal .booking-appointment span {
-    white-space: normal;
+    grid-template-columns: 1fr 1fr;
 }
 
 @media (max-width: 760px) {

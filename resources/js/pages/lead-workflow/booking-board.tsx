@@ -67,6 +67,7 @@ type BookingBoardProps = {
 const START_HOUR = 6;
 const END_HOUR = 22;
 const HOUR_WIDTH = 90;
+const VERTICAL_HOUR_HEIGHT = 72;
 const SALESMAN_COLORS = [
   "#2563eb",
   "#0f9f8f",
@@ -493,8 +494,85 @@ export default function BookingBoard({
           </div>
         </section>
 
-        <section className="booking-timeline">
+        <section
+          className={`booking-timeline ${
+            viewerRole === "salesman" ? "booking-timeline--vertical" : ""
+          }`}
+        >
           <div className="booking-timeline__scroll">
+            {viewerRole === "salesman" ? (
+              <div className="booking-vertical">
+                <div className="booking-vertical__heading">My Schedule</div>
+                <div className="booking-vertical__body">
+                  <div className="booking-vertical__times">
+                    {Array.from(
+                      { length: END_HOUR - START_HOUR },
+                      (_, index) => START_HOUR + index,
+                    ).map((hour) => (
+                      <span key={hour}>
+                        {new Intl.DateTimeFormat("en-US", {
+                          hour: "numeric",
+                        }).format(new Date(2026, 0, 1, hour))}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="booking-vertical__track">
+                    {dayLeads.map((lead) => {
+                      const date = appointmentDate(lead.appointment_at);
+                      const startMinutes =
+                        date.getHours() * 60 +
+                        date.getMinutes() -
+                        START_HOUR * 60;
+                      const top =
+                        (Math.max(0, startMinutes) / 60) *
+                        VERTICAL_HOUR_HEIGHT;
+                      const height =
+                        (Math.max(
+                          30,
+                          lead.appointment_duration_minutes || 60,
+                        ) /
+                          60) *
+                        VERTICAL_HOUR_HEIGHT;
+                      const assignedSalesmanId =
+                        lead.salesman_one?.salesman_id ??
+                        lead.salesman_two?.salesman_id ??
+                        null;
+
+                      return (
+                        <button
+                          type="button"
+                          key={lead.id}
+                          className={`booking-appointment is-${lead.status} ${
+                            selected?.id === lead.id ? "is-selected" : ""
+                          }`}
+                          style={
+                            {
+                              top,
+                              height,
+                              "--appointment-color": salesmanColor(
+                                assignedSalesmanId,
+                                salesmen,
+                              ),
+                            } as CSSProperties
+                          }
+                          onClick={() => setSelectedId(lead.id)}
+                        >
+                          <strong>{lead.customer_name}</strong>
+                          <span>
+                            {timeFormatter.format(date)} · {lead.city}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {dayLeads.length === 0 && (
+                      <div className="booking-timeline-empty">
+                        No appointments for this date.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div
               className="booking-timeline__content"
               style={
@@ -595,11 +673,28 @@ export default function BookingBoard({
                 </div>
               )}
             </div>
+            )}
           </div>
         </section>
 
         {selected && (
-          <aside className="booking-selection">
+          <div
+            className={viewerRole === "salesman" ? "booking-modal" : undefined}
+            role={viewerRole === "salesman" ? "presentation" : undefined}
+            onClick={
+              viewerRole === "salesman"
+                ? () => setSelectedId(null)
+                : undefined
+            }
+          >
+          <aside
+            className={`booking-selection ${
+              viewerRole === "salesman" ? "booking-selection--modal" : ""
+            }`}
+            role={viewerRole === "salesman" ? "dialog" : undefined}
+            aria-modal={viewerRole === "salesman" ? true : undefined}
+            onClick={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               className="booking-selection__close"
@@ -645,6 +740,7 @@ export default function BookingBoard({
               </Link>
             </div>
           </aside>
+          </div>
         )}
       </main>
     </>
