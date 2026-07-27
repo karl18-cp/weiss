@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { CalendarDays, LogOut, UsersRound } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import IdleSessionGuard from '@/components/idle-session-guard';
+import SalesmanPwaControls from '@/components/salesman-pwa-controls';
 import { logout } from '@/routes';
 import type { Auth } from '@/types';
 import '@/../css/salesman-portal.css';
@@ -16,7 +17,10 @@ const links = [
 ];
 
 export default function SalesmanLayout({ children }: PropsWithChildren) {
-    const { url, props } = usePage<{ auth: Auth }>();
+    const { url, props } = usePage<{
+        auth: Auth;
+        pwa: { pushPublicKey: string | null };
+    }>();
     const username = props.auth.user.username ?? props.auth.user.email;
 
     return (
@@ -43,6 +47,7 @@ export default function SalesmanLayout({ children }: PropsWithChildren) {
             </header>
 
             <main className="salesman-portal__content">{children}</main>
+            <SalesmanPwaControls publicKey={props.pwa.pushPublicKey} />
 
             <nav className="salesman-portal__nav" aria-label="Salesman navigation">
                 {links.map(({ label, href, icon: Icon }) => (

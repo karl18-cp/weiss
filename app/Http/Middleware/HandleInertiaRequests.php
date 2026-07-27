@@ -53,6 +53,11 @@ class HandleInertiaRequests extends Middleware
                     return $profile?->permissions()->pluck('access_level', 'module') ?? [];
                 },
             ],
+            'pwa' => [
+                'pushPublicKey' => fn () => $request->user()?->role === 'salesman'
+                    ? config('services.webpush.public_key')
+                    : null,
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'importResult' => fn () => $request->session()->get('importResult'),
             'workflowCounts' => function (): array {

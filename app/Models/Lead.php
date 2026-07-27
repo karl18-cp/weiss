@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\WebPushService;
 use App\Support\PhoneNumberVisibility;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -146,6 +147,8 @@ class Lead extends Model
                 ])->saveQuietly();
             }
 
+            $lead->sendSalesmanPushUpdates();
+
             if (! $lead->wasChanged('status') || ! Schema::hasTable('lead_movements')) {
                 return;
             }
@@ -156,5 +159,49 @@ class Lead extends Model
                 'moved_by' => auth()->id() ?: $lead->created_by,
             ]);
         });
+    }
+
+    private function sendSalesmanPushUpdates(): void
+    {
+        $assignmentChanged = $this->wasChanged(['salesman_1_id', 'salesman_2_id']);
+        $appointmentChanged = $this->wasChanged('appointment_at');
+
+        if (! $assignmentChanged && ! $appointmentChanged) {
+            return;
+        }
+
+        $currentIds = array_values(array_unique(array_filter([
+            $this->salesman_1_id,
+            $this->salesman_2_id,
+        ])));
+        $previousIds = array_values(array_unique(array_filter([
+            $this->getOriginal('salesman_1_id'),
+            $this->getOriginal('salesman_2_id'),
+        ])));
+        $recipientIds = $appointmentChanged
+            ? $currentIds
+            : array_values(array_diff($currentIds, $previousIds));
+
+        if ($recipientIds === []) {
+            return;
+        }
+
+        $title = $appointmentChanged ? 'Appointment updated' : 'New lead assigned';
+        $appointment = $this->appointment_at?->format('M j, Y \a\t g:i A');
+        $body = $appointment
+            ? "{$this->customer_name} — {$appointment}"
+            : $this->customer_name;
+        $push = app(WebPushService::class);
+
+        Salesman::query()
+            ->whereIn('salesman_id', $recipientIds)
+            ->whereNotNull('account_id')
+            ->pluck('account_id')
+            ->each(fn (int $accountId) => $push->sendToAccount(
+                $accountId,
+                $title,
+                $body,
+                "/salesman/leads?lead={$this->id}",
+            ));
     }
 }

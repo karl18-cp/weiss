@@ -4,6 +4,7 @@ use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Lead;
 use App\Models\LeadNote;
+use App\Models\PushSubscription;
 use App\Models\Salesman;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -59,8 +60,11 @@ test('the salesman leads page only returns assigned leads', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('salesman/leads')
             ->has('leads', 2)
-            ->where('leads.0.customer_name', 'Secondary Assignment')
-            ->where('leads.1.customer_name', 'Primary Assignment')
+            ->where('leads', fn ($leads) => collect($leads)
+                ->pluck('customer_name')
+                ->sort()
+                ->values()
+                ->all() === ['Primary Assignment', 'Secondary Assignment'])
             ->where('salesman.id', $salesman->salesman_id));
 });
 
@@ -138,4 +142,36 @@ test('salesmen can add appointment result notes only to assigned leads', functio
         ->assertForbidden();
 
     expect(LeadNote::query()->where('lead_id', $notAssigned->id)->exists())->toBeFalse();
+});
+
+test('salesmen can register and remove a phone push subscription', function () {
+    $account = Account::query()->create([
+        'username' => 'push-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    Salesman::query()->create([
+        'salesman_name' => 'Push Salesman',
+        'account_id' => $account->acc_id,
+    ]);
+    $endpoint = 'https://push.example.test/device/123';
+
+    $this->actingAs($account)
+        ->postJson(route('salesman.push-subscriptions.store'), [
+            'endpoint' => $endpoint,
+            'keys' => ['p256dh' => 'public-key', 'auth' => 'auth-token'],
+        ])
+        ->assertOk()
+        ->assertJson(['subscribed' => true]);
+
+    expect(PushSubscription::query()
+        ->where('account_id', $account->acc_id)
+        ->where('endpoint', $endpoint)
+        ->exists())->toBeTrue();
+
+    $this->actingAs($account)
+        ->deleteJson(route('salesman.push-subscriptions.destroy'), ['endpoint' => $endpoint])
+        ->assertNoContent();
+
+    expect(PushSubscription::query()->where('endpoint', $endpoint)->exists())->toBeFalse();
 });

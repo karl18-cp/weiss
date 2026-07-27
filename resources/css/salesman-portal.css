@@ -69,6 +69,51 @@
     padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
 }
 
+.salesman-pwa {
+    position: fixed;
+    right: 0.75rem;
+    bottom: calc(5.4rem + env(safe-area-inset-bottom));
+    z-index: 35;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    max-width: calc(100vw - 1.5rem);
+}
+
+.salesman-pwa button {
+    display: inline-flex;
+    min-height: 2.45rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #d9e2ee;
+    border-radius: 999px;
+    color: #23416e;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 5px 18px rgb(15 23 42 / 12%);
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+
+.salesman-pwa button:disabled {
+    opacity: 0.55;
+}
+
+.salesman-pwa button svg {
+    width: 0.85rem;
+}
+
+.salesman-pwa p {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.6rem;
+    color: #334155;
+    background: #fff;
+    box-shadow: 0 5px 18px rgb(15 23 42 / 12%);
+    font-size: 0.62rem;
+}
+
 .salesman-portal__nav {
     position: fixed;
     z-index: 90;

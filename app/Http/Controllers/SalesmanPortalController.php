@@ -48,6 +48,7 @@ class SalesmanPortalController extends Controller
                 'id' => $salesmanId,
                 'name' => $user->salesman->salesman_name,
             ],
+            'pushPublicKey' => config('services.webpush.public_key'),
         ]);
     }
 

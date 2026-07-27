@@ -21,6 +21,7 @@ use App\Http\Controllers\RingCentralCallStatusController;
 use App\Http\Controllers\RingCentralRecordingController;
 use App\Http\Controllers\SalesmanController;
 use App\Http\Controllers\SalesmanPortalController;
+use App\Http\Controllers\SalesmanPushSubscriptionController;
 use App\Http\Controllers\TeleHoursController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,12 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         ->name('salesman.leads');
     Route::post('salesman/leads/{lead}/appointment-result-notes', [SalesmanPortalController::class, 'storeAppointmentResultNote'])
         ->name('salesman.leads.appointment-result-notes.store');
+    Route::post('salesman/push-subscriptions', [SalesmanPushSubscriptionController::class, 'store'])
+        ->name('salesman.push-subscriptions.store');
+    Route::delete('salesman/push-subscriptions', [SalesmanPushSubscriptionController::class, 'destroy'])
+        ->name('salesman.push-subscriptions.destroy');
+    Route::post('salesman/push-subscriptions/test', [SalesmanPushSubscriptionController::class, 'test'])
+        ->name('salesman.push-subscriptions.test');
     Route::get('lead-search', LeadSearchController::class)->name('lead-search');
     Route::post('integrations/ringcentral/calls', RingCentralCallController::class)
         ->middleware('throttle:10,1')
