@@ -358,6 +358,63 @@
     padding-bottom: 1.5rem;
 }
 
+.salesman-portal .booking-timeline {
+    max-height: 58dvh;
+}
+
+.salesman-portal .booking-timeline__scroll {
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: pan-y;
+}
+
+.salesman-portal .booking-timeline__content {
+    width: 100%;
+    min-width: 0;
+}
+
+.salesman-portal .booking-timeline__header,
+.salesman-portal .booking-timeline__row {
+    grid-template-columns: 1fr;
+}
+
+.salesman-portal .booking-timeline__hours {
+    display: none;
+}
+
+.salesman-portal .booking-timeline__corner,
+.salesman-portal .booking-salesman {
+    position: static;
+    border-right: 0;
+}
+
+.salesman-portal .booking-time-track {
+    display: grid;
+    gap: 0.6rem;
+    overflow: visible;
+    padding: 0.7rem;
+    background-image: none;
+}
+
+.salesman-portal .booking-time-track::after {
+    display: none;
+}
+
+.salesman-portal .booking-appointment {
+    position: relative;
+    top: auto;
+    left: auto !important;
+    width: 100% !important;
+    max-width: none;
+    height: auto;
+    min-height: 4rem;
+}
+
+.salesman-portal .booking-appointment strong,
+.salesman-portal .booking-appointment span {
+    white-space: normal;
+}
+
 @media (max-width: 760px) {
     .salesman-leads {
         padding: 1rem;
