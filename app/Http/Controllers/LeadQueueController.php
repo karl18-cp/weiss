@@ -17,6 +17,18 @@ class LeadQueueController extends Controller
 {
     public function bookingBoard(Request $request): Response
     {
+        return $this->bookingBoardResponse($request, 'lead-workflow/booking-board');
+    }
+
+    public function salesmanBookingBoard(Request $request): Response
+    {
+        abort_unless($request->user()?->role === 'salesman', 403);
+
+        return $this->bookingBoardResponse($request, 'salesman/booking-board');
+    }
+
+    private function bookingBoardResponse(Request $request, string $page): Response
+    {
         $user = $request->user();
         $salesmanId = $user?->role === 'salesman'
             ? $user->salesman?->salesman_id
@@ -37,7 +49,7 @@ class LeadQueueController extends Controller
             });
         }
 
-        return Inertia::render('lead-workflow/booking-board', [
+        return Inertia::render($page, [
             'leads' => $leadQuery
                 ->with([
                     'company:com_id,company,prefix',
@@ -67,6 +79,9 @@ class LeadQueueController extends Controller
             ],
             'viewerRole' => $user?->role,
             'viewerSalesmanId' => $salesmanId,
+            'leadBaseUrl' => $user?->role === 'salesman'
+                ? '/salesman/leads'
+                : '/lead-workflow/leads-shop',
         ]);
     }
 

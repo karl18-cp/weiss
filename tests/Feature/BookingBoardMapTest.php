@@ -98,8 +98,9 @@ test('salesmen only receive their assigned bookings', function () {
     ]);
 
     $this->actingAs($salesmanAccount)
-        ->get(route('lead-workflow.booking-board'))
+        ->get(route('salesman.booking-board'))
         ->assertInertia(fn (Assert $page) => $page
+            ->component('salesman/booking-board')
             ->has('leads', 2)
             ->where('leads.0.customer_name', 'Visible Customer')
             ->where('leads.1.customer_name', 'Secondary Customer')
@@ -117,8 +118,21 @@ test('salesman accounts without a linked profile cannot see unassigned bookings'
     ]);
 
     $this->actingAs($account)
-        ->get(route('lead-workflow.booking-board'))
+        ->get(route('salesman.booking-board'))
         ->assertForbidden();
+});
+
+test('salesmen are redirected from the full crm into their dedicated workspace', function () {
+    $account = Account::query()->create([
+        'username' => 'portal-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    $account->salesman()->create(['salesman_name' => 'Portal Salesman']);
+
+    $this->actingAs($account)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('salesman.booking-board'));
 });
 
 test('confirmed leads do not appear until they are dispatched', function () {

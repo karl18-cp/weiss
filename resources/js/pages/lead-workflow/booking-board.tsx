@@ -61,6 +61,7 @@ type BookingBoardProps = {
   map: { key: string | null; styleUrl: string };
   viewerRole: string;
   viewerSalesmanId: number | null;
+  leadBaseUrl?: string;
 };
 
 const START_HOUR = 6;
@@ -268,6 +269,7 @@ export default function BookingBoard({
   map,
   viewerRole,
   viewerSalesmanId,
+  leadBaseUrl = "/lead-workflow/leads-shop",
 }: BookingBoardProps) {
   const visibleLeads = useMemo(
     () =>
@@ -638,7 +640,7 @@ export default function BookingBoard({
                 <Navigation />
                 Apple Maps
               </a>
-              <Link href={`/lead-workflow/leads-shop?lead=${selected.id}`}>
+              <Link href={`${leadBaseUrl}?lead=${selected.id}`}>
                 Open lead
               </Link>
             </div>

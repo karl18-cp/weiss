@@ -20,6 +20,7 @@ use App\Http\Controllers\RingCentralCallIntentController;
 use App\Http\Controllers\RingCentralCallStatusController;
 use App\Http\Controllers\RingCentralRecordingController;
 use App\Http\Controllers\SalesmanController;
+use App\Http\Controllers\SalesmanPortalController;
 use App\Http\Controllers\TeleHoursController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +28,11 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified', 'manager.permission'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::redirect('salesman', '/salesman/booking-board')->name('salesman.home');
+    Route::get('salesman/booking-board', [LeadQueueController::class, 'salesmanBookingBoard'])
+        ->name('salesman.booking-board');
+    Route::get('salesman/leads', [SalesmanPortalController::class, 'leads'])
+        ->name('salesman.leads');
     Route::get('lead-search', LeadSearchController::class)->name('lead-search');
     Route::post('integrations/ringcentral/calls', RingCentralCallController::class)
         ->middleware('throttle:10,1')

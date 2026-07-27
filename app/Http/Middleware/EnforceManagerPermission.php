@@ -17,6 +17,13 @@ class EnforceManagerPermission
         }
 
         $permissionPath = $request->path();
+        if ($user->role === 'salesman' && ! str_starts_with($permissionPath, 'salesman/')) {
+            if ($request->isMethod('GET')) {
+                return redirect()->route('salesman.booking-board');
+            }
+
+            abort(403, 'Salesman accounts use the dedicated salesman workspace.');
+        }
         if (! $request->isMethod('GET') && str_starts_with($permissionPath, 'lead-workflow/leads-shop/')) {
             $previousPath = parse_url(url()->previous(), PHP_URL_PATH);
             if (is_string($previousPath)) {
