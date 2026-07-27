@@ -1775,7 +1775,12 @@ export default function LeadsShop({
                     </span>
                     <div>
                       <small>Lead #{selected.id}</small>
-                      <h2>{selected.customer_name}</h2>
+                      <div className="lead-detail__name-row">
+                        <h2>{selected.customer_name}</h2>
+                        <span className="lead-header-source">
+                          {selected.source}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="lead-detail__controls">
@@ -2341,6 +2346,170 @@ export default function LeadsShop({
                             {selected.email || "—"}
                           </strong>
                         </div>
+                        {queue?.status === "dispatched" && (
+                          <div className="lead-dispatch-assignments">
+                            <label>
+                              <span>Assign another agent</span>
+                              <select
+                                className="lead-inline-assignment"
+                                value=""
+                                onChange={(event) =>
+                                  assignSecondAgent(event.target.value)
+                                }
+                              >
+                                <option value="">Select agent</option>
+                                {agents.map((agent) => (
+                                  <option
+                                    key={agent.agent_id}
+                                    value={agent.agent_id}
+                                    disabled={
+                                      selected.agent?.agent_id ===
+                                      agent.agent_id
+                                    }
+                                  >
+                                    {agent.agent_name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              <span>Appointment result</span>
+                              <div className="lead-inline-save-field">
+                                <select
+                                  className="lead-inline-assignment"
+                                  value={appointmentResultDraft}
+                                  onChange={(event) =>
+                                    setAppointmentResultDraft(event.target.value)
+                                  }
+                                >
+                                  <option value="">Select result</option>
+                                  <option value="PNS">PNS</option>
+                                  <option value="PNS No Rehash">
+                                    PNS No Rehash
+                                  </option>
+                                  <option value="2 ND Meeting">
+                                    2 ND Meeting
+                                  </option>
+                                  <option value="Salesman Sent">
+                                    Salesman Sent
+                                  </option>
+                                  <option value="Sold and Cancel">
+                                    Sold and Cancel
+                                  </option>
+                                </select>
+                                <button
+                                  type="button"
+                                  className="lead-inline-save"
+                                  onClick={saveAppointmentResult}
+                                  disabled={
+                                    savingAssignment !== null ||
+                                    appointmentResultDraft ===
+                                      (selected.appointment_result ?? "")
+                                  }
+                                  aria-label="Save appointment result"
+                                >
+                                  <Save />
+                                </button>
+                              </div>
+                            </label>
+                            <label>
+                              <span>Salesman 1</span>
+                              <div className="lead-inline-save-field">
+                                <select
+                                  className="lead-inline-assignment"
+                                  value={salesmanOneDraft}
+                                  onChange={(event) =>
+                                    setSalesmanOneDraft(event.target.value)
+                                  }
+                                >
+                                  <option value="">Unassigned</option>
+                                  {salesmen.map((salesman) => (
+                                    <option
+                                      key={salesman.salesman_id}
+                                      value={salesman.salesman_id}
+                                      disabled={
+                                        salesmanTwoDraft ===
+                                        String(salesman.salesman_id)
+                                      }
+                                    >
+                                      {salesman.salesman_name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  className="lead-inline-save"
+                                  onClick={() =>
+                                    saveSalesman("salesman_1_id")
+                                  }
+                                  disabled={
+                                    savingAssignment !== null ||
+                                    salesmanOneDraft ===
+                                      String(
+                                        selected.salesman_one?.salesman_id ??
+                                          "",
+                                      )
+                                  }
+                                  aria-label="Save salesman 1"
+                                >
+                                  <Save />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="lead-inline-save lead-inline-sms"
+                                  onClick={openSmsTemplate}
+                                  aria-label="Create SMS copy for this lead"
+                                >
+                                  <MessageCircle />
+                                </button>
+                              </div>
+                            </label>
+                            <label>
+                              <span>Salesman 2</span>
+                              <div className="lead-inline-save-field">
+                                <select
+                                  className="lead-inline-assignment"
+                                  value={salesmanTwoDraft}
+                                  onChange={(event) =>
+                                    setSalesmanTwoDraft(event.target.value)
+                                  }
+                                >
+                                  <option value="">Unassigned</option>
+                                  {salesmen.map((salesman) => (
+                                    <option
+                                      key={salesman.salesman_id}
+                                      value={salesman.salesman_id}
+                                      disabled={
+                                        salesmanOneDraft ===
+                                        String(salesman.salesman_id)
+                                      }
+                                    >
+                                      {salesman.salesman_name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  className="lead-inline-save"
+                                  onClick={() =>
+                                    saveSalesman("salesman_2_id")
+                                  }
+                                  disabled={
+                                    savingAssignment !== null ||
+                                    salesmanTwoDraft ===
+                                      String(
+                                        selected.salesman_two?.salesman_id ??
+                                          "",
+                                      )
+                                  }
+                                  aria-label="Save salesman 2"
+                                >
+                                  <Save />
+                                </button>
+                              </div>
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </article>
 
@@ -2384,7 +2553,7 @@ export default function LeadsShop({
                             <strong>{selected.agent?.agent_name ?? "—"}</strong>
                           </span>
                         </div>
-                        <div>
+                        <div className="lead-project-only-assignment">
                           <UserRound />
                           <span>
                             <small>Assign another agent</small>
@@ -2434,7 +2603,7 @@ export default function LeadsShop({
                             {["dispatched", "kit"].includes(
                               queue?.status ?? "",
                             ) && (
-                              <div>
+                              <div className="lead-project-only-assignment">
                                 <CalendarClock />
                                 <span>
                                   <small>Appointment result</small>
@@ -2481,7 +2650,7 @@ export default function LeadsShop({
                                 </span>
                               </div>
                             )}
-                            <div>
+                            <div className="lead-project-only-assignment">
                               <UserRound />
                               <span>
                                 <small>Salesman 1</small>
@@ -2538,7 +2707,7 @@ export default function LeadsShop({
                                 </div>
                               </span>
                             </div>
-                            <div>
+                            <div className="lead-project-only-assignment">
                               <UserRound />
                               <span>
                                 <small>Salesman 2</small>
@@ -2588,7 +2757,7 @@ export default function LeadsShop({
                             </div>
                           </>
                         )}
-                        <div>
+                        <div className="lead-project-only-source">
                           <Clock3 />
                           <span>
                             <small>Lead source</small>
