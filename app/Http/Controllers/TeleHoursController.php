@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\Lead;
+use App\Services\CallToolsReportingSync;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
@@ -15,8 +17,12 @@ class TeleHoursController extends Controller
 {
     private const LUNCH_STATUS_ID = '43069';
 
-    public function __invoke(Request $request): Response
-    {
+    public function __invoke(
+        Request $request,
+        CallToolsReportingSync $reportingSync,
+    ): Response {
+        $this->refreshLoginShiftsIfStale($reportingSync);
+
         $timezone = $this->timezone($request->string('timezone')->toString());
         $minimum = CarbonImmutable::parse(config('services.calltools.sync_start_date'), $timezone)->startOfDay();
         $today = CarbonImmutable::today($timezone);
@@ -93,8 +99,7 @@ class TeleHoursController extends Controller
 
                 foreach ($liveStatuses as $status) {
                     $alreadyHasOpenShift = $shifts->contains(
-                        fn (object $shift): bool =>
-                            (string) $shift->app_user_id === (string) $status->app_user_id
+                        fn (object $shift): bool => (string) $shift->app_user_id === (string) $status->app_user_id
                             && $shift->stopped_at === null,
                     );
 
@@ -194,8 +199,37 @@ class TeleHoursController extends Controller
 
     private function date(string $value, mixed $fallback, string $timezone): CarbonImmutable
     {
-        try { return $value !== '' ? CarbonImmutable::parse($value, $timezone) : CarbonImmutable::parse($fallback, $timezone); }
-        catch (\Throwable) { return CarbonImmutable::parse($fallback, $timezone); }
+        try {
+            return $value !== '' ? CarbonImmutable::parse($value, $timezone) : CarbonImmutable::parse($fallback, $timezone);
+        } catch (\Throwable) {
+            return CarbonImmutable::parse($fallback, $timezone);
+        }
+    }
+
+    private function refreshLoginShiftsIfStale(
+        CallToolsReportingSync $reportingSync,
+    ): void {
+        if (! Schema::hasTable('calltools_sync_states')) {
+            return;
+        }
+
+        $lastSuccess = DB::table('calltools_sync_states')
+            ->where('key', 'login_shifts_last_success_at')
+            ->value('value');
+
+        try {
+            if (
+                $lastSuccess
+                && CarbonImmutable::parse($lastSuccess)->greaterThan(now()->subSeconds(45))
+            ) {
+                return;
+            }
+
+            Cache::lock('calltools-login-shifts-report-refresh', 55)
+                ->get(fn () => $reportingSync->syncLoginShifts(2));
+        } catch (\Throwable $error) {
+            report($error);
+        }
     }
 
     private function loginCoverage(string $timezone): array

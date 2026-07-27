@@ -9,9 +9,6 @@ type LoginDay = {
     agent_name: string;
     shift_date: string;
     first_login_at?: string | null;
-    first_logout_at?: string | null;
-    second_login_at?: string | null;
-    second_logout_at?: string | null;
     last_logout_at?: string | null;
     logged_seconds: number;
     lunch_seconds: number;
@@ -291,22 +288,12 @@ export default function TeleHours({
                                             ? dateTime(day.first_login_at)
                                             : 'No login recorded'}
                                     </span>
-                                    <span className="tele-hours-session-boundary">
-                                        {!day.first_logout_at
-                                            ? '—'
-                                            : dateTime(day.first_logout_at)}
-                                    </span>
-                                    <span className="tele-hours-session-boundary">
-                                        {day.second_login_at
-                                            ? dateTime(day.second_login_at)
-                                            : '—'}
-                                    </span>
                                     <span className="tele-hours-day-only">
-                                        {day.second_login_at
-                                            ? day.second_logout_at
-                                                ? dateTime(day.second_logout_at)
-                                                : 'Still logged in'
-                                            : '—'}
+                                        {day.last_logout_at
+                                            ? dateTime(day.last_logout_at)
+                                            : day.first_login_at
+                                              ? 'Still logged in'
+                                              : '—'}
                                     </span>
                                     <strong>{day.leads_sent}</strong>
                                     <span>{hours(day.lunch_seconds)}</span>
