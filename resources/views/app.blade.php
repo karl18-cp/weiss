@@ -50,7 +50,7 @@
         <x-inertia::app />
 
         @auth
-            @if (config('services.ringcentral.embeddable_client_id'))
+            @if (auth()->user()->role !== 'salesman' && config('services.ringcentral.embeddable_client_id'))
                 <script
                     src="https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/adapter.js?clientId={{ urlencode(config('services.ringcentral.embeddable_client_id')) }}"
                     async
