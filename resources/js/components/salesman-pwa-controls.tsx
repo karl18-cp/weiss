@@ -82,7 +82,7 @@ export default function SalesmanPwaControls({
                     applicationServerKey: decodeKey(publicKey),
                 }));
 
-            await fetch('/salesman/push-subscriptions', {
+            const response = await fetch('/salesman/push-subscriptions', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -92,7 +92,13 @@ export default function SalesmanPwaControls({
                 },
                 body: JSON.stringify(subscription.toJSON()),
             });
-            await fetch('/salesman/push-subscriptions/test', {
+            if (!response.ok) {
+                throw new Error(
+                    `The phone could not be registered (${response.status}).`,
+                );
+            }
+
+            const testResponse = await fetch('/salesman/push-subscriptions/test', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -100,9 +106,21 @@ export default function SalesmanPwaControls({
                     'X-CSRF-TOKEN': csrfToken(),
                 },
             });
+            if (!testResponse.ok) {
+                throw new Error(
+                    `The test notification could not be sent (${testResponse.status}).`,
+                );
+            }
 
             setSubscribed(true);
             setMessage('Notifications enabled on this phone.');
+        } catch (error) {
+            setSubscribed(false);
+            setMessage(
+                error instanceof Error
+                    ? error.message
+                    : 'This phone could not enable notifications.',
+            );
         } finally {
             setBusy(false);
         }
@@ -148,6 +166,11 @@ export default function SalesmanPwaControls({
                 {subscribed ? 'Disable alerts' : 'Enable alerts'}
             </button>
             {message && <p>{message}</p>}
+            {!subscribed && !message && (
+                <p className="salesman-pwa__warning">
+                    Phone alerts are off. Install the app, then tap Enable alerts.
+                </p>
+            )}
         </div>
     );
 }

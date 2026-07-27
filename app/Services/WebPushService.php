@@ -9,13 +9,13 @@ use Throwable;
 
 class WebPushService
 {
-    public function sendToAccount(int $accountId, string $title, string $body, string $url = '/salesman/booking-board'): void
+    public function sendToAccount(int $accountId, string $title, string $body, string $url = '/salesman/booking-board'): int
     {
         $publicKey = config('services.webpush.public_key');
         $privateKey = config('services.webpush.private_key');
 
         if (! $publicKey || ! $privateKey) {
-            return;
+            return 0;
         }
 
         $webPush = new WebPush([
@@ -34,9 +34,10 @@ class WebPushService
             'badge' => '/pwa/icon-192.png',
         ], JSON_THROW_ON_ERROR);
 
+        $sent = 0;
         PushSubscriptionModel::query()
             ->where('account_id', $accountId)
-            ->each(function (PushSubscriptionModel $stored) use ($webPush, $payload): void {
+            ->each(function (PushSubscriptionModel $stored) use ($webPush, $payload, &$sent): void {
                 try {
                     $report = $webPush->sendOneNotification(
                         Subscription::create([
@@ -50,10 +51,14 @@ class WebPushService
 
                     if ($report->isSubscriptionExpired()) {
                         $stored->delete();
+                    } elseif ($report->isSuccess()) {
+                        $sent++;
                     }
                 } catch (Throwable $exception) {
                     report($exception);
                 }
             });
+
+        return $sent;
     }
 }

@@ -23,3 +23,7 @@ Schedule::command('ringcentral:sync-recordings')
 Schedule::command('leads:geocode --all --limit=25')
     ->everyMinute()
     ->withoutOverlapping(5);
+
+Schedule::command('push:appointment-reminders')
+    ->everyMinute()
+    ->withoutOverlapping(5);

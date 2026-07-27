@@ -472,11 +472,14 @@
     padding-bottom: 1.5rem;
 }
 
-.salesman-portal .booking-timeline {
-    max-height: 58dvh;
+.salesman-portal .booking-timeline.booking-timeline--vertical {
+    height: min(64dvh, 42rem);
+    min-height: 24rem;
+    max-height: none;
 }
 
 .salesman-portal .booking-timeline__scroll {
+    height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
     touch-action: pan-y;
