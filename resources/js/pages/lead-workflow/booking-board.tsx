@@ -65,6 +65,7 @@ type BookingBoardProps = {
 };
 
 const START_HOUR = 6;
+const SALESMAN_START_HOUR = 9;
 const END_HOUR = 22;
 const HOUR_WIDTH = 90;
 const VERTICAL_HOUR_HEIGHT = 72;
@@ -506,8 +507,8 @@ export default function BookingBoard({
                 <div className="booking-vertical__body">
                   <div className="booking-vertical__times">
                     {Array.from(
-                      { length: END_HOUR - START_HOUR },
-                      (_, index) => START_HOUR + index,
+                      { length: END_HOUR - SALESMAN_START_HOUR },
+                      (_, index) => SALESMAN_START_HOUR + index,
                     ).map((hour) => (
                       <span key={hour}>
                         {new Intl.DateTimeFormat("en-US", {
@@ -517,12 +518,18 @@ export default function BookingBoard({
                     ))}
                   </div>
                   <div className="booking-vertical__track">
-                    {dayLeads.map((lead) => {
+                    {dayLeads
+                      .filter(
+                        (lead) =>
+                          appointmentDate(lead.appointment_at).getHours() >=
+                          SALESMAN_START_HOUR,
+                      )
+                      .map((lead) => {
                       const date = appointmentDate(lead.appointment_at);
                       const startMinutes =
                         date.getHours() * 60 +
                         date.getMinutes() -
-                        START_HOUR * 60;
+                        SALESMAN_START_HOUR * 60;
                       const top =
                         (Math.max(0, startMinutes) / 60) *
                         VERTICAL_HOUR_HEIGHT;
@@ -564,7 +571,11 @@ export default function BookingBoard({
                         </button>
                       );
                     })}
-                    {dayLeads.length === 0 && (
+                    {dayLeads.filter(
+                      (lead) =>
+                        appointmentDate(lead.appointment_at).getHours() >=
+                        SALESMAN_START_HOUR,
+                    ).length === 0 && (
                       <div className="booking-timeline-empty">
                         No appointments for this date.
                       </div>
