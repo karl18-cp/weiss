@@ -815,12 +815,20 @@
 }
 
 .lead-detail__grid--dispatch .lead-summary-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem 0.6rem;
+  grid-template-columns: 1fr;
+  gap: 0.55rem;
 }
 
 .lead-detail__grid--dispatch .lead-summary-list > div {
   align-items: flex-start;
+}
+
+.lead-detail__grid--dispatch .lead-summary-list strong {
+  overflow: visible;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .lead-detail__grid--three-notes {
@@ -1988,8 +1996,7 @@
   }
 }
 @media (max-width: 900px) {
-  .lead-detail__grid--dispatch .lead-detail-fields,
-  .lead-detail__grid--dispatch .lead-summary-list {
+  .lead-detail__grid--dispatch .lead-detail-fields {
     grid-template-columns: 1fr;
   }
 
