@@ -26,9 +26,13 @@ class LeadRequest extends FormRequest
             'state' => ['required', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'years_in_house' => ['required', 'integer', 'min:0', 'max:150'],
-            'house_age' => ['required', 'integer', 'min:0', 'max:500'],
-            'needs_financing' => ['required', 'boolean'],
-            'house_value' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
+            // Legacy leads may already be in downstream queues without these
+            // newer qualification fields. Do not block an unrelated edit there;
+            // updateStatus() still requires them before a Leads Shop lead moves
+            // into a downstream queue.
+            'house_age' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'needs_financing' => ['nullable', 'boolean'],
+            'house_value' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
             'product_id' => ['required', 'integer', 'exists:products,prod_id'],
             'appointment_at' => ['required', 'date'],
             'appointment_result' => ['nullable', 'string', 'in:PNS,PNS No Rehash,2 ND Meeting,Salesman Sent,Sold and Cancel'],
