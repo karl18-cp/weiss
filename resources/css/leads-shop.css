@@ -207,12 +207,15 @@
 
 .lead-date-row strong {
   justify-self: end;
-  min-width: 1.25rem;
-  padding: 0.15rem 0.25rem;
+  min-width: 1.6rem;
+  min-height: 1.6rem;
+  padding: 0.2rem 0.4rem;
   border-radius: 999px;
   color: #536177;
   background: #e9edf4;
-  font-size: 0.56rem;
+  font-size: 0.75rem;
+  font-weight: 850;
+  line-height: 1;
   text-align: center;
 }
 
