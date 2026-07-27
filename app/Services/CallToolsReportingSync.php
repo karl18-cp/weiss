@@ -61,20 +61,28 @@ class CallToolsReportingSync
             $dateField = $type === 'calls' ? 'start' : 'created_on';
             $eligible = $rows->filter(function (array $row) use ($dateField, $cutoff, &$stopped, &$latest): bool {
                 $date = $this->date($row[$dateField] ?? null);
-                if ($date && (! $latest || $date->greaterThan($latest))) $latest = $date;
+                if ($date && (! $latest || $date->greaterThan($latest))) {
+                    $latest = $date;
+                }
                 if ($date && $date->lessThan($cutoff)) {
                     $stopped = true;
+
                     return false;
                 }
 
                 return $date !== null;
             });
 
-            if ($type === 'calls') $this->upsertCalls($eligible->all());
-            else $this->upsertDispositions($eligible->all());
+            if ($type === 'calls') {
+                $this->upsertCalls($eligible->all());
+            } else {
+                $this->upsertDispositions($eligible->all());
+            }
             $processed += $eligible->count();
 
-            if ($stopped || empty($json['next'])) break;
+            if ($stopped || empty($json['next'])) {
+                break;
+            }
         }
 
         if (! $complete) {
@@ -85,7 +93,9 @@ class CallToolsReportingSync
                 $this->state($backfillKey, (string) $page);
             }
         }
-        if ($latest) $this->state("{$type}_latest_at", $latest->toIso8601String());
+        if ($latest) {
+            $this->state("{$type}_latest_at", $latest->toIso8601String());
+        }
 
         return ['processed' => $processed, 'backfill_complete' => $complete || $stopped, 'next_page' => $stopped ? null : $page];
     }
@@ -128,9 +138,12 @@ class CallToolsReportingSync
 
             $eligible = $rows->filter(function (array $row) use ($cutoff, &$stopped, &$latest): bool {
                 $date = $this->date($row['start'] ?? $row['created_on'] ?? null);
-                if ($date && (! $latest || $date->greaterThan($latest))) $latest = $date;
+                if ($date && (! $latest || $date->greaterThan($latest))) {
+                    $latest = $date;
+                }
                 if ($date && $date->lessThan($cutoff)) {
                     $stopped = true;
+
                     return false;
                 }
 
@@ -140,7 +153,9 @@ class CallToolsReportingSync
             $this->upsertLoginShifts($eligible->all());
             $processed += $eligible->count();
 
-            if ($stopped || empty($json['next'])) break;
+            if ($stopped || empty($json['next'])) {
+                break;
+            }
         }
 
         if (! $complete) {
@@ -151,7 +166,9 @@ class CallToolsReportingSync
                 $this->state($backfillKey, (string) $page);
             }
         }
-        if ($latest) $this->state('login_shifts_latest_at', $latest->toIso8601String());
+        if ($latest) {
+            $this->state('login_shifts_latest_at', $latest->toIso8601String());
+        }
 
         return ['processed' => $processed, 'backfill_complete' => $complete || $stopped, 'next_page' => $stopped ? null : $page];
     }
@@ -181,7 +198,9 @@ class CallToolsReportingSync
             'created_at' => $now,
             'updated_at' => $now,
         ])->filter(fn (array $row) => $row['calltools_id'] && $row['uuid'] !== '')->values()->all();
-        if ($data !== []) DB::table('calltools_calls')->upsert($data, ['calltools_id'], array_diff(array_keys($data[0]), ['calltools_id', 'created_at']));
+        if ($data !== []) {
+            DB::table('calltools_calls')->upsert($data, ['calltools_id'], array_diff(array_keys($data[0]), ['calltools_id', 'created_at']));
+        }
     }
 
     private function upsertDispositions(array $rows): void
@@ -199,7 +218,9 @@ class CallToolsReportingSync
             'created_at' => $now,
             'updated_at' => $now,
         ])->filter(fn (array $row) => $row['calltools_id'])->values()->all();
-        if ($data !== []) DB::table('calltools_dispositions')->upsert($data, ['calltools_id'], array_diff(array_keys($data[0]), ['calltools_id', 'created_at']));
+        if ($data !== []) {
+            DB::table('calltools_dispositions')->upsert($data, ['calltools_id'], array_diff(array_keys($data[0]), ['calltools_id', 'created_at']));
+        }
     }
 
     private function upsertLoginShifts(array $rows): void
@@ -216,11 +237,13 @@ class CallToolsReportingSync
             'updated_at' => $now,
         ])->filter(fn (array $row) => $row['calltools_id'] && $row['app_user_id'] && $row['started_at'])->values()->all();
 
-        if ($data !== []) DB::table('calltools_user_login_shifts')->upsert(
-            $data,
-            ['calltools_id'],
-            ['app_user_id', 'started_at', 'stopped_at', 'duration_seconds', 'calltools_created_at', 'updated_at'],
-        );
+        if ($data !== []) {
+            DB::table('calltools_user_login_shifts')->upsert(
+                $data,
+                ['calltools_id'],
+                ['app_user_id', 'started_at', 'stopped_at', 'duration_seconds', 'calltools_created_at', 'updated_at'],
+            );
+        }
     }
 
     private function syncAgents(): int
@@ -230,7 +253,9 @@ class CallToolsReportingSync
         foreach ($this->results($json) as $row) {
             $id = $this->externalId($row['app_user'] ?? null);
             $name = trim((string) ($row['full_name'] ?? ''));
-            if (! $id || $name === '') continue;
+            if (! $id || $name === '') {
+                continue;
+            }
             $matches = Agent::query()->get()->filter(fn (Agent $agent): bool => $this->namesMatch($agent->agent_name, $name));
             if ($matches->count() === 1) {
                 $matches->first()->update(['calltools_user_id' => $id]);
@@ -255,7 +280,9 @@ class CallToolsReportingSync
             'updated_at' => $now,
             'created_at' => $now,
         ])->filter(fn (array $row) => $row['external_id'])->values()->all();
-        if ($rows !== []) DB::table('calltools_disposition_definitions')->upsert($rows, ['external_id'], ['name', 'button_color', 'text_color', 'hang_up_call', 'no_contact', 'updated_at']);
+        if ($rows !== []) {
+            DB::table('calltools_disposition_definitions')->upsert($rows, ['external_id'], ['name', 'button_color', 'text_color', 'hang_up_call', 'no_contact', 'updated_at']);
+        }
 
         return count($rows);
     }
@@ -287,9 +314,53 @@ class CallToolsReportingSync
             'created_at' => $now,
             'updated_at' => $now,
         ])->filter(fn (array $row) => $row['app_user_id'])->values()->all();
-        if ($rows !== []) DB::table('calltools_agent_daily_metrics')->upsert($rows, ['app_user_id', 'metric_date'], array_diff(array_keys($rows[0]), ['app_user_id', 'metric_date', 'created_at']));
+        if ($rows !== []) {
+            DB::table('calltools_agent_daily_metrics')->upsert($rows, ['app_user_id', 'metric_date'], array_diff(array_keys($rows[0]), ['app_user_id', 'metric_date', 'created_at']));
+        }
+        $this->reconcileOpenLoginShifts($rows, $now);
 
         return count($rows);
+    }
+
+    private function reconcileOpenLoginShifts(array $statuses, CarbonImmutable $capturedAt): void
+    {
+        if (! Schema::hasTable('calltools_user_login_shifts')) {
+            return;
+        }
+
+        $statusesByUser = collect($statuses)->keyBy('app_user_id');
+        $openShifts = DB::table('calltools_user_login_shifts')
+            ->whereNull('stopped_at')
+            ->orderBy('app_user_id')
+            ->orderBy('started_at')
+            ->get(['id', 'app_user_id', 'started_at'])
+            ->groupBy('app_user_id');
+
+        foreach ($openShifts as $appUserId => $sessions) {
+            $status = $statusesByUser->get((string) $appUserId);
+            $ordered = $sessions->values();
+
+            foreach ($ordered as $index => $session) {
+                $startedAt = CarbonImmutable::parse($session->started_at, 'UTC');
+                $nextSession = $ordered->get($index + 1);
+                $stoppedAt = $nextSession
+                    ? CarbonImmutable::parse($nextSession->started_at, 'UTC')
+                    : (($status !== null && ! $status['logged_in']) ? $capturedAt : null);
+
+                if (! $stoppedAt || ! $stoppedAt->greaterThan($startedAt)) {
+                    continue;
+                }
+
+                DB::table('calltools_user_login_shifts')
+                    ->where('id', $session->id)
+                    ->whereNull('stopped_at')
+                    ->update([
+                        'stopped_at' => $stoppedAt->format('Y-m-d H:i:s'),
+                        'duration_seconds' => $startedAt->diffInSeconds($stoppedAt),
+                        'updated_at' => $capturedAt,
+                    ]);
+            }
+        }
     }
 
     private function recordStatusIntervals(array $rows, mixed $capturedAt): void
@@ -335,7 +406,9 @@ class CallToolsReportingSync
     private function get(string $path, array $query): array
     {
         $response = $this->request()->get(rtrim(config('services.calltools.api_base_url'), '/').$path, $query);
-        if (! $response->successful()) throw new RuntimeException("CallTools {$path} returned HTTP {$response->status()}.");
+        if (! $response->successful()) {
+            throw new RuntimeException("CallTools {$path} returned HTTP {$response->status()}.");
+        }
 
         return $response->json() ?: [];
     }
@@ -347,7 +420,9 @@ class CallToolsReportingSync
 
     private function assertConfigured(): void
     {
-        if (! config('services.calltools.api_base_url') || ! config('services.calltools.api_key')) throw new RuntimeException('CallTools API configuration is missing.');
+        if (! config('services.calltools.api_base_url') || ! config('services.calltools.api_key')) {
+            throw new RuntimeException('CallTools API configuration is missing.');
+        }
     }
 
     private function state(string $key, ?string $value): void
@@ -363,16 +438,25 @@ class CallToolsReportingSync
     private function id(mixed $value): ?int
     {
         $value = is_array($value) ? Arr::first(Arr::only($value, ['id', 'app_user', 'pk'])) : $value;
-        if (is_string($value) && preg_match('~/(\d+)/?$~', $value, $match)) return (int) $match[1];
+        if (is_string($value) && preg_match('~/(\d+)/?$~', $value, $match)) {
+            return (int) $match[1];
+        }
+
         return is_numeric($value) ? (int) $value : null;
     }
 
     private function externalId(mixed $value): ?string
     {
-        if (is_array($value)) $value = Arr::first(Arr::only($value, ['id', 'app_user', 'pk', 'uuid']));
-        if (! is_scalar($value) || trim((string) $value) === '') return null;
+        if (is_array($value)) {
+            $value = Arr::first(Arr::only($value, ['id', 'app_user', 'pk', 'uuid']));
+        }
+        if (! is_scalar($value) || trim((string) $value) === '') {
+            return null;
+        }
         $value = trim((string) $value);
-        if (str_contains($value, '/')) $value = basename(rtrim($value, '/'));
+        if (str_contains($value, '/')) {
+            $value = basename(rtrim($value, '/'));
+        }
 
         return mb_substr($value, 0, 191);
     }
@@ -389,28 +473,46 @@ class CallToolsReportingSync
         $tokens = fn (string $name): array => preg_split('/\s+/', mb_strtolower(trim(preg_replace('/[^\pL\pN\s]/u', '', $name)))) ?: [];
         $left = $tokens($local);
         $right = $tokens($remote);
-        if (implode(' ', $left) === implode(' ', $right)) return true;
-        if (count($left) < 2 || count($right) < 2 || $left[0] !== $right[0]) return false;
+        if (implode(' ', $left) === implode(' ', $right)) {
+            return true;
+        }
+        if (count($left) < 2 || count($right) < 2 || $left[0] !== $right[0]) {
+            return false;
+        }
 
         return mb_substr(end($left), 0, 1) === mb_substr(end($right), 0, 1);
     }
 
     private function text(mixed $value): ?string
     {
-        if (is_array($value)) $value = $value['name'] ?? $value['label'] ?? $value['id'] ?? null;
+        if (is_array($value)) {
+            $value = $value['name'] ?? $value['label'] ?? $value['id'] ?? null;
+        }
+
         return is_scalar($value) && trim((string) $value) !== '' ? trim((string) $value) : null;
     }
 
     private function date(mixed $value): ?CarbonImmutable
     {
-        if (! is_scalar($value) || trim((string) $value) === '') return null;
-        try { return CarbonImmutable::parse((string) $value)->utc(); } catch (\Throwable) { return null; }
+        if (! is_scalar($value) || trim((string) $value) === '') {
+            return null;
+        }
+        try {
+            return CarbonImmutable::parse((string) $value)->utc();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function seconds(mixed $value): int
     {
-        if (is_numeric($value)) return max(0, (int) $value);
-        if (is_string($value) && preg_match('/^(\d+):(\d{2}):(\d{2})$/', $value, $match)) return ((int) $match[1] * 3600) + ((int) $match[2] * 60) + (int) $match[3];
+        if (is_numeric($value)) {
+            return max(0, (int) $value);
+        }
+        if (is_string($value) && preg_match('/^(\d+):(\d{2}):(\d{2})$/', $value, $match)) {
+            return ((int) $match[1] * 3600) + ((int) $match[2] * 60) + (int) $match[3];
+        }
+
         return 0;
     }
 }
