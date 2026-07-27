@@ -17,11 +17,10 @@ class RingCentralRecordingSync
         $calls = RingCentralCall::query()
             ->where('initiated_at', '>=', now()->subDays(2))
             ->where('initiated_at', '<=', now()->subSeconds(15))
-            ->where(function ($query): void {
-                $query->whereNull('matched_at')->orWhere(function ($query): void {
-                    $query->whereNotNull('recording_id')->whereNull('recording_path');
-                });
-            })
+            // RingCentral can add recording metadata after the completed call first
+            // appears in the call log. Keep revisiting calls without archived audio
+            // so a call matched too early is not permanently skipped.
+            ->whereNull('recording_path')
             ->oldest('initiated_at')
             ->get();
 
