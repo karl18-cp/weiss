@@ -177,6 +177,19 @@
     color: #a321b2;
     background: #fff;
 }
+.tele-hours-filters .tele-hours-export {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border: 1px solid #7e22ce;
+    background: #6f21bb;
+    white-space: nowrap;
+}
+.tele-hours-filters .tele-hours-export svg {
+    width: 0.9rem;
+    height: 0.9rem;
+}
 .tele-hours-coverage {
     margin: -0.65rem 0 -0.35rem;
     padding-inline: 0.25rem;

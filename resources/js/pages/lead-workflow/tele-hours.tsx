@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { Activity, Clock3, History, PhoneCall } from 'lucide-react';
+import { Activity, Clock3, Download, History, PhoneCall } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import '@/../css/tele-hours.css';
 
@@ -54,6 +54,150 @@ const dateTime = (value: string) => {
     return new Date(normalized).toLocaleString();
 };
 
+const pdfSafe = (value: string) =>
+    value
+        .normalize('NFKD')
+        .replace(/[^\x20-\x7e]/g, '')
+        .replace(/\\/g, '\\\\')
+        .replace(/\(/g, '\\(')
+        .replace(/\)/g, '\\)');
+
+const shortPdfText = (value: string, limit: number) =>
+    value.length > limit ? `${value.slice(0, Math.max(0, limit - 3))}...` : value;
+
+const createTeleReportPdf = (
+    loginDays: LoginDay[],
+    filters: Filters,
+    agentName: string,
+) => {
+    const rowsPerPage = 17;
+    const pages = Array.from(
+        { length: Math.max(1, Math.ceil(loginDays.length / rowsPerPage)) },
+        (_, page) => loginDays.slice(page * rowsPerPage, (page + 1) * rowsPerPage),
+    );
+    const reportPeriod =
+        filters.from === filters.to
+            ? `Report date: ${filters.from}`
+            : `Report range: ${filters.from} through ${filters.to}`;
+    const generatedAt = new Date().toLocaleString();
+    const totalNetSeconds = loginDays.reduce(
+        (total, day) => total + Math.max(0, day.logged_seconds - day.lunch_seconds),
+        0,
+    );
+    const fontId = 3 + pages.length * 2;
+    const objects: string[] = [];
+    const text = (x: number, y: number, size: number, value: string) =>
+        `BT /F1 ${size} Tf ${x} ${y} Td (${pdfSafe(value)}) Tj ET\n`;
+
+    objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+    objects[2] = `<< /Type /Pages /Count ${pages.length} /Kids [${pages
+        .map((_, index) => `${3 + index * 2} 0 R`)
+        .join(' ')}] >>`;
+
+    pages.forEach((pageRows, pageIndex) => {
+        const pageId = 3 + pageIndex * 2;
+        const contentId = pageId + 1;
+        let content = '';
+
+        content += '0.64 0.13 0.70 rg\n0 552 792 60 re f\n';
+        content += '1 1 1 rg\n';
+        content += text(32, 580, 18, 'Weiss CRM - Tele Report');
+        content += text(32, 562, 9, `${reportPeriod} | Timezone: ${filters.timezone}`);
+        content += '0.12 0.16 0.25 rg\n';
+        content += text(32, 535, 9, `Agent: ${agentName}`);
+        content += text(
+            290,
+            535,
+            9,
+            `Total net hours: ${(totalNetSeconds / 3600).toFixed(1)}h`,
+        );
+        content += text(590, 535, 8, `Generated: ${generatedAt}`);
+        content += '0.97 0.93 0.98 rg\n32 498 728 24 re f\n';
+        content += '0.25 0.18 0.33 rg\n';
+
+        const headers = [
+            [38, 'Date'],
+            [112, 'Agent'],
+            [225, 'First login'],
+            [355, 'Final logout'],
+            [485, 'Leads'],
+            [535, 'Lunch'],
+            [595, 'Net'],
+            [650, 'Sessions'],
+        ] as const;
+        headers.forEach(([x, label]) => {
+            content += text(x, 507, 8, label);
+        });
+
+        pageRows.forEach((day, rowIndex) => {
+            const y = 482 - rowIndex * 25;
+            if (rowIndex % 2 === 1) {
+                content += '0.98 0.98 0.99 rg\n32 ' + (y - 8) + ' 728 23 re f\n';
+            }
+            content += '0.15 0.20 0.30 rg\n';
+            const firstLogin = day.first_login_at
+                ? dateTime(day.first_login_at)
+                : 'No login';
+            const finalLogout = day.last_logout_at
+                ? dateTime(day.last_logout_at)
+                : day.first_login_at
+                  ? 'Still logged in'
+                  : '-';
+            const values = [
+                [38, shortPdfText(day.shift_date, 18)],
+                [112, shortPdfText(day.agent_name ?? 'Unmapped', 18)],
+                [225, shortPdfText(firstLogin, 22)],
+                [355, shortPdfText(finalLogout, 22)],
+                [485, String(day.leads_sent)],
+                [535, hours(day.lunch_seconds)],
+                [595, hours(Math.max(0, day.logged_seconds - day.lunch_seconds))],
+                [650, String(day.sessions)],
+            ] as const;
+            values.forEach(([x, value]) => {
+                content += text(x, y, 8, value);
+            });
+            content += `0.88 0.88 0.91 RG\n32 ${y - 10} m 760 ${y - 10} l S\n`;
+        });
+
+        if (pageRows.length === 0) {
+            content += text(32, 470, 10, 'No imported login sessions in this range.');
+        }
+        content += text(690, 22, 8, `Page ${pageIndex + 1} of ${pages.length}`);
+
+        objects[pageId] =
+            `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] ` +
+            `/Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`;
+        objects[contentId] = `<< /Length ${new TextEncoder().encode(content).length} >>\nstream\n${content}endstream`;
+    });
+    objects[fontId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+    let pdf = '%PDF-1.4\n';
+    const offsets: number[] = [0];
+    for (let id = 1; id <= fontId; id += 1) {
+        offsets[id] = new TextEncoder().encode(pdf).length;
+        pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    }
+    const xrefOffset = new TextEncoder().encode(pdf).length;
+    pdf += `xref\n0 ${fontId + 1}\n0000000000 65535 f \n`;
+    for (let id = 1; id <= fontId; id += 1) {
+        pdf += `${String(offsets[id]).padStart(10, '0')} 00000 n \n`;
+    }
+    pdf +=
+        `trailer\n<< /Size ${fontId + 1} /Root 1 0 R >>\n` +
+        `startxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob([new TextEncoder().encode(pdf)], {
+        type: 'application/pdf',
+    });
+    const link = document.createElement('a');
+    const period =
+        filters.from === filters.to ? filters.from : `${filters.from}-to-${filters.to}`;
+    link.href = URL.createObjectURL(blob);
+    link.download = `tele-report-${period}.pdf`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 1_000);
+};
+
 export default function TeleHours({
     loginDays,
     agentOptions,
@@ -84,6 +228,10 @@ export default function TeleHours({
     });
     const lastSyncedAt =
         sync.login_shifts_last_success_at ?? sync.last_success_at;
+    const appliedAgentName = filters.agent
+        ? (agentOptions.find((agent) => agent.id === filters.agent)?.name ??
+          'Selected agent')
+        : 'All agents';
     const navigate = (params: Record<string, string>) => {
         const search = new URLSearchParams(
             Object.entries(params).filter(([, value]) => value !== ''),
@@ -237,6 +385,20 @@ export default function TeleHours({
                         }}
                     >
                         Today
+                    </button>
+                    <button
+                        type="button"
+                        className="tele-hours-export"
+                        onClick={() =>
+                            createTeleReportPdf(
+                                loginDays,
+                                filters,
+                                appliedAgentName,
+                            )
+                        }
+                    >
+                        <Download />
+                        Export PDF
                     </button>
                     <small>
                         Last synced:{' '}
