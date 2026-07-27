@@ -1,7 +1,6 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { CalendarDays, LogOut, UsersRound } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
-import IdleSessionGuard from '@/components/idle-session-guard';
 import SalesmanPwaControls from '@/components/salesman-pwa-controls';
 import { logout } from '@/routes';
 import type { Auth } from '@/types';
@@ -25,7 +24,6 @@ export default function SalesmanLayout({ children }: PropsWithChildren) {
 
     return (
         <div className="salesman-portal">
-            <IdleSessionGuard />
             <header className="salesman-portal__header">
                 <Link href="/salesman/booking-board" className="salesman-portal__brand">
                     <img src="/images/weiss-logo.png" alt="WEISS" />
