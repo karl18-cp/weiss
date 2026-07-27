@@ -6,6 +6,7 @@ use App\Models\Agent;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -103,11 +104,17 @@ class CallToolsReportingSync
     public function syncLoginShifts(int $maxPages = 2): array
     {
         $this->assertConfigured();
-        $result = $this->syncLoginShiftPages($maxPages);
-        $result['live_statuses'] = $this->syncStatuses();
-        $this->state('login_shifts_last_success_at', now()->utc()->toIso8601String());
 
-        return $result;
+        return Cache::lock('calltools-login-shifts-sync', 55)->block(
+            10,
+            fn (): array => DB::transaction(function () use ($maxPages): array {
+                $result = $this->syncLoginShiftPages($maxPages);
+                $result['live_statuses'] = $this->syncStatuses();
+                $this->state('login_shifts_last_success_at', now()->utc()->toIso8601String());
+
+                return $result;
+            }),
+        );
     }
 
     private function syncLoginShiftPages(int $maxPages): array
@@ -343,9 +350,16 @@ class CallToolsReportingSync
             foreach ($ordered as $index => $session) {
                 $startedAt = CarbonImmutable::parse($session->started_at, 'UTC');
                 $nextSession = $ordered->get($index + 1);
+                $statusModifiedAt = $status && $status['status_modified_at']
+                    ? CarbonImmutable::parse($status['status_modified_at'], 'UTC')
+                    : null;
                 $stoppedAt = $nextSession
                     ? CarbonImmutable::parse($nextSession->started_at, 'UTC')
-                    : (($status !== null && ! $status['logged_in']) ? $capturedAt : null);
+                    : (($status !== null && ! $status['logged_in'])
+                        ? (($statusModifiedAt && $statusModifiedAt->greaterThan($startedAt))
+                            ? $statusModifiedAt
+                            : $capturedAt)
+                        : null);
 
                 if (! $stoppedAt || ! $stoppedAt->greaterThan($startedAt)) {
                     continue;

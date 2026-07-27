@@ -7,7 +7,6 @@ use App\Models\Lead;
 use App\Services\CallToolsReportingSync;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
@@ -93,6 +92,7 @@ class TeleHoursController extends Controller
             if ($selectedTo->isSameDay($today) && Schema::hasTable('calltools_agent_daily_metrics')) {
                 $liveStatuses = DB::table('calltools_agent_daily_metrics')
                     ->where('logged_in', true)
+                    ->whereDate('metric_date', now('UTC')->toDateString())
                     ->whereBetween('logged_in_since', [$from, $to])
                     ->whereIn('app_user_id', $appUserIds)
                     ->get(['app_user_id', 'logged_in_since']);
@@ -225,8 +225,7 @@ class TeleHoursController extends Controller
                 return;
             }
 
-            Cache::lock('calltools-login-shifts-report-refresh', 55)
-                ->get(fn () => $reportingSync->syncLoginShifts(2));
+            $reportingSync->syncLoginShifts(2);
         } catch (\Throwable $error) {
             report($error);
         }

@@ -79,6 +79,7 @@ test('login shift sync closes overlapping sessions when CallTools reports logout
                     'app_user' => 'agent-1',
                     'full_name' => 'Agent One',
                     'logged_in' => false,
+                    'agent_status_modified_on' => '2026-07-27T17:45:00Z',
                 ]],
             ]);
         }
@@ -95,7 +96,7 @@ test('login shift sync closes overlapping sessions when CallTools reports logout
     ]);
     $this->assertDatabaseHas('calltools_user_login_shifts', [
         'calltools_id' => '9002',
-        'stopped_at' => '2026-07-27 18:00:00',
-        'duration_seconds' => 18000,
+        'stopped_at' => '2026-07-27 17:45:00',
+        'duration_seconds' => 17100,
     ]);
 });
