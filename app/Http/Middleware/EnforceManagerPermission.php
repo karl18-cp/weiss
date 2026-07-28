@@ -59,6 +59,7 @@ class EnforceManagerPermission
     {
         $map = [
             'dashboard' => 'dashboard',
+            'team-dashboard' => 'team_dashboard',
             'lead-workflow/lead-card' => 'lead_card', 'lead-workflow/leads-shop' => 'leads_shop',
             'lead-workflow/confirm-leads' => 'confirm_leads', 'lead-workflow/dispatch-leads' => 'dispatch_leads',
             'lead-workflow/reschedule' => 'reschedule', 'lead-workflow/rehash' => 'rehash',

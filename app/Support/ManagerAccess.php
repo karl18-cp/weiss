@@ -10,6 +10,7 @@ class ManagerAccess
 
     public const MODULES = [
         'dashboard' => 'Dashboard',
+        'team_dashboard' => 'Team Dashboard',
         'lead_card' => 'Lead Card', 'leads_shop' => 'Leads Shop',
         'confirm_leads' => 'Confirm Leads', 'dispatch_leads' => 'Dispatch Leads',
         'reschedule' => 'Reschedule', 'rehash' => 'Rehash', '555' => '555',
@@ -22,6 +23,7 @@ class ManagerAccess
 
     public const MODULE_PATHS = [
         'dashboard' => '/dashboard',
+        'team_dashboard' => '/team-dashboard',
         'lead_card' => '/lead-workflow/lead-card',
         'leads_shop' => '/lead-workflow/leads-shop',
         'confirm_leads' => '/lead-workflow/confirm-leads',

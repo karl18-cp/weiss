@@ -20,6 +20,7 @@ import {
   Trash2,
   UserRoundPlus,
   Users,
+  Trophy,
 } from "lucide-react";
 import { useMemo } from "react";
 import "@/../css/app-sidebar.css";
@@ -54,6 +55,12 @@ const workflowItems: SidebarItem[] = [
     icon: LayoutDashboard,
     href: dashboard(),
     permission: "dashboard",
+  },
+  {
+    title: "Team Dashboard",
+    icon: Trophy,
+    href: "/team-dashboard",
+    permission: "team_dashboard",
   },
   {
     title: "Lead Card",

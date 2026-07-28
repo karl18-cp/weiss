@@ -25,12 +25,14 @@ use App\Http\Controllers\SalesmanPortalController;
 use App\Http\Controllers\SalesmanPushSubscriptionController;
 use App\Http\Controllers\TeleHoursController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamDashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified', 'manager.permission'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('team-dashboard', TeamDashboardController::class)->name('team-dashboard');
     Route::redirect('salesman', '/salesman/booking-board')->name('salesman.home');
     Route::get('salesman/booking-board', [LeadQueueController::class, 'salesmanBookingBoard'])
         ->name('salesman.booking-board');
