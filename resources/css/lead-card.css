@@ -459,6 +459,17 @@
     margin-top: 0.85rem;
 }
 
+.lead-submit-unavailable {
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #f2c6ca;
+    border-radius: 0.65rem;
+    color: #9f2735;
+    background: #fff1f2;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
 .lead-card-actions button,
 .lead-appointment-summary {
     display: inline-flex;

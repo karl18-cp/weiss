@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
     Building2,
     CalendarClock,
@@ -83,7 +83,45 @@ export default function LeadCard({
     const [addressLoading, setAddressLoading] = useState(false);
     const [addressLookupFailed, setAddressLookupFailed] = useState(false);
     const [unitNumber, setUnitNumber] = useState('');
+    const [submissionUnavailable, setSubmissionUnavailable] = useState(false);
     const addressRequestId = useRef(0);
+    const serviceUnavailableRetry = useRef<{
+        attempt: number;
+        retry: () => void;
+    } | null>(null);
+    const serviceUnavailableTimer = useRef<number | null>(null);
+
+    useEffect(() => {
+        const removeListener = router.on('invalid', (event) => {
+            const pending = serviceUnavailableRetry.current;
+
+            if (event.detail.response.status !== 503 || !pending) {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (pending.attempt >= 2) {
+                serviceUnavailableRetry.current = null;
+                setSubmissionUnavailable(true);
+
+                return;
+            }
+
+            serviceUnavailableTimer.current = window.setTimeout(
+                pending.retry,
+                750 * (pending.attempt + 1),
+            );
+        });
+
+        return () => {
+            removeListener();
+
+            if (serviceUnavailableTimer.current !== null) {
+                window.clearTimeout(serviceUnavailableTimer.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         const query = form.data.address.trim();
@@ -195,6 +233,26 @@ export default function LeadCard({
         setAddressLoading(false);
     };
 
+    const postLead = (attempt = 0) => {
+        serviceUnavailableRetry.current = {
+            attempt,
+            retry: () => postLead(attempt + 1),
+        };
+        setSubmissionUnavailable(false);
+
+        form.post('/lead-workflow/lead-card', {
+            preserveScroll: true,
+            onSuccess: () => {
+                serviceUnavailableRetry.current = null;
+                form.reset();
+                setUnitNumber('');
+            },
+            onError: () => {
+                serviceUnavailableRetry.current = null;
+            },
+        });
+    };
+
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const unit = unitNumber.trim();
@@ -211,13 +269,7 @@ export default function LeadCard({
                 .filter(Boolean)
                 .join(', '),
         }));
-        form.post('/lead-workflow/lead-card', {
-            preserveScroll: true,
-            onSuccess: () => {
-                form.reset();
-                setUnitNumber('');
-            },
-        });
+        postLead();
     };
 
     const clearForm = () => {
@@ -646,6 +698,16 @@ export default function LeadCard({
                                 </p>
                             </div>
                             <div className="lead-card-actions">
+                                {submissionUnavailable && (
+                                    <p
+                                        className="lead-submit-unavailable"
+                                        role="alert"
+                                    >
+                                        The hosting server is temporarily busy.
+                                        Your lead was not submitted. Please
+                                        press Create lead again.
+                                    </p>
+                                )}
                                 <button
                                     type="submit"
                                     disabled={form.processing}
