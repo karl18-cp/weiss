@@ -1,4 +1,4 @@
-import { Bell, BellOff, Download } from 'lucide-react';
+import { Bell, Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type InstallPromptEvent = Event & {
@@ -17,6 +17,13 @@ const decodeKey = (value: string) => {
     return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
 };
 
+const isRunningAsInstalledApp = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    Boolean(
+        (navigator as Navigator & { standalone?: boolean }).standalone,
+    );
+
 export default function SalesmanPwaControls({
     publicKey,
 }: {
@@ -24,16 +31,25 @@ export default function SalesmanPwaControls({
 }) {
     const [installPrompt, setInstallPrompt] =
         useState<InstallPromptEvent | null>(null);
-    const [subscribed, setSubscribed] = useState(false);
+    const [installed, setInstalled] = useState(isRunningAsInstalledApp);
+    const [subscribed, setSubscribed] = useState<boolean | null>(null);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        if (!('serviceWorker' in navigator)) return;
+        if (!('serviceWorker' in navigator)) {
+            setSubscribed(false);
+            return;
+        }
 
-        navigator.serviceWorker.register('/sw.js').then(async (registration) => {
-            setSubscribed(Boolean(await registration.pushManager.getSubscription()));
-        });
+        navigator.serviceWorker
+            .register('/sw.js')
+            .then(async (registration) => {
+                setSubscribed(
+                    Boolean(await registration.pushManager.getSubscription()),
+                );
+            })
+            .catch(() => setSubscribed(false));
 
         const capturePrompt = (event: Event) => {
             event.preventDefault();
@@ -48,7 +64,10 @@ export default function SalesmanPwaControls({
     const install = async () => {
         if (installPrompt) {
             await installPrompt.prompt();
-            await installPrompt.userChoice;
+            const choice = await installPrompt.userChoice;
+            if (choice.outcome === 'accepted') {
+                setInstalled(true);
+            }
             setInstallPrompt(null);
             return;
         }
@@ -126,49 +145,34 @@ export default function SalesmanPwaControls({
         }
     };
 
-    const disableNotifications = async () => {
-        setBusy(true);
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            const subscription = await registration.pushManager.getSubscription();
-            if (subscription) {
-                await fetch('/salesman/push-subscriptions', {
-                    method: 'DELETE',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/json',
-                        'X-CSRF-TOKEN': csrfToken(),
-                    },
-                    body: JSON.stringify({ endpoint: subscription.endpoint }),
-                });
-                await subscription.unsubscribe();
-            }
-            setSubscribed(false);
-            setMessage('Notifications disabled on this phone.');
-        } finally {
-            setBusy(false);
-        }
-    };
+    if (subscribed === null || (installed && subscribed)) {
+        return null;
+    }
 
     return (
         <div className="salesman-pwa">
-            <button type="button" onClick={install}>
-                <Download />
-                Install app
-            </button>
-            <button
-                type="button"
-                disabled={busy}
-                onClick={subscribed ? disableNotifications : enableNotifications}
-            >
-                {subscribed ? <BellOff /> : <Bell />}
-                {subscribed ? 'Disable alerts' : 'Enable alerts'}
-            </button>
+            {!installed && (
+                <button type="button" onClick={install}>
+                    <Download />
+                    Install app
+                </button>
+            )}
+            {!subscribed && (
+                <button
+                    type="button"
+                    disabled={busy}
+                    onClick={enableNotifications}
+                >
+                    <Bell />
+                    Enable alerts
+                </button>
+            )}
             {message && <p>{message}</p>}
             {!subscribed && !message && (
                 <p className="salesman-pwa__warning">
-                    Phone alerts are off. Install the app, then tap Enable alerts.
+                    {installed
+                        ? 'Phone alerts are off. Tap Enable alerts.'
+                        : 'Phone alerts are off. Install the app, then tap Enable alerts.'}
                 </p>
             )}
         </div>
