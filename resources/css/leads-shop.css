@@ -1045,6 +1045,46 @@
   margin-bottom: 0;
 }
 
+.lead-note-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.28rem 0.48rem;
+  border: 1px solid #cbd2dc;
+  border-radius: 0.45rem;
+  color: #667085;
+  background: #eef1f5;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.lead-note-locked-badge svg {
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
+.lead-live-notes.is-note-locked,
+.lead-expanded-note.is-note-locked {
+  border-color: #cbd2dc;
+  background: #f2f4f7;
+  box-shadow: none;
+}
+
+.lead-live-notes.is-note-locked textarea,
+.lead-expanded-note.is-note-locked textarea {
+  cursor: not-allowed;
+  border-color: #d0d5dd;
+  color: #667085;
+  background: #e9edf2;
+  box-shadow: none;
+}
+
+.lead-live-notes.is-note-locked .lead-note-actions button {
+  color: #7b8492;
+  background: #d6dbe2;
+  opacity: 1;
+}
+
 .lead-note-card--confirmation {
   order: 1;
 }

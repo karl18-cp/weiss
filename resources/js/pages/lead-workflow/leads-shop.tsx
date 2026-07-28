@@ -9,6 +9,7 @@ import {
   Clock3,
   History,
   Headphones,
+  LockKeyhole,
   Mail,
   MapPin,
   Maximize2,
@@ -1329,8 +1330,9 @@ export default function LeadsShop({
     selected?.notes.filter((note) => note.note_type === "appointment_result") ??
     [];
   const isDispatchNoteLocked = (noteType: EditableNoteType) =>
-    queue?.status === "dispatched" &&
-    ["telemarketer", "confirmation", "appointment_result"].includes(noteType);
+    noteType === "telemarketer" ||
+    (queue?.status === "dispatched" &&
+      ["confirmation", "appointment_result"].includes(noteType));
   const expandedNoteLocked = expandedNoteType
     ? isDispatchNoteLocked(expandedNoteType)
     : false;
@@ -2785,9 +2787,12 @@ export default function LeadsShop({
                       </div>
                     </article>
 
-                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--telemarketer">
+                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--telemarketer is-note-locked">
                       <div className="lead-note-heading">
                         <h3>Telemarketer notes</h3>
+                        <span className="lead-note-locked-badge">
+                          <LockKeyhole /> Locked
+                        </span>
                         <button
                           type="button"
                           onClick={() => setExpandedNoteType("telemarketer")}
@@ -2836,9 +2841,20 @@ export default function LeadsShop({
                         </button>
                       </div>
                     </article>
-                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--confirmation">
+                    <article
+                      className={`lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--confirmation ${
+                        isDispatchNoteLocked("confirmation")
+                          ? "is-note-locked"
+                          : ""
+                      }`}
+                    >
                       <div className="lead-note-heading">
                         <h3>Confirmation notes</h3>
+                        {isDispatchNoteLocked("confirmation") && (
+                          <span className="lead-note-locked-badge">
+                            <LockKeyhole /> Locked
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => setExpandedNoteType("confirmation")}
@@ -2940,9 +2956,12 @@ export default function LeadsShop({
                           </div>
                         </article>
                         {queue?.status === "dispatched" && (
-                          <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result">
+                          <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result is-note-locked">
                             <div className="lead-note-heading">
                               <h3>Appointment result notes</h3>
+                              <span className="lead-note-locked-badge">
+                                <LockKeyhole /> Locked
+                              </span>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -3038,7 +3057,11 @@ export default function LeadsShop({
               }
             }}
           >
-            <section className="lead-note-modal__card lead-expanded-note">
+            <section
+              className={`lead-note-modal__card lead-expanded-note ${
+                expandedNoteLocked ? "is-note-locked" : ""
+              }`}
+            >
               <header>
                 <div>
                   <span>
@@ -3046,6 +3069,11 @@ export default function LeadsShop({
                   </span>
                   <div>
                     <h2 id="lead-expanded-note-title">{expandedNote.title}</h2>
+                    {expandedNoteLocked && (
+                      <span className="lead-note-locked-badge">
+                        <LockKeyhole /> Locked
+                      </span>
+                    )}
                     <p>
                       {selected.customer_name} · Lead #{selected.id}
                     </p>
