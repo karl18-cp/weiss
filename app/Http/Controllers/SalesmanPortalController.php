@@ -6,7 +6,6 @@ use App\Models\Lead;
 use App\Models\LeadNote;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,17 +24,22 @@ class SalesmanPortalController extends Controller
                 $query->where('salesman_1_id', $salesmanId)
                     ->orWhere('salesman_2_id', $salesmanId);
             })
+            ->select([
+                'id',
+                'customer_name',
+                'primary_number',
+                'mobile_number',
+                'address',
+                'city',
+                'state',
+                'zip_code',
+                'appointment_at',
+                'company_id',
+                'product_id',
+            ])
             ->with([
-                'company:com_id,company,prefix',
+                'company:com_id,company',
                 'product:prod_id,product_name',
-                'agent:agent_id,agent_name',
-                'secondAgent:agent_id,agent_name',
-                'salesmanOne:salesman_id,salesman_name',
-                'salesmanTwo:salesman_id,salesman_name',
-                'notes:id,lead_id,note_type,body,created_at',
-                ...(Schema::hasTable('ringcentral_calls')
-                    ? ['ringCentralCalls.caller:acc_id,username']
-                    : []),
             ])
             ->orderByRaw('appointment_at IS NULL')
             ->orderBy('appointment_at')

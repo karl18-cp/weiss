@@ -3,15 +3,12 @@ import {
     Building2,
     CalendarClock,
     ChevronRight,
-    CircleDollarSign,
-    House,
     MapPin,
     Navigation,
     Package,
     Phone,
     Search,
     Save,
-    UserRound,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { formatAppointmentDate } from '@/lib/appointment-date';
@@ -26,22 +23,8 @@ type SalesmanLead = {
     state: string;
     zip_code: string;
     appointment_at: string | null;
-    status: string;
-    source: string;
-    marital_status: string;
-    years_in_house: number;
-    house_age: number | null;
-    needs_financing: boolean | null;
-    house_value: string | null;
     company: { company: string } | null;
     product: { product_name: string } | null;
-    agent: { agent_name: string } | null;
-    notes: {
-        id: number;
-        note_type: string;
-        body: string;
-        created_at: string;
-    }[];
 };
 
 const address = (lead: SalesmanLead) =>
@@ -154,9 +137,7 @@ export default function SalesmanLeads({
                     {selected && (
                         <article className="salesman-lead-detail">
                             <div className="salesman-lead-detail__title">
-                                <span>{selected.status}</span>
                                 <h2>{selected.customer_name}</h2>
-                                <small>Lead #{selected.id}</small>
                             </div>
 
                             <div className="salesman-lead-detail__facts">
@@ -210,72 +191,7 @@ export default function SalesmanLeads({
                                         </strong>
                                     </span>
                                 </div>
-                                <div>
-                                    <UserRound />
-                                    <span>
-                                        <small>Assigned by</small>
-                                        <strong>
-                                            {selected.agent?.agent_name ?? '—'}
-                                        </strong>
-                                    </span>
-                                </div>
-                                <div>
-                                    <House />
-                                    <span>
-                                        <small>Home details</small>
-                                        <strong>
-                                            {selected.marital_status} ·{' '}
-                                            {selected.years_in_house} years in
-                                            house ·{' '}
-                                            {selected.house_age == null
-                                                ? 'House age unavailable'
-                                                : `${selected.house_age}-year-old house`}
-                                        </strong>
-                                    </span>
-                                </div>
-                                <div>
-                                    <CircleDollarSign />
-                                    <span>
-                                        <small>Financing and value</small>
-                                        <strong>
-                                            {selected.needs_financing == null
-                                                ? 'Financing unavailable'
-                                                : selected.needs_financing
-                                                  ? 'Needs financing'
-                                                  : 'No financing needed'}
-                                            {' · '}
-                                            {selected.house_value == null
-                                                ? 'Value unavailable'
-                                                : Number(
-                                                      selected.house_value,
-                                                  ).toLocaleString('en-US', {
-                                                      style: 'currency',
-                                                      currency: 'USD',
-                                                      maximumFractionDigits: 0,
-                                                  })}
-                                        </strong>
-                                    </span>
-                                </div>
                             </div>
-
-                            <section className="salesman-lead-detail__notes">
-                                <h3>Lead notes</h3>
-                                {selected.notes.length > 0 ? (
-                                    selected.notes.map((note) => (
-                                        <p key={note.id}>
-                                            <small>
-                                                {note.note_type.replaceAll(
-                                                    '_',
-                                                    ' ',
-                                                )}
-                                            </small>
-                                            {note.body}
-                                        </p>
-                                    ))
-                                ) : (
-                                    <p>No notes have been added.</p>
-                                )}
-                            </section>
 
                             <section className="salesman-appointment-result">
                                 <h3>Appointment result notes</h3>
