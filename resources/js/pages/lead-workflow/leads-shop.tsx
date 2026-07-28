@@ -693,7 +693,7 @@ export default function LeadsShop({
 
     if (queue?.dateField === "appointment_at") {
       return [...counts.entries()]
-        .sort(([first], [second]) => first.localeCompare(second))
+        .sort(([first], [second]) => second.localeCompare(first))
         .map(([key, count]) => {
           const date = new Date(`${key}T12:00:00`);
 
