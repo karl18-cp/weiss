@@ -123,8 +123,6 @@ export default function TeamDashboard({
         );
     };
 
-    const maxTeamScore = Math.max(...teams.map((team) => team.total), 1);
-
     return (
         <>
             <Head title="Team Dashboard" />
@@ -261,13 +259,6 @@ export default function TeamDashboard({
 
                     <div className="team-score-list">
                         {filteredTeams.map((team) => {
-                            const teamMaxDaily = Math.max(
-                                ...team.dailyScores.map(
-                                    (score) => score.count,
-                                ),
-                                1,
-                            );
-
                             return (
                                 <article
                                     className="team-score-card"
@@ -292,50 +283,32 @@ export default function TeamDashboard({
                                         </strong>
                                     </header>
 
-                                    <div className="team-overall-bar">
-                                        <i>
-                                            <b
-                                                style={{
-                                                    width: `${(team.total / maxTeamScore) * 100}%`,
-                                                }}
-                                            />
-                                        </i>
-                                        <span>
-                                            {Math.round(
-                                                (team.total /
-                                                    maxTeamScore) *
-                                                    100,
-                                            )}
-                                            % of top score
-                                        </span>
-                                    </div>
-
                                     <div className="team-score-details">
-                                        <section className="team-daily-score">
-                                            <h4>Daily score</h4>
+                                        <section className="team-date-counts">
+                                            <h4>
+                                                {filters.period === 'daily'
+                                                    ? 'Selected day'
+                                                    : 'Count by day'}
+                                            </h4>
                                             <div>
                                                 {team.dailyScores.map(
                                                     (score) => (
                                                         <article
                                                             key={score.date}
-                                                            title={`${score.date}: ${score.count} leads`}
                                                         >
-                                                            <strong>
+                                                            <span>
+                                                                <strong>
+                                                                    {score.day}
+                                                                </strong>
+                                                                <small>
+                                                                    {
+                                                                        score.label
+                                                                    }
+                                                                </small>
+                                                            </span>
+                                                            <b>
                                                                 {score.count}
-                                                            </strong>
-                                                            <i>
-                                                                <b
-                                                                    style={{
-                                                                        height: `${Math.max((score.count / teamMaxDaily) * 100, score.count ? 8 : 0)}%`,
-                                                                    }}
-                                                                />
-                                                            </i>
-                                                            <small>
-                                                                {filters.period ===
-                                                                'daily'
-                                                                    ? score.day
-                                                                    : score.label}
-                                                            </small>
+                                                            </b>
                                                         </article>
                                                     ),
                                                 )}
