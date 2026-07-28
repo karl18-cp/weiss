@@ -246,9 +246,18 @@
     font-size: .72rem;
 }
 
-.team-scoreboard > header label {
+.team-scoreboard-actions {
     display: flex;
-    width: min(22rem, 45%);
+    width: min(34rem, 58%);
+    align-items: center;
+    justify-content: flex-end;
+    gap: .55rem;
+}
+
+.team-scoreboard-actions label {
+    display: flex;
+    min-width: 0;
+    flex: 1;
     height: 2.6rem;
     align-items: center;
     gap: .55rem;
@@ -258,17 +267,70 @@
     background: #f8fafc;
 }
 
-.team-scoreboard > header label svg {
+.team-scoreboard-actions label svg {
     width: 1rem;
     color: #8996a8;
 }
 
-.team-scoreboard > header input {
+.team-scoreboard-actions input {
     width: 100%;
     min-width: 0;
     background: transparent;
     font-size: .75rem;
     outline: 0;
+}
+
+.team-scoreboard-actions > button,
+.team-fullscreen-exit {
+    display: inline-flex;
+    min-height: 2.6rem;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    padding-inline: .8rem;
+    border-radius: .7rem;
+    color: #fff;
+    background: #2d67e8;
+    font-size: .72rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.team-scoreboard-actions > button svg,
+.team-fullscreen-exit svg {
+    width: .95rem;
+}
+
+.team-fullscreen-exit {
+    position: fixed;
+    z-index: 100;
+    top: .75rem;
+    right: 1rem;
+    box-shadow: 0 8px 25px rgb(20 48 105 / 25%);
+}
+
+.team-dashboard-page.is-score-fullscreen {
+    padding: 1rem;
+    background: #eef3fb;
+}
+
+.team-dashboard-page.is-score-fullscreen > .team-dashboard-hero,
+.team-dashboard-page.is-score-fullscreen > .team-dashboard-controls,
+.team-dashboard-page.is-score-fullscreen > .team-dashboard-summary,
+.team-dashboard-page.is-score-fullscreen > .team-dashboard-timezone,
+.team-dashboard-page.is-score-fullscreen .team-scoreboard > header {
+    display: none;
+}
+
+.team-dashboard-page.is-score-fullscreen .team-scoreboard {
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.team-dashboard-page.is-score-fullscreen .team-score-list {
+    padding: 3.4rem .5rem .5rem;
 }
 
 .team-score-list {
@@ -532,7 +594,13 @@
         flex-direction: column;
     }
 
-    .team-scoreboard > header label {
+    .team-scoreboard-actions {
+        width: 100%;
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .team-scoreboard-actions label {
         width: 100%;
     }
 

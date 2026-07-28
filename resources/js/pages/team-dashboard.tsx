@@ -3,13 +3,15 @@ import {
     CalendarDays,
     ChevronLeft,
     ChevronRight,
+    Maximize2,
     Medal,
+    Minimize2,
     Search,
     Trophy,
     UserRound,
     Users,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import '@/../css/team-dashboard.css';
 
 type Period = 'daily' | 'weekly' | 'monthly';
@@ -73,6 +75,23 @@ export default function TeamDashboard({
     teams,
 }: TeamDashboardProps) {
     const [search, setSearch] = useState('');
+    const [isScoreFullscreen, setIsScoreFullscreen] = useState(false);
+    const dashboardRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        const syncFullscreenState = () =>
+            setIsScoreFullscreen(
+                document.fullscreenElement === dashboardRef.current,
+            );
+
+        document.addEventListener('fullscreenchange', syncFullscreenState);
+
+        return () =>
+            document.removeEventListener(
+                'fullscreenchange',
+                syncFullscreenState,
+            );
+    }, []);
     const filteredTeams = useMemo(() => {
         const query = search.trim().toLowerCase();
 
@@ -101,6 +120,28 @@ export default function TeamDashboard({
         );
     };
 
+    const enterScoreFullscreen = async () => {
+        if (!dashboardRef.current?.requestFullscreen) {
+            setIsScoreFullscreen(true);
+
+            return;
+        }
+
+        try {
+            await dashboardRef.current.requestFullscreen();
+        } catch {
+            setIsScoreFullscreen(true);
+        }
+    };
+
+    const exitScoreFullscreen = async () => {
+        if (document.fullscreenElement) {
+            await document.exitFullscreen();
+        } else {
+            setIsScoreFullscreen(false);
+        }
+    };
+
     const movePeriod = (direction: -1 | 1) => {
         const date = new Date(`${filters.date}T12:00:00`);
 
@@ -126,7 +167,20 @@ export default function TeamDashboard({
     return (
         <>
             <Head title="Team Dashboard" />
-            <main className="team-dashboard-page">
+            <main
+                ref={dashboardRef}
+                className={`team-dashboard-page${isScoreFullscreen ? ' is-score-fullscreen' : ''}`}
+            >
+                {isScoreFullscreen && (
+                    <button
+                        type="button"
+                        className="team-fullscreen-exit"
+                        onClick={exitScoreFullscreen}
+                    >
+                        <Minimize2 />
+                        Exit fullscreen
+                    </button>
+                )}
                 <header className="team-dashboard-hero">
                     <span>
                         <Trophy />
@@ -245,16 +299,25 @@ export default function TeamDashboard({
                                 period.
                             </p>
                         </div>
-                        <label>
-                            <Search />
-                            <input
-                                value={search}
-                                onChange={(event) =>
-                                    setSearch(event.target.value)
-                                }
-                                placeholder="Search team, manager, or agent"
-                            />
-                        </label>
+                        <div className="team-scoreboard-actions">
+                            <label>
+                                <Search />
+                                <input
+                                    value={search}
+                                    onChange={(event) =>
+                                        setSearch(event.target.value)
+                                    }
+                                    placeholder="Search team, manager, or agent"
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                onClick={enterScoreFullscreen}
+                            >
+                                <Maximize2 />
+                                Fullscreen scores
+                            </button>
+                        </div>
                     </header>
 
                     <div className="team-score-list">
