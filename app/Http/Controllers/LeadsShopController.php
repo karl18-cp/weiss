@@ -135,6 +135,19 @@ class LeadsShopController extends Controller
 
     public function storeNote(LeadNoteRequest $request, Lead $lead): RedirectResponse
     {
+        if (
+            $lead->status === 'dispatched'
+            && in_array(
+                $request->validated('note_type'),
+                ['telemarketer', 'confirmation', 'appointment_result'],
+                true,
+            )
+        ) {
+            throw ValidationException::withMessages([
+                'body' => 'This note type is locked after the lead reaches Dispatch.',
+            ]);
+        }
+
         LeadNote::query()->create([
             'lead_id' => $lead->id,
             ...$request->validated(),

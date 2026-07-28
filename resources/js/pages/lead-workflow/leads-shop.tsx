@@ -1328,6 +1328,12 @@ export default function LeadsShop({
   const appointmentResultHistory =
     selected?.notes.filter((note) => note.note_type === "appointment_result") ??
     [];
+  const isDispatchNoteLocked = (noteType: EditableNoteType) =>
+    queue?.status === "dispatched" &&
+    ["telemarketer", "confirmation", "appointment_result"].includes(noteType);
+  const expandedNoteLocked = expandedNoteType
+    ? isDispatchNoteLocked(expandedNoteType)
+    : false;
   const expandedNote = expandedNoteType
     ? {
         telemarketer: {
@@ -2798,6 +2804,7 @@ export default function LeadsShop({
                         </button>
                       </div>
                       <textarea
+                        readOnly={isDispatchNoteLocked("telemarketer")}
                         value={telemarketerNoteForm.data.body}
                         onChange={(event) =>
                           telemarketerNoteForm.setData(
@@ -2814,6 +2821,7 @@ export default function LeadsShop({
                         <button
                           type="button"
                           disabled={
+                            isDispatchNoteLocked("telemarketer") ||
                             telemarketerNoteForm.processing ||
                             !telemarketerNoteForm.data.body.trim() ||
                             telemarketerNoteForm.data.body.trim() ===
@@ -2847,6 +2855,7 @@ export default function LeadsShop({
                         </button>
                       </div>
                       <textarea
+                        readOnly={isDispatchNoteLocked("confirmation")}
                         value={confirmationNoteForm.data.body}
                         onChange={(event) =>
                           confirmationNoteForm.setData(
@@ -2863,6 +2872,7 @@ export default function LeadsShop({
                         <button
                           type="button"
                           disabled={
+                            isDispatchNoteLocked("confirmation") ||
                             confirmationNoteForm.processing ||
                             !confirmationNoteForm.data.body.trim() ||
                             confirmationNoteForm.data.body.trim() ===
@@ -2953,6 +2963,9 @@ export default function LeadsShop({
                               </button>
                             </div>
                             <textarea
+                              readOnly={isDispatchNoteLocked(
+                                "appointment_result",
+                              )}
                               value={appointmentResultNoteForm.data.body}
                               onChange={(event) =>
                                 appointmentResultNoteForm.setData(
@@ -2966,6 +2979,7 @@ export default function LeadsShop({
                               <button
                                 type="button"
                                 disabled={
+                                  isDispatchNoteLocked("appointment_result") ||
                                   appointmentResultNoteForm.processing ||
                                   !appointmentResultNoteForm.data.body.trim() ||
                                   appointmentResultNoteForm.data.body.trim() ===
@@ -3048,6 +3062,7 @@ export default function LeadsShop({
               <div className="lead-expanded-note__editor">
                 <textarea
                   autoFocus
+                  readOnly={expandedNoteLocked}
                   value={expandedNote.value}
                   onChange={(event) =>
                     expandedNote.setValue(event.target.value)
@@ -3063,6 +3078,7 @@ export default function LeadsShop({
                 <button
                   type="button"
                   disabled={
+                    expandedNoteLocked ||
                     expandedNote.processing ||
                     !expandedNote.value.trim() ||
                     expandedNote.unchanged
