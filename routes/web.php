@@ -24,6 +24,7 @@ use App\Http\Controllers\SalesmanController;
 use App\Http\Controllers\SalesmanPortalController;
 use App\Http\Controllers\SalesmanPushSubscriptionController;
 use App\Http\Controllers\TeleHoursController;
+use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -118,6 +119,10 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::post('managers', [ManagerController::class, 'store'])->name('managers.store');
         Route::put('managers/{manager}', [ManagerController::class, 'update'])->name('managers.update');
         Route::delete('managers/{manager}', [ManagerController::class, 'destroy'])->name('managers.destroy');
+        Route::get('teams', [TeamController::class, 'index'])->name('teams');
+        Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
+        Route::put('teams/{team}', [TeamController::class, 'update'])->name('teams.update');
+        Route::delete('teams/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');
         Route::inertia('directory', 'management/directory')->name('directory');
         Route::get('contacts-users', [CompanyController::class, 'index'])->name('contacts-users');
         Route::post('contacts-users', [CompanyController::class, 'store'])->name('contacts-users.store');

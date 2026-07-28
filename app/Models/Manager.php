@@ -40,6 +40,11 @@ class Manager extends Model
         return $this->hasMany(ManagerPermission::class, 'manager_id', 'manager_id');
     }
 
+    public function teams(): HasMany
+    {
+        return $this->hasMany(Team::class, 'manager_id', 'manager_id');
+    }
+
     protected function casts(): array
     {
         return ['manager_types' => 'array'];
