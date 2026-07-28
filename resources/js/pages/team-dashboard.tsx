@@ -284,37 +284,6 @@ export default function TeamDashboard({
                                     </header>
 
                                     <div className="team-score-details">
-                                        <section className="team-date-counts">
-                                            <h4>
-                                                {filters.period === 'daily'
-                                                    ? 'Selected day'
-                                                    : 'Count by day'}
-                                            </h4>
-                                            <div>
-                                                {team.dailyScores.map(
-                                                    (score) => (
-                                                        <article
-                                                            key={score.date}
-                                                        >
-                                                            <span>
-                                                                <strong>
-                                                                    {score.day}
-                                                                </strong>
-                                                                <small>
-                                                                    {
-                                                                        score.label
-                                                                    }
-                                                                </small>
-                                                            </span>
-                                                            <b>
-                                                                {score.count}
-                                                            </b>
-                                                        </article>
-                                                    ),
-                                                )}
-                                            </div>
-                                        </section>
-
                                         <section className="team-agent-scores">
                                             <h4>Agent contribution</h4>
                                             <div>
