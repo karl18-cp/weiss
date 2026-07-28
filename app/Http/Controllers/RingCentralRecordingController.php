@@ -12,6 +12,11 @@ class RingCentralRecordingController extends Controller
     public function __invoke(Lead $lead, RingCentralCall $ringCentralCall): StreamedResponse
     {
         abort_unless($ringCentralCall->lead_id === $lead->id && $ringCentralCall->recording_path, 404);
+        abort_unless(
+            request()->user()?->role === 'admin'
+            || $ringCentralCall->account_id === request()->user()?->getAuthIdentifier(),
+            403,
+        );
         abort_unless(Storage::disk('local')->exists($ringCentralCall->recording_path), 404);
 
         return Storage::disk('local')->response(

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AgentController;
+use App\Http\Controllers\CallLogController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ContractorController;
 use App\Http\Controllers\DashboardController;
@@ -83,6 +84,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::post('data/tele-hours', [DataTeleHoursController::class, 'store'])->name('data.tele-hours.store');
         Route::get('booking-board', [LeadQueueController::class, 'bookingBoard'])->name('booking-board');
         Route::get('tele-hours', TeleHoursController::class)->name('tele-hours');
+        Route::get('call-logs', CallLogController::class)->name('call-logs');
     });
 
     Route::prefix('management')->name('management.')->group(function () {

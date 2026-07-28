@@ -149,6 +149,11 @@ const workflowItems: SidebarItem[] = [
     href: "/lead-workflow/tele-hours",
     permission: "tele_hours",
   },
+  {
+    title: "Call Logs",
+    icon: PhoneCall,
+    href: "/lead-workflow/call-logs",
+  },
 ];
 
 const managementItems: SidebarItem[] = [
