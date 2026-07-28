@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\RingCentralCall;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class RingCentralRecordingSync
@@ -14,6 +14,22 @@ class RingCentralRecordingSync
     /** @return array{matched: int, recordings: int, checked: int} */
     public function sync(): array
     {
+        // Recording downloads use RingCentral's heavy API allowance. Drain a
+        // small batch per minute so a backlog cannot rate-limit new calls.
+        $pendingDownloads = RingCentralCall::query()
+            ->whereNotNull('recording_id')
+            ->whereNull('recording_path')
+            ->latest('initiated_at')
+            ->limit(2)
+            ->get();
+        $recordings = 0;
+
+        foreach ($pendingDownloads as $call) {
+            if ($this->downloadRecording($call)) {
+                $recordings++;
+            }
+        }
+
         $calls = RingCentralCall::query()
             ->where('initiated_at', '>=', now()->subDays(2))
             ->where('initiated_at', '<=', now()->subSeconds(15))
@@ -21,18 +37,19 @@ class RingCentralRecordingSync
             // appears in the call log. Keep revisiting calls without archived audio
             // so a call matched too early is not permanently skipped.
             ->whereNull('recording_path')
+            ->whereNull('recording_id')
             ->oldest('initiated_at')
+            ->limit(500)
             ->get();
 
         if ($calls->isEmpty()) {
-            return ['matched' => 0, 'recordings' => 0, 'checked' => 0];
+            return ['matched' => 0, 'recordings' => $recordings, 'checked' => 0];
         }
 
         $records = collect($this->ringCentral->callLog($calls->min('initiated_at')->copy()->subMinutes(10)))
             ->filter(fn (array $record): bool => strcasecmp((string) ($record['direction'] ?? ''), 'Outbound') === 0);
         $usedIds = RingCentralCall::query()->whereNotNull('ringcentral_call_log_id')->pluck('ringcentral_call_log_id')->all();
         $matched = 0;
-        $recordings = 0;
 
         foreach ($calls as $call) {
             $record = $call->ringcentral_call_log_id
@@ -59,21 +76,35 @@ class RingCentralRecordingSync
             $usedIds[] = (string) ($record['id'] ?? '');
             $matched++;
 
-            if ($call->recording_id && ! $call->recording_path) {
-                $audio = $this->ringCentral->recording($call->recording_id);
-                $extension = str_contains(strtolower($audio['content_type']), 'wav') ? 'wav' : 'mp3';
-                $path = 'ringcentral-recordings/'.$startedAt->format('Y/m').'/'.$call->id.'.'.$extension;
-                Storage::disk('local')->put($path, $audio['body']);
-                $call->update([
-                    'recording_path' => $path,
-                    'recording_content_type' => $audio['content_type'],
-                    'recorded_at' => now()->utc(),
-                ]);
-                $recordings++;
-            }
         }
 
         return ['matched' => $matched, 'recordings' => $recordings, 'checked' => $calls->count()];
+    }
+
+    private function downloadRecording(RingCentralCall $call): bool
+    {
+        try {
+            $audio = $this->ringCentral->recording((string) $call->recording_id);
+            $extension = str_contains(strtolower($audio['content_type']), 'wav') ? 'wav' : 'mp3';
+            $recordedAt = $call->started_at ?? $call->initiated_at;
+            $path = 'ringcentral-recordings/'.$recordedAt->format('Y/m').'/'.$call->id.'.'.$extension;
+            Storage::disk('local')->put($path, $audio['body']);
+            $call->update([
+                'recording_path' => $path,
+                'recording_content_type' => $audio['content_type'],
+                'recorded_at' => now()->utc(),
+            ]);
+
+            return true;
+        } catch (\Throwable $exception) {
+            Log::warning('RingCentral recording download failed.', [
+                'ringcentral_call_id' => $call->id,
+                'recording_id' => $call->recording_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     private function match(RingCentralCall $call, $records): ?array

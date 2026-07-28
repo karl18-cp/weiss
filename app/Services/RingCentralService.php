@@ -38,6 +38,7 @@ class RingCentralService
         }
 
         $response = $this->api()
+            ->accept('audio/mpeg, audio/wav, application/octet-stream')
             ->withToken($this->accessToken())
             ->get('/restapi/v1.0/account/~/recording/'.rawurlencode($recordingId).'/content');
 
