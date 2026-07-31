@@ -120,16 +120,35 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->where('note_type', 'telemarketer')
         ->value('body'))->toBe('Interested customer');
 
+    $originalLeadId = $lead->id;
+    $lead->forceFill([
+        'status' => 'dispatched',
+        'created_at' => now()->subDays(10),
+    ])->save();
+    $resentAt = now()->addMinute()->startOfSecond();
+    $this->travelTo($resentAt);
+
     $this->withToken('test-webhook-secret')
         ->postJson(route('webhooks.calltools'), [
             ...$payload,
+            'first_name' => 'Jamie Updated',
+            'address' => '456 Updated Avenue',
+            'city' => 'Tampa',
             'phone_number' => '+15557654321',
         ])
         ->assertOk()
         ->assertJsonPath('message', 'Lead updated.');
 
+    $resentLead = $lead->fresh();
+
     expect(Lead::query()->where('calltools_contact_id', 'contact-123')->count())->toBe(1)
-        ->and($lead->fresh()->primary_number)->toBe('+15557654321')
+        ->and($resentLead->id)->toBe($originalLeadId)
+        ->and($resentLead->status)->toBe('fresh')
+        ->and($resentLead->customer_name)->toBe('Jamie Updated Customer')
+        ->and($resentLead->address)->toBe('456 Updated Avenue')
+        ->and($resentLead->city)->toBe('Tampa')
+        ->and($resentLead->primary_number)->toBe('+15557654321')
+        ->and($resentLead->created_at->equalTo($resentAt))->toBeTrue()
         ->and(LeadNote::query()->where('lead_id', $lead->id)->count())->toBe(1);
 });
 

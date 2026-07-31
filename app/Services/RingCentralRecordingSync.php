@@ -14,40 +14,63 @@ class RingCentralRecordingSync
     /** @return array{matched: int, recordings: int, checked: int} */
     public function sync(): array
     {
-        // Recording downloads use RingCentral's heavy API allowance. Drain a
-        // small batch per minute so a backlog cannot rate-limit new calls.
-        $pendingDownloads = RingCentralCall::query()
-            ->whereNotNull('recording_id')
-            ->whereNull('recording_path')
-            ->latest('initiated_at')
-            ->limit(8)
-            ->get();
+        $downloadLimit = 4;
         $recordings = 0;
+        $matched = 0;
+        $checked = 0;
 
-        foreach ($pendingDownloads as $call) {
-            if ($this->downloadRecording($call)) {
-                $recordings++;
+        $pendingQuery = RingCentralCall::query()
+            ->where('initiated_at', '<=', now()->subSeconds(15))
+            ->whereNull('recording_path')
+            ->whereNull('recording_id');
+        $backfillRun = now()->minute % 10 === 0;
+        $calls = (clone $pendingQuery)
+            ->when(
+                $backfillRun,
+                fn ($query) => $query->oldest('initiated_at'),
+                fn ($query) => $query->latest('initiated_at'),
+            )
+            ->limit($backfillRun ? 150 : 500)
+            ->get();
+
+        if ($calls->isNotEmpty()) {
+            $usedIds = RingCentralCall::query()->whereNotNull('ringcentral_call_log_id')->pluck('ringcentral_call_log_id')->all();
+            $result = $this->syncBatch($calls, $usedIds, $recordings, $downloadLimit);
+            $matched = $result['matched'];
+            $checked = $result['checked'];
+        }
+
+        if ($recordings < $downloadLimit) {
+            $pendingDownloads = RingCentralCall::query()
+                ->whereNotNull('recording_id')
+                ->whereNull('recording_path')
+                ->latest('initiated_at')
+                ->limit($downloadLimit - $recordings)
+                ->get();
+
+            foreach ($pendingDownloads as $call) {
+                if ($this->downloadRecording($call)) {
+                    $recordings++;
+                }
             }
         }
 
-        $calls = RingCentralCall::query()
-            ->where('initiated_at', '<=', now()->subSeconds(15))
-            // RingCentral can add recording metadata after the completed call first
-            // appears in the call log. Keep revisiting calls without archived audio
-            // so a call matched too early is not permanently skipped.
-            ->whereNull('recording_path')
-            ->whereNull('recording_id')
-            ->oldest('initiated_at')
-            ->limit(500)
-            ->get();
+        return [
+            'matched' => $matched,
+            'recordings' => $recordings,
+            'checked' => $checked,
+        ];
+    }
 
+    /** @return array{matched: int, checked: int} */
+    private function syncBatch($calls, array &$usedIds, int &$recordings, int $downloadLimit): array
+    {
         if ($calls->isEmpty()) {
-            return ['matched' => 0, 'recordings' => $recordings, 'checked' => 0];
+            return ['matched' => 0, 'checked' => 0];
         }
 
         $records = collect($this->ringCentral->callLog($calls->min('initiated_at')->copy()->subMinutes(10)))
             ->filter(fn (array $record): bool => strcasecmp((string) ($record['direction'] ?? ''), 'Outbound') === 0);
-        $usedIds = RingCentralCall::query()->whereNotNull('ringcentral_call_log_id')->pluck('ringcentral_call_log_id')->all();
         $matched = 0;
 
         foreach ($calls as $call) {
@@ -75,9 +98,12 @@ class RingCentralRecordingSync
             $usedIds[] = (string) ($record['id'] ?? '');
             $matched++;
 
+            if ($call->recording_id && $recordings < $downloadLimit && $this->downloadRecording($call)) {
+                $recordings++;
+            }
         }
 
-        return ['matched' => $matched, 'recordings' => $recordings, 'checked' => $calls->count()];
+        return ['matched' => $matched, 'checked' => $calls->count()];
     }
 
     private function downloadRecording(RingCentralCall $call): bool
@@ -111,9 +137,13 @@ class RingCentralRecordingSync
         return $records
             ->filter(function (array $record) use ($call): bool {
                 $phone = data_get($record, 'to.phoneNumber') ?? data_get($record, 'to.phoneNumberInfo.phoneNumber');
-                if (! is_string($phone)) return false;
+                if (! is_string($phone)) {
+                    return false;
+                }
                 try {
-                    if ($this->ringCentral->normalizePhoneNumber($phone) !== $call->normalized_phone) return false;
+                    if ($this->ringCentral->normalizePhoneNumber($phone) !== $call->normalized_phone) {
+                        return false;
+                    }
                     $startedAt = CarbonImmutable::parse($record['startTime'] ?? null);
                 } catch (\Throwable) {
                     return false;
@@ -127,9 +157,13 @@ class RingCentralRecordingSync
 
     private function recordingMetadata(array $record): ?array
     {
-        if (is_array($record['recording'] ?? null)) return $record['recording'];
+        if (is_array($record['recording'] ?? null)) {
+            return $record['recording'];
+        }
         foreach ((array) ($record['legs'] ?? []) as $leg) {
-            if (is_array($leg['recording'] ?? null)) return $leg['recording'];
+            if (is_array($leg['recording'] ?? null)) {
+                return $leg['recording'];
+            }
         }
 
         return null;

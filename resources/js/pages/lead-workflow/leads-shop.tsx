@@ -28,7 +28,14 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import "@/../css/leads-shop.css";
 import { RingCentralCallButton } from "@/components/ringcentral-call-button";
 import { useSystemModal } from "@/components/system-modal-provider";
@@ -121,6 +128,38 @@ type SmsTemplateField =
 
 type EditableNoteType =
   "telemarketer" | "confirmation" | "dispatch" | "appointment_result";
+type DateField = "created_at" | "appointment_at";
+type LeadCardLayout = {
+  primaryColumn: number;
+  informationRow: number;
+};
+
+const LEAD_CARD_LAYOUT_KEY = "weiss:lead-card-layout";
+const DEFAULT_LEAD_CARD_LAYOUT: LeadCardLayout = {
+  primaryColumn: 66,
+  informationRow: 62,
+};
+
+const loadLeadCardLayout = (): LeadCardLayout => {
+  try {
+    const saved = JSON.parse(
+      window.localStorage.getItem(LEAD_CARD_LAYOUT_KEY) ?? "null",
+    ) as Partial<LeadCardLayout> | null;
+
+    return {
+      primaryColumn:
+        typeof saved?.primaryColumn === "number"
+          ? Math.min(78, Math.max(50, saved.primaryColumn))
+          : DEFAULT_LEAD_CARD_LAYOUT.primaryColumn,
+      informationRow:
+        typeof saved?.informationRow === "number"
+          ? Math.min(75, Math.max(38, saved.informationRow))
+          : DEFAULT_LEAD_CARD_LAYOUT.informationRow,
+    };
+  } catch {
+    return DEFAULT_LEAD_CARD_LAYOUT;
+  }
+};
 
 const latestNoteBody = (lead: Lead | null, noteType: string): string => {
   if (!lead) return "";
@@ -187,7 +226,7 @@ const emptyLeadForm = {
 
 const leadFormData = (lead: Lead) => ({
   customer_name: lead.customer_name,
-  marital_status: lead.marital_status,
+  marital_status: lead.marital_status ?? "",
   primary_number: lead.primary_number,
   secondary_number: lead.secondary_number ?? "",
   mobile_number: lead.mobile_number ?? "",
@@ -197,7 +236,8 @@ const leadFormData = (lead: Lead) => ({
   county: lead.county,
   state: lead.state,
   email: lead.email ?? "",
-  years_in_house: String(lead.years_in_house),
+  years_in_house:
+    lead.years_in_house == null ? "" : String(lead.years_in_house),
   house_age: lead.house_age == null ? "" : String(lead.house_age),
   needs_financing:
     lead.needs_financing == null ? "" : lead.needs_financing ? "1" : "0",
@@ -205,7 +245,7 @@ const leadFormData = (lead: Lead) => ({
   product_id: String(lead.product?.prod_id ?? ""),
   appointment_at: appointmentInputValue(lead.appointment_at ?? ""),
   appointment_result: lead.appointment_result ?? "",
-  telemarketer_notes: lead.telemarketer_notes,
+  telemarketer_notes: lead.telemarketer_notes ?? "",
   company_id: String(lead.company?.com_id ?? ""),
   source: "CallTools",
   agent_id: String(lead.agent?.agent_id ?? ""),
@@ -539,6 +579,9 @@ export default function LeadsShop({
   const { confirm, notify } = useSystemModal();
   const [search, setSearch] = useState("");
   const [selectedDate, setSelectedDate] = useState<string>("all");
+  const [dateField, setDateField] = useState<DateField>(
+    queue?.dateField ?? "created_at",
+  );
   const [selectedStatus, setSelectedStatus] = useState(
     requestedLead?.status ?? queue?.status ?? "fresh",
   );
@@ -563,6 +606,9 @@ export default function LeadsShop({
     SmsTemplateField[]
   >([]);
   const [recordingsOpen, setRecordingsOpen] = useState(false);
+  const detailGridRef = useRef<HTMLDivElement>(null);
+  const [leadCardLayout, setLeadCardLayout] =
+    useState<LeadCardLayout>(loadLeadCardLayout);
   const [newCallAttempts, setNewCallAttempts] = useState<
     Record<number, number>
   >({});
@@ -579,6 +625,60 @@ export default function LeadsShop({
   const form = useForm(
     requestedLead ? leadFormData(requestedLead) : emptyLeadForm,
   );
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      LEAD_CARD_LAYOUT_KEY,
+      JSON.stringify(leadCardLayout),
+    );
+  }, [leadCardLayout]);
+
+  const resizeLeadCards = (
+    axis: "horizontal" | "vertical",
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    const grid = detailGridRef.current;
+    if (!grid) return;
+
+    event.preventDefault();
+    const rectangle = grid.getBoundingClientRect();
+    document.body.classList.add("is-resizing-lead-cards");
+
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      if (axis === "horizontal") {
+        const percentage =
+          ((pointerEvent.clientX - rectangle.left) / rectangle.width) * 100;
+        setLeadCardLayout((current) => ({
+          ...current,
+          primaryColumn: Math.min(78, Math.max(50, percentage)),
+        }));
+        return;
+      }
+
+      const percentage =
+        ((pointerEvent.clientY - rectangle.top) / rectangle.height) * 100;
+      setLeadCardLayout((current) => ({
+        ...current,
+        informationRow: Math.min(75, Math.max(38, percentage)),
+      }));
+    };
+
+    const stopResizing = () => {
+      document.body.classList.remove("is-resizing-lead-cards");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing, { once: true });
+    window.addEventListener("pointercancel", stopResizing, { once: true });
+  };
+
+  const leadCardLayoutStyle = {
+    "--lead-detail-primary-column": `${leadCardLayout.primaryColumn}%`,
+    "--lead-detail-information-row": `${leadCardLayout.informationRow}%`,
+  } as CSSProperties;
 
   useEffect(() => {
     const handleTrackedCall = (event: Event) => {
@@ -630,6 +730,7 @@ export default function LeadsShop({
   const saleForm = useForm<{ amount: string; salesman?: string }>({
     amount: "",
   });
+  const effectiveDateField = queue?.dateField ?? dateField;
 
   useEffect(() => {
     let refreshing = false;
@@ -687,12 +788,12 @@ export default function LeadsShop({
   const availableDateRows = useMemo(() => {
     const counts = new Map<string, number>();
     leads.forEach((lead) => {
-      const key = calendarDateKey(lead[queue?.dateField ?? "created_at"]);
+      const key = calendarDateKey(lead[effectiveDateField]);
       if (!key) return;
       counts.set(key, (counts.get(key) ?? 0) + 1);
     });
 
-    if (queue?.dateField === "appointment_at") {
+    if (effectiveDateField === "appointment_at") {
       return [...counts.entries()]
         .sort(([first], [second]) => second.localeCompare(first))
         .map(([key, count]) => {
@@ -732,7 +833,7 @@ export default function LeadsShop({
         count: counts.get(key) ?? 0,
       };
     }).filter((day) => day.count > 0);
-  }, [leads, queue?.dateField]);
+  }, [effectiveDateField, leads]);
 
   const filterOptions = useMemo(
     () => ({
@@ -810,8 +911,7 @@ export default function LeadsShop({
       .filter((lead) => {
         const matchesDate =
           selectedDate === "all" ||
-          calendarDateKey(lead[queue?.dateField ?? "created_at"]) ===
-            selectedDate;
+          calendarDateKey(lead[effectiveDateField]) === selectedDate;
         const matchesSearch =
           !query ||
           [
@@ -866,23 +966,22 @@ export default function LeadsShop({
           return firstIsToday ? -1 : 1;
         }
 
-        const dateField = queue?.dateField ?? "created_at";
-        const firstTime = first[dateField]
-          ? new Date(first[dateField] as string).getTime()
+        const firstTime = first[effectiveDateField]
+          ? new Date(first[effectiveDateField] as string).getTime()
           : Number.POSITIVE_INFINITY;
-        const secondTime = second[dateField]
-          ? new Date(second[dateField] as string).getTime()
+        const secondTime = second[effectiveDateField]
+          ? new Date(second[effectiveDateField] as string).getTime()
           : Number.POSITIVE_INFINITY;
         const missingTime =
           queue?.sortDirection === "asc"
             ? Number.POSITIVE_INFINITY
             : Number.NEGATIVE_INFINITY;
         const firstSortableTime =
-          Number.isNaN(firstTime) || !first[dateField]
+          Number.isNaN(firstTime) || !first[effectiveDateField]
             ? missingTime
             : firstTime;
         const secondSortableTime =
-          Number.isNaN(secondTime) || !second[dateField]
+          Number.isNaN(secondTime) || !second[effectiveDateField]
             ? missingTime
             : secondTime;
         const dateDifference =
@@ -902,7 +1001,7 @@ export default function LeadsShop({
     cityFilter,
     productFilter,
     agentFilter,
-    queue?.dateField,
+    effectiveDateField,
     queue?.sortDirection,
   ]);
 
@@ -1106,6 +1205,16 @@ export default function LeadsShop({
         setSalesmanTwoDraft(form.data.salesman_2_id);
         setIsEditing(false);
         router.flushAll();
+      },
+      onError: (errors) => {
+        const firstError = Object.values(errors)[0];
+        notify({
+          tone: "error",
+          message:
+            typeof firstError === "string"
+              ? firstError
+              : "The lead could not be saved. Check the highlighted fields.",
+        });
       },
     });
   };
@@ -1562,13 +1671,28 @@ export default function LeadsShop({
                 <h2>{queue?.dateLabel ?? "Last 30 days"}</h2>
                 <p>
                   Filter by{" "}
-                  {queue?.dateField === "appointment_at"
+                  {effectiveDateField === "appointment_at"
                     ? "appointment date"
                     : "created date"}
                 </p>
               </div>
               <CalendarClock />
             </div>
+            {!queue && (
+              <label className="lead-dates__basis">
+                <span>Date based on</span>
+                <select
+                  value={dateField}
+                  onChange={(event) => {
+                    setDateField(event.target.value as DateField);
+                    setSelectedDate("all");
+                  }}
+                >
+                  <option value="created_at">Lead created</option>
+                  <option value="appointment_at">Appointment date</option>
+                </select>
+              </label>
+            )}
             <div className="lead-dates__columns">
               <span>Date</span>
               <span>Day</span>
@@ -1593,7 +1717,7 @@ export default function LeadsShop({
               ))}
               {availableDateRows.length === 0 && (
                 <div className="lead-dates__empty">
-                  {queue?.dateField === "appointment_at"
+                  {effectiveDateField === "appointment_at"
                     ? "No appointment dates in this queue."
                     : "No leads in the last 30 days."}
                 </div>
@@ -1724,7 +1848,7 @@ export default function LeadsShop({
               <span>Customer</span>
               <span>City</span>
               <span>
-                {(queue?.dateField ?? "appointment_at") === "appointment_at"
+                {effectiveDateField === "appointment_at"
                   ? "Appointment"
                   : "Created"}
               </span>
@@ -1759,7 +1883,7 @@ export default function LeadsShop({
                   </span>
                   <span>{lead.city}</span>
                   <span>
-                    {(queue?.dateField ?? "appointment_at") === "appointment_at"
+                    {effectiveDateField === "appointment_at"
                       ? lead.appointment_at
                         ? formatAppointmentDate(lead.appointment_at)
                         : "No appointment"
@@ -1848,6 +1972,17 @@ export default function LeadsShop({
                         Created {formatDate(selected.created_at)}
                       </small>
                     </div>
+                    <button
+                      type="button"
+                      className="lead-layout-reset"
+                      onClick={() =>
+                        setLeadCardLayout(DEFAULT_LEAD_CARD_LAYOUT)
+                      }
+                      title="Reset card sizes"
+                    >
+                      <SlidersHorizontal />
+                      Reset cards
+                    </button>
                     <button
                       type="button"
                       className={
@@ -2251,6 +2386,8 @@ export default function LeadsShop({
                 ) : (
                   <div
                     className={`lead-detail__grid ${queue?.status === "dispatched" ? "lead-detail__grid--dispatch" : ["rehash", "555", "la", "his", "kit"].includes(queue?.status ?? "") ? "lead-detail__grid--three-notes" : ""}`}
+                    ref={detailGridRef}
+                    style={leadCardLayoutStyle}
                   >
                     <article className="lead-detail-card lead-detail-card--customer">
                       <h3>
@@ -3013,6 +3150,24 @@ export default function LeadsShop({
                         )}
                       </>
                     )}
+                    <button
+                      type="button"
+                      className="lead-card-resize-handle lead-card-resize-handle--column"
+                      aria-label="Resize the information card columns"
+                      title="Drag to resize left and right cards"
+                      onPointerDown={(event) =>
+                        resizeLeadCards("horizontal", event)
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="lead-card-resize-handle lead-card-resize-handle--row"
+                      aria-label="Resize the information and notes rows"
+                      title="Drag to resize information and notes cards"
+                      onPointerDown={(event) =>
+                        resizeLeadCards("vertical", event)
+                      }
+                    />
                   </div>
                 )}
               </>

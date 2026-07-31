@@ -161,6 +161,7 @@ class LeadQueueController extends Controller
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
             'cities' => Lead::query()
+                ->whereIn('status', (array) $status)
                 ->whereNotNull('city')
                 ->where('city', '!=', '')
                 ->distinct()

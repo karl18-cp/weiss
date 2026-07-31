@@ -7,6 +7,7 @@ import {
     SquareStack,
     TrendingUp,
     Users,
+    X,
 } from 'lucide-react';
 import { useState } from 'react';
 import '@/../css/dashboard.css';
@@ -23,12 +24,32 @@ type DashboardProps = {
         projects: number;
         completedProjects: number;
     };
-    priority: {
-        raw: number;
-        noAppointment: number;
-        overdue: number;
-        today: number;
+    teamFilters: {
+        from: string;
+        to: string;
+        timezone: string;
     };
+    teamPerformance: {
+        id: number;
+        name: string;
+        manager: string;
+        total: number;
+        confirmed: number;
+        sold: number;
+        agents: {
+            id: number;
+            name: string;
+            total: number;
+            confirmed: number;
+            sold: number;
+        }[];
+    }[];
+    salesmanPerformance: {
+        id: number;
+        name: string;
+        assigned: number;
+        sold: number;
+    }[];
     bookingPressure: {
         today: number;
         tomorrow: number;
@@ -59,7 +80,9 @@ const laneLinks: Record<string, string> = {
 
 export default function Dashboard({
     metrics,
-    priority,
+    teamFilters,
+    teamPerformance,
+    salesmanPerformance,
     bookingPressure,
     projectHealth,
     workflowLanes,
@@ -67,6 +90,11 @@ export default function Dashboard({
     topSources,
 }: DashboardProps) {
     const [search, setSearch] = useState('');
+    const [teamFrom, setTeamFrom] = useState(teamFilters.from);
+    const [teamTo, setTeamTo] = useState(teamFilters.to);
+    const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+    const selectedTeam =
+        teamPerformance.find((team) => team.id === selectedTeamId) ?? null;
     const maxProjectStatus = Math.max(...Object.values(projectHealth), 1);
     const maxSource = Math.max(...topSources.map((source) => source.total), 1);
     const kpis = [
@@ -166,58 +194,115 @@ export default function Dashboard({
                 </section>
 
                 <section className="crm-dashboard-main-grid">
-                    <article className="crm-dashboard-card crm-dashboard-priority">
+                    <article className="crm-dashboard-card crm-dashboard-teams">
                         <header>
-                            <h2>Priority Queue</h2>
-                            <p>Operational items that need attention first.</p>
+                            <div>
+                                <h2>Team Lead Performance</h2>
+                                <p>Leads counted by their creation date.</p>
+                            </div>
+                            <form
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    router.get(
+                                        '/dashboard',
+                                        {
+                                            team_from: teamFrom,
+                                            team_to: teamTo,
+                                        },
+                                        {
+                                            preserveScroll: true,
+                                            preserveState: true,
+                                            only: [
+                                                'teamFilters',
+                                                'teamPerformance',
+                                                'salesmanPerformance',
+                                            ],
+                                        },
+                                    );
+                                }}
+                            >
+                                <label>
+                                    <span>From</span>
+                                    <input
+                                        type="date"
+                                        value={teamFrom}
+                                        max={teamTo}
+                                        onChange={(event) =>
+                                            setTeamFrom(event.target.value)
+                                        }
+                                    />
+                                </label>
+                                <label>
+                                    <span>To</span>
+                                    <input
+                                        type="date"
+                                        value={teamTo}
+                                        min={teamFrom}
+                                        onChange={(event) =>
+                                            setTeamTo(event.target.value)
+                                        }
+                                    />
+                                </label>
+                                <button type="submit">Apply</button>
+                            </form>
                         </header>
-                        <div>
-                            <Link href="/lead-workflow/leads-shop">
-                                <i className="is-red" />
-                                <span>Raw leads to triage</span>
-                                <strong>{priority.raw}</strong>
-                            </Link>
-                            <Link href="/lead-workflow/booking-board">
-                                <i className="is-orange" />
-                                <span>No appointment set</span>
-                                <strong>{priority.noAppointment}</strong>
-                            </Link>
-                            <Link href="/lead-workflow/booking-board">
-                                <i className="is-yellow" />
-                                <span>Overdue bookings</span>
-                                <strong>{priority.overdue}</strong>
-                            </Link>
-                            <Link href="/lead-workflow/booking-board">
-                                <i className="is-blue" />
-                                <span>Appointments today</span>
-                                <strong>{priority.today}</strong>
-                            </Link>
+                        <div className="crm-dashboard-team-table">
+                            <div className="crm-dashboard-team-row is-heading">
+                                <span>Team</span>
+                                <span>Total</span>
+                                <span>Confirmed</span>
+                                <span>Sold</span>
+                            </div>
+                            {teamPerformance.map((team) => (
+                                <button
+                                    type="button"
+                                    className="crm-dashboard-team-row"
+                                    key={team.id}
+                                    onClick={() => setSelectedTeamId(team.id)}
+                                >
+                                    <strong>
+                                        {team.name}{' '}
+                                        <small>({team.manager})</small>
+                                    </strong>
+                                    <span>{team.total}</span>
+                                    <span>{team.confirmed}</span>
+                                    <span>{team.sold}</span>
+                                </button>
+                            ))}
+                            {teamPerformance.length === 0 && (
+                                <p className="crm-dashboard-team-empty">
+                                    No teams have been created yet.
+                                </p>
+                            )}
                         </div>
                     </article>
 
-                    <article className="crm-dashboard-card crm-dashboard-booking">
+                    <article className="crm-dashboard-card crm-dashboard-salesmen">
                         <header>
-                            <h2>Booking Pressure</h2>
-                            <p>Confirm and dispatch appointments.</p>
+                            <h2>Salesman Lead Performance</h2>
+                            <p>Current assignments and leads sold.</p>
                         </header>
-                        <div>
-                            {[
-                                ['Today', bookingPressure.today],
-                                ['Tomorrow', bookingPressure.tomorrow],
-                                ['No Appt.', bookingPressure.noAppointment],
-                                ['Overdue', bookingPressure.overdue],
-                            ].map(([label, value]) => (
-                                <Link
-                                    href="/lead-workflow/booking-board"
-                                    key={label}
-                                    className={
-                                        label === 'Overdue' ? 'is-alert' : ''
-                                    }
+                        <div className="crm-dashboard-salesman-table">
+                            <div className="crm-dashboard-salesman-row is-heading">
+                                <span>Salesman</span>
+                                <span>Assigned</span>
+                                <span>Sold</span>
+                            </div>
+                            {salesmanPerformance.map((salesman) => (
+                                <div
+                                    className="crm-dashboard-salesman-row"
+                                    key={salesman.id}
                                 >
-                                    <strong>{value}</strong>
-                                    <span>{label}</span>
-                                </Link>
+                                    <strong>{salesman.name}</strong>
+                                    <span>{salesman.assigned}</span>
+                                    <span>{salesman.sold}</span>
+                                </div>
                             ))}
+                            {salesmanPerformance.length === 0 && (
+                                <p className="crm-dashboard-team-empty">
+                                    No salesmen have been created yet.
+                                </p>
+                            )}
                         </div>
                     </article>
 
@@ -247,6 +332,74 @@ export default function Dashboard({
                         </div>
                     </article>
                 </section>
+
+                {selectedTeam && (
+                    <div
+                        className="crm-dashboard-team-modal"
+                        role="presentation"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setSelectedTeamId(null);
+                            }
+                        }}
+                    >
+                        <section
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="team-breakdown-title"
+                        >
+                            <header>
+                                <div>
+                                    <small>Team member breakdown</small>
+                                    <h2 id="team-breakdown-title">
+                                        {selectedTeam.name}
+                                    </h2>
+                                    <p>Manager: {selectedTeam.manager}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedTeamId(null)}
+                                    aria-label="Close team breakdown"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="crm-dashboard-team-modal__summary">
+                                <article>
+                                    <small>Total</small>
+                                    <strong>{selectedTeam.total}</strong>
+                                </article>
+                                <article>
+                                    <small>Confirmed</small>
+                                    <strong>{selectedTeam.confirmed}</strong>
+                                </article>
+                                <article>
+                                    <small>Sold</small>
+                                    <strong>{selectedTeam.sold}</strong>
+                                </article>
+                            </div>
+                            <div className="crm-dashboard-team-modal__table">
+                                <div className="is-heading">
+                                    <span>Member</span>
+                                    <span>Total</span>
+                                    <span>Confirmed</span>
+                                    <span>Sold</span>
+                                </div>
+                                {selectedTeam.agents.map((agent) => (
+                                    <div key={agent.id}>
+                                        <strong>{agent.name}</strong>
+                                        <span>{agent.total}</span>
+                                        <span>{agent.confirmed}</span>
+                                        <span>{agent.sold}</span>
+                                    </div>
+                                ))}
+                                {selectedTeam.agents.length === 0 && (
+                                    <p>No agents assigned to this team.</p>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+                )}
 
                 <section className="crm-dashboard-bottom-grid">
                     <article className="crm-dashboard-card crm-dashboard-workflow">

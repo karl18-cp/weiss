@@ -154,6 +154,7 @@ class CallToolsWebhookController extends Controller
         $existingLead = Lead::query()
             ->where('calltools_contact_id', $data['contact_id'])
             ->first();
+        $receivedAt = now();
 
         $lead = Lead::query()->updateOrCreate(
             ['calltools_contact_id' => $data['contact_id']],
@@ -181,6 +182,13 @@ class CallToolsWebhookController extends Controller
                 'status' => 'fresh',
             ],
         );
+
+        if ($existingLead) {
+            // A repeated CallTools submission is a newly received lead, not a
+            // duplicate. Keep its CRM history and relationships on the same
+            // record while returning it to the top of Leads Shop.
+            $lead->forceFill(['created_at' => $receivedAt])->saveQuietly();
+        }
 
         if ($existingLead && (int) $relationships['agent_id'] !== (int) $lead->agent_id) {
             $hasAssignmentHistory = class_exists(LeadAgentAssignment::class)

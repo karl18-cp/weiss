@@ -212,105 +212,311 @@
     font-size: 0.62rem;
 }
 
-.crm-dashboard-priority > div {
+.crm-dashboard-teams {
+    grid-column: span 1;
+}
+
+.crm-dashboard-teams > header {
     display: grid;
-    gap: 0.45rem;
-    margin-top: 0.85rem;
+    gap: 0.65rem;
 }
 
-.crm-dashboard-priority a {
+.crm-dashboard-teams form {
     display: grid;
-    grid-template-columns: 0.55rem 1fr auto;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.65rem 0.7rem;
-    border-radius: 0.65rem;
-    color: #435067;
-    background: #fff3f3;
-    font-size: 0.65rem;
-    text-decoration: none;
+    grid-template-columns: 1fr 1fr auto;
+    align-items: end;
+    gap: 0.4rem;
 }
 
-.crm-dashboard-priority a:nth-child(2) {
-    background: #fff7ed;
-}
-.crm-dashboard-priority a:nth-child(3) {
-    background: #fff9e8;
-}
-.crm-dashboard-priority a:nth-child(4) {
-    background: #eef5ff;
-}
-
-.crm-dashboard-priority a > i {
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 50%;
-    background: #ef4444;
-}
-
-.crm-dashboard-priority a > i.is-orange {
-    background: #f97316;
-}
-.crm-dashboard-priority a > i.is-yellow {
-    background: #f59e0b;
-}
-.crm-dashboard-priority a > i.is-blue {
-    background: #3b82f6;
-}
-
-.crm-dashboard-priority a strong {
-    min-width: 1.55rem;
-    padding: 0.3rem;
-    border-radius: 0.45rem;
-    color: #fff;
-    background: #ef4444;
-    text-align: center;
-}
-
-.crm-dashboard-priority a:nth-child(2) strong {
-    background: #f97316;
-}
-.crm-dashboard-priority a:nth-child(3) strong {
-    background: #f59e0b;
-}
-.crm-dashboard-priority a:nth-child(4) strong {
-    background: #3b82f6;
-}
-
-.crm-dashboard-booking > div {
+.crm-dashboard-teams label {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.45rem;
-    margin-top: 0.85rem;
+    gap: 0.2rem;
+    color: #718096;
+    font-size: 0.52rem;
+    font-weight: 750;
 }
 
-.crm-dashboard-booking a {
-    display: grid;
-    min-height: 5rem;
-    place-content: center;
+.crm-dashboard-teams input,
+.crm-dashboard-teams form button {
+    min-width: 0;
+    height: 2rem;
     border: 1px solid #dce4ef;
-    border-radius: 0.7rem;
-    color: #172036;
+    border-radius: 0.5rem;
     background: #f8fafc;
-    text-align: center;
-    text-decoration: none;
+    font-size: 0.58rem;
 }
 
-.crm-dashboard-booking strong,
-.crm-dashboard-booking span {
-    display: block;
+.crm-dashboard-teams input {
+    padding: 0 0.45rem;
 }
-.crm-dashboard-booking strong {
-    font-size: 1.25rem;
+
+.crm-dashboard-teams form button {
+    padding: 0 0.65rem;
+    border-color: #2f6fed;
+    color: #fff;
+    background: #2f6fed;
+    font-weight: 800;
+}
+
+.crm-dashboard-team-table {
+    max-height: 10rem;
+    overflow-y: auto;
+    margin-top: 0.7rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.65rem;
+}
+
+.crm-dashboard-team-row {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(6rem, 1fr) repeat(3, minmax(3.4rem, auto));
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.65rem;
+    border-bottom: 1px solid #edf1f6;
+    color: #334155;
+    background: #fff;
+    font-size: 0.62rem;
+    text-align: left;
+}
+
+.crm-dashboard-team-row:last-child {
+    border-bottom: 0;
+}
+
+.crm-dashboard-team-row > span:not(:first-child) {
+    font-weight: 850;
+    text-align: center;
+}
+
+.crm-dashboard-team-row > strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.crm-dashboard-team-row > strong small {
+    color: #7b8799;
+    font-size: 0.55rem;
+    font-weight: 650;
+}
+
+.crm-dashboard-team-row:not(.is-heading):hover {
+    background: #f5f8fd;
+}
+
+.crm-dashboard-team-row.is-heading {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    color: #77869c;
+    background: #f8fafc;
+    font-size: 0.5rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.crm-dashboard-team-modal {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(14 25 48 / 48%);
+    backdrop-filter: blur(3px);
+}
+
+.crm-dashboard-team-modal > section {
+    width: min(38rem, 100%);
+    max-height: min(42rem, calc(100vh - 2rem));
+    overflow: hidden;
+    border: 1px solid #dce5f2;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 24px 70px rgb(12 28 58 / 28%);
+}
+
+.crm-dashboard-team-modal > section > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.1rem 1.2rem;
+    color: #fff;
+    background: linear-gradient(110deg, #2456d9, #3d83ed);
+}
+
+.crm-dashboard-team-modal header small {
+    color: #d9e7ff;
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.crm-dashboard-team-modal header h2 {
+    margin-top: 0.15rem;
+    font-size: 1.15rem;
     font-weight: 900;
 }
-.crm-dashboard-booking span {
-    margin-top: 0.25rem;
-    color: #92a0b5;
-    font-size: 0.56rem;
+
+.crm-dashboard-team-modal header p {
+    margin-top: 0.15rem;
+    color: #d9e7ff;
+    font-size: 0.65rem;
 }
-.crm-dashboard-booking a.is-alert strong {
-    color: #ef4444;
+
+.crm-dashboard-team-modal header button {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    place-items: center;
+    border-radius: 0.55rem;
+    background: rgb(255 255 255 / 16%);
+}
+
+.crm-dashboard-team-modal header button:hover {
+    background: rgb(255 255 255 / 25%);
+}
+
+.crm-dashboard-team-modal header svg {
+    width: 1rem;
+}
+
+.crm-dashboard-team-modal__summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+    padding: 0.9rem 1rem;
+    background: #f5f8fd;
+}
+
+.crm-dashboard-team-modal__summary article {
+    padding: 0.65rem;
+    border: 1px solid #e1e8f2;
+    border-radius: 0.65rem;
+    background: #fff;
+    text-align: center;
+}
+
+.crm-dashboard-team-modal__summary small,
+.crm-dashboard-team-modal__summary strong {
+    display: block;
+}
+
+.crm-dashboard-team-modal__summary small {
+    color: #8290a5;
+    font-size: 0.55rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.crm-dashboard-team-modal__summary strong {
+    margin-top: 0.15rem;
+    color: #2864e4;
+    font-size: 1.2rem;
+    font-weight: 900;
+}
+
+.crm-dashboard-team-modal__table {
+    max-height: 25rem;
+    padding: 0.75rem 1rem 1rem;
+    overflow-y: auto;
+}
+
+.crm-dashboard-team-modal__table > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) repeat(3, minmax(4.2rem, auto));
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem;
+    border-bottom: 1px solid #edf1f6;
+    color: #3c4a60;
+    font-size: 0.67rem;
+}
+
+.crm-dashboard-team-modal__table > div > span {
+    font-weight: 850;
+    text-align: center;
+}
+
+.crm-dashboard-team-modal__table > div.is-heading {
+    position: sticky;
+    z-index: 1;
+    top: -0.75rem;
+    color: #7d899c;
+    background: #fff;
+    font-size: 0.52rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.crm-dashboard-team-modal__table > p {
+    padding: 2rem 1rem;
+    color: #8794a7;
+    font-size: 0.65rem;
+    text-align: center;
+}
+
+.crm-dashboard-team-empty {
+    margin: 0;
+    padding: 1rem;
+    color: #91a0b6;
+    font-size: 0.62rem;
+    text-align: center;
+}
+
+.crm-dashboard-salesman-table {
+    max-height: 13.35rem;
+    overflow-y: auto;
+    margin-top: 0.85rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.65rem;
+}
+
+.crm-dashboard-salesman-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 1fr) 4rem 3.5rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.62rem 0.7rem;
+    border-bottom: 1px solid #edf1f6;
+    color: #334155;
+    font-size: 0.62rem;
+}
+
+.crm-dashboard-salesman-row:last-child {
+    border-bottom: 0;
+}
+
+.crm-dashboard-salesman-row > span {
+    font-weight: 850;
+    text-align: center;
+}
+
+.crm-dashboard-salesman-row > span:last-child {
+    color: #15834f;
+}
+
+.crm-dashboard-salesman-row.is-heading {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    color: #77869c;
+    background: #f8fafc;
+    font-size: 0.5rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.crm-dashboard-salesman-row.is-heading > span:last-child {
+    color: inherit;
 }
 
 .crm-dashboard-health > div,
@@ -497,6 +703,18 @@
     }
     .crm-dashboard-health {
         grid-column: auto;
+    }
+    .crm-dashboard-teams form {
+        grid-template-columns: 1fr 1fr;
+    }
+    .crm-dashboard-teams form button {
+        grid-column: 1 / -1;
+    }
+    .crm-dashboard-team-table {
+        overflow-x: auto;
+    }
+    .crm-dashboard-team-row {
+        min-width: 28rem;
     }
     .crm-dashboard-workflow > div {
         grid-template-columns: 1fr 1fr;

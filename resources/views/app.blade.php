@@ -21,11 +21,18 @@
             }
 
             /* Keep third-party widget failures from covering the CRM. */
+            #rc-widget {
+                max-width: min(24rem, calc(100vw - 2rem)) !important;
+                max-height: min(42rem, calc(100svh - 2rem)) !important;
+                overflow: hidden !important;
+                border-radius: 0.75rem !important;
+                box-shadow: 0 1rem 3rem rgb(15 23 42 / 24%) !important;
+            }
+
             #rc-widget-adapter-frame {
                 max-width: min(24rem, calc(100vw - 2rem)) !important;
                 max-height: min(42rem, calc(100svh - 2rem)) !important;
                 border-radius: 0.75rem !important;
-                box-shadow: 0 1rem 3rem rgb(15 23 42 / 24%) !important;
             }
         </style>
 

@@ -17,6 +17,7 @@ use App\Models\LeadNote;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Salesman;
+use App\Services\ProjectNumberAllocator;
 use App\Support\PhoneNumberVisibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,13 @@ class LeadsShopController extends Controller
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
             'cities' => Lead::query()
+                ->where(function ($query) use ($requestedLeadId): void {
+                    $query->whereIn('status', Lead::LEADS_SHOP_STATUSES)
+                        ->when(
+                            $requestedLeadId,
+                            fn ($query) => $query->orWhere('id', $requestedLeadId),
+                        );
+                })
                 ->whereNotNull('city')
                 ->where('city', '!=', '')
                 ->distinct()
@@ -99,6 +107,9 @@ class LeadsShopController extends Controller
             if (! PhoneNumberVisibility::canView($request->user())) {
                 unset($data['primary_number'], $data['secondary_number'], $data['mobile_number']);
             }
+            // This field is read-only in the edit UI. Never overwrite it with a
+            // stale or blank value submitted by an already-open lead card.
+            unset($data['telemarketer_notes']);
             $reassignedAgentId = (int) $data['agent_id'];
             unset($data['agent_id']);
             $previousSalesmen = [
@@ -224,13 +235,16 @@ class LeadsShopController extends Controller
         }
 
         $project = DB::transaction(function () use ($request, $lead): Project {
-            $project = Project::query()->updateOrCreate(
-                ['lead_id' => $lead->id],
-                [
-                    'amount' => $request->validated('amount'),
-                    'created_by' => $request->user()->getAuthIdentifier(),
-                ],
-            );
+            $project = Project::query()->firstOrNew(['lead_id' => $lead->id]);
+
+            if (! $project->exists) {
+                $project->project_number = app(ProjectNumberAllocator::class)->allocate($lead);
+            }
+
+            $project->fill([
+                'amount' => $request->validated('amount'),
+                'created_by' => $request->user()->getAuthIdentifier(),
+            ])->save();
 
             $project->sales()->updateOrCreate(
                 ['type' => 'original'],

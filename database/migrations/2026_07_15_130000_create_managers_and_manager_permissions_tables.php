@@ -13,7 +13,7 @@ return new class extends Migration
 
         Schema::create('managers', function (Blueprint $table) {
             $table->id('manager_id');
-            $table->integer('account_id')->unique();
+            $table->foreignId('account_id')->unique();
             $table->string('manager_name');
             $table->string('phone', 30);
             $table->unsignedInteger('company_id')->nullable();

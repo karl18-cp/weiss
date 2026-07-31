@@ -94,6 +94,7 @@ test('accepting a sale creates a related project', function () {
 
     $this->assertDatabaseHas('projects', [
         'lead_id' => $lead->id,
+        'project_number' => 'PC-001',
         'amount' => 12500.50,
         'status' => 'new',
         'created_by' => $account->acc_id,
@@ -110,6 +111,7 @@ test('accepting a sale creates a related project', function () {
         'type' => 'original',
         'amount' => 12500.50,
     ]);
+    expect($lead->company->refresh()->project_code)->toBe('PC-002');
 
     $this->actingAs($account)
         ->get(route('management.projects'))
@@ -121,6 +123,25 @@ test('accepting a sale creates a related project', function () {
             ->where('projects.0.lead.company.prefix', 'PC')
             ->where('projects.0.lead.customer_name', 'Project Customer'),
         );
+});
+
+test('company project codes are allocated sequentially for new projects', function () {
+    ['account' => $account, 'lead' => $firstLead, 'salesman' => $salesman] = projectSaleFixtures();
+    $firstLead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $secondLead = $firstLead->replicate();
+    $secondLead->customer_name = 'Second Project Customer';
+    $secondLead->save();
+
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $firstLead), [
+        'amount' => 12500,
+    ])->assertRedirect();
+    $this->post(route('lead-workflow.leads-shop.sale', $secondLead), [
+        'amount' => 15000,
+    ])->assertRedirect();
+
+    expect($firstLead->refresh()->project->project_number)->toBe('PC-001')
+        ->and($secondLead->refresh()->project->project_number)->toBe('PC-002')
+        ->and($firstLead->company->refresh()->project_code)->toBe('PC-003');
 });
 
 test('sold appointment results must use the sale workflow', function () {

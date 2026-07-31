@@ -17,7 +17,7 @@ class CompanyRequest extends FormRequest
             'company' => ['required', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:255'],
             'prefix' => ['required', 'string', 'max:255'],
-            'project_code' => ['required', 'string', 'max:255'],
+            'project_code' => ['required', 'string', 'max:255', 'regex:/\d+$/'],
         ];
     }
 }

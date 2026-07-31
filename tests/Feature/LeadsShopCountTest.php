@@ -49,8 +49,10 @@ test('leads shop only loads and counts leads that remain in its statuses', funct
 
     $makeLead('fresh', 'Fresh Shop Lead');
     $makeLead('raw', 'Raw Shop Lead');
-    $makeLead('confirmed', 'Moved To Confirmation');
-    $makeLead('dispatched', 'Moved To Dispatch');
+    $confirmedLead = $makeLead('confirmed', 'Moved To Confirmation');
+    $confirmedLead->update(['city' => 'Confirmation Only City']);
+    $dispatchedLead = $makeLead('dispatched', 'Moved To Dispatch');
+    $dispatchedLead->update(['city' => 'Dispatch Only City']);
     $makeLead('project', 'Converted Project');
 
     $this->actingAs($account)
@@ -61,6 +63,21 @@ test('leads shop only loads and counts leads that remain in its statuses', funct
             ->has('leads', 2)
             ->where('leads.0.customer_name', fn (string $name): bool => in_array($name, ['Fresh Shop Lead', 'Raw Shop Lead'], true))
             ->where('leads.1.customer_name', fn (string $name): bool => in_array($name, ['Fresh Shop Lead', 'Raw Shop Lead'], true))
+            ->where('cities', ['Test City'])
+        );
+
+    $this->get(route('lead-workflow.confirm-leads'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/confirm-leads')
+            ->where('cities', ['Confirmation Only City'])
+        );
+
+    $this->get(route('lead-workflow.dispatch-leads'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/dispatch-leads')
+            ->where('cities', ['Dispatch Only City'])
         );
 });
 

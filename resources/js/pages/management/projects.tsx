@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 
 type ProductOption = { prod_id: number; product_name: string };
+type ProjectStatusFilter = 'all' | 'new' | 'progress' | 'completed';
 
 type ProjectSale = {
     id: number;
@@ -218,6 +219,8 @@ export default function Projects({
     const [activeTab, setActiveTab] = useState<
         'PRJ' | 'DTL' | 'SP' | 'INV' | 'ACT' | 'DOC'
     >('PRJ');
+    const [projectStatusFilter, setProjectStatusFilter] =
+        useState<ProjectStatusFilter>('all');
     const [selectedId, setSelectedId] = useState<number | null>(() =>
         projects.some((project) => project.id === requestedProjectId)
             ? requestedProjectId
@@ -353,6 +356,31 @@ export default function Projects({
     const selected = useMemo(
         () => projects.find((project) => project.id === selectedId) ?? null,
         [projects, selectedId],
+    );
+    const filteredProjects = useMemo(
+        () =>
+            projectStatusFilter === 'all'
+                ? projects
+                : projects.filter(
+                      (project) =>
+                          (project.status || 'new') === projectStatusFilter,
+                  ),
+        [projects, projectStatusFilter],
+    );
+    const projectStatusCounts = useMemo(
+        () => ({
+            all: projects.length,
+            new: projects.filter(
+                (project) => (project.status || 'new') === 'new',
+            ).length,
+            progress: projects.filter(
+                (project) => project.status === 'progress',
+            ).length,
+            completed: projects.filter(
+                (project) => project.status === 'completed',
+            ).length,
+        }),
+        [projects],
     );
 
     const projectInvoiceContractorIds = new Set(
@@ -2405,6 +2433,40 @@ export default function Projects({
 
                     {activeTab === 'PRJ' && (
                         <section className="projects-panel">
+                            <div
+                                className="projects-status-filter"
+                                aria-label="Filter projects by status"
+                            >
+                                {(
+                                    [
+                                        ['all', 'All'],
+                                        ['new', 'New'],
+                                        ['progress', 'In Progress'],
+                                        ['completed', 'Completed'],
+                                    ] as const
+                                ).map(([value, label]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        className={
+                                            projectStatusFilter === value
+                                                ? 'is-active'
+                                                : ''
+                                        }
+                                        aria-pressed={
+                                            projectStatusFilter === value
+                                        }
+                                        onClick={() =>
+                                            setProjectStatusFilter(value)
+                                        }
+                                    >
+                                        <span>{label}</span>
+                                        <strong>
+                                            {projectStatusCounts[value]}
+                                        </strong>
+                                    </button>
+                                ))}
+                            </div>
                             <div className="projects-table-wrap">
                                 <table className="projects-table">
                                     <thead>
@@ -2425,7 +2487,7 @@ export default function Projects({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {projects.map((project) => (
+                                        {filteredProjects.map((project) => (
                                             <tr
                                                 key={project.id}
                                                 className={
@@ -2511,7 +2573,7 @@ export default function Projects({
                                             </tr>
                                         ))}
 
-                                        {projects.length === 0 && (
+                                        {filteredProjects.length === 0 && (
                                             <tr>
                                                 <td
                                                     colSpan={13}
@@ -2519,12 +2581,20 @@ export default function Projects({
                                                 >
                                                     <BriefcaseBusiness />
                                                     <strong>
-                                                        No projects yet
+                                                        No{' '}
+                                                        {projectStatusFilter ===
+                                                        'all'
+                                                            ? ''
+                                                            : projectStatusFilter ===
+                                                                'progress'
+                                                              ? 'in progress '
+                                                              : `${projectStatusFilter} `}
+                                                        projects
                                                     </strong>
                                                     <span>
-                                                        Accepted sales from
-                                                        Dispatch will appear
-                                                        here.
+                                                        Choose another status
+                                                        to view matching
+                                                        projects.
                                                     </span>
                                                 </td>
                                             </tr>

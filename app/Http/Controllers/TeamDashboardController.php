@@ -24,19 +24,19 @@ class TeamDashboardController extends Controller
             ->map(fn ($date): string => $date->format('Y-m-d'));
 
         $leads = Lead::query()
+            ->withExists('project')
             ->whereBetween('created_at', [
                 $start->utc(),
                 $end->endOfDay()->utc(),
             ])
-            ->get(['agent_id', 'created_at']);
+            ->get(['agent_id', 'created_at', 'status']);
 
         $scores = $leads
             ->groupBy(fn (Lead $lead): int => (int) $lead->agent_id)
             ->map(fn ($agentLeads) => $agentLeads
                 ->groupBy(fn (Lead $lead): string => CarbonImmutable::parse($lead->created_at, 'UTC')
                     ->setTimezone($timezone)
-                    ->format('Y-m-d'))
-                ->map->count());
+                    ->format('Y-m-d')));
 
         $teams = Team::query()
             ->with([
@@ -45,7 +45,7 @@ class TeamDashboardController extends Controller
             ])
             ->orderBy('team_name')
             ->get()
-            ->map(function (Team $team) use ($dates, $scores): array {
+            ->map(function (Team $team) use ($dates, $leads, $scores): array {
                 $agentScores = $team->agents
                     ->map(function ($agent) use ($dates, $scores): array {
                         $daily = $scores->get((int) $agent->agent_id, collect());
@@ -53,7 +53,7 @@ class TeamDashboardController extends Controller
                         return [
                             'id' => (int) $agent->agent_id,
                             'name' => $agent->agent_name,
-                            'total' => $dates->sum(fn (string $date): int => (int) $daily->get($date, 0)),
+                            'total' => $dates->sum(fn (string $date): int => $daily->get($date, collect())->count()),
                         ];
                     })
                     ->sortByDesc('total')
@@ -61,9 +61,10 @@ class TeamDashboardController extends Controller
 
                 $dailyScores = $dates->map(function (string $date) use ($team, $scores): array {
                     $count = $team->agents->sum(
-                        fn ($agent): int => (int) $scores
+                        fn ($agent): int => $scores
                             ->get((int) $agent->agent_id, collect())
-                            ->get($date, 0),
+                            ->get($date, collect())
+                            ->count(),
                     );
 
                     return [
@@ -73,6 +74,8 @@ class TeamDashboardController extends Controller
                         'count' => $count,
                     ];
                 });
+                $teamAgentIds = $team->agents->pluck('agent_id')->map(fn ($id): int => (int) $id);
+                $teamLeads = $leads->whereIn('agent_id', $teamAgentIds);
 
                 return [
                     'id' => (int) $team->team_id,
@@ -80,6 +83,8 @@ class TeamDashboardController extends Controller
                     'manager' => $team->manager?->manager_name ?? 'No manager',
                     'memberCount' => $team->agents->count(),
                     'total' => $dailyScores->sum('count'),
+                    'confirmed' => $teamLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
+                    'sold' => $teamLeads->where('project_exists', true)->count(),
                     'dailyScores' => $dailyScores,
                     'agents' => $agentScores,
                 ];

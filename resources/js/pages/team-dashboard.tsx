@@ -35,6 +35,8 @@ type TeamScore = {
     manager: string;
     memberCount: number;
     total: number;
+    confirmed: number;
+    sold: number;
     rank: number;
     dailyScores: DailyScore[];
     agents: AgentScore[];
@@ -340,10 +342,20 @@ export default function TeamDashboard({
                                                 {team.memberCount} members
                                             </p>
                                         </div>
-                                        <strong>
-                                            {team.total}
-                                            <small>leads</small>
-                                        </strong>
+                                        <div className="team-score-counts">
+                                            <span>
+                                                <small>Total</small>
+                                                <strong>{team.total}</strong>
+                                            </span>
+                                            <span>
+                                                <small>Confirmed</small>
+                                                <strong>{team.confirmed}</strong>
+                                            </span>
+                                            <span>
+                                                <small>Sold</small>
+                                                <strong>{team.sold}</strong>
+                                            </span>
+                                        </div>
                                     </header>
 
                                     <div className="team-score-details">
