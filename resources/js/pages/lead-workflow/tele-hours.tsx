@@ -2,6 +2,8 @@ import { Head, router } from '@inertiajs/react';
 import { Activity, Clock3, Download, History, PhoneCall } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import '@/../css/tele-hours.css';
+import { formatPhoneNumber } from '@/lib/phone-number';
+import { CRM_TIME_ZONE, crmDateKey } from '@/lib/crm-time';
 
 type LoginDay = {
     app_user_id?: string | null;
@@ -51,7 +53,9 @@ const dateTime = (value: string) => {
         ? value
         : `${value.replace(' ', 'T')}Z`;
 
-    return new Date(normalized).toLocaleString();
+    return new Date(normalized).toLocaleString('en-US', {
+        timeZone: CRM_TIME_ZONE,
+    });
 };
 
 const pdfSafe = (value: string) =>
@@ -79,7 +83,9 @@ const createTeleReportPdf = (
         filters.from === filters.to
             ? `Report date: ${filters.from}`
             : `Report range: ${filters.from} through ${filters.to}`;
-    const generatedAt = new Date().toLocaleString();
+    const generatedAt = new Date().toLocaleString('en-US', {
+        timeZone: CRM_TIME_ZONE,
+    });
     const totalNetSeconds = loginDays.reduce(
         (total, day) => total + Math.max(0, day.logged_seconds - day.lunch_seconds),
         0,
@@ -240,38 +246,6 @@ export default function TeleHours({
     };
     const apply = () => navigate(query);
     useEffect(() => {
-        const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-        if (deviceTimezone && deviceTimezone !== filters.timezone) {
-            const parts = new Intl.DateTimeFormat('en-US', {
-                timeZone: deviceTimezone,
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-            })
-                .formatToParts(new Date())
-                .reduce<Record<string, string>>((values, part) => {
-                    values[part.type] = part.value;
-
-                    return values;
-                }, {});
-            const deviceDate = `${parts.year}-${parts.month}-${parts.day}`;
-            const hasExplicitRange = new URLSearchParams(window.location.search).has('from');
-            const search = new URLSearchParams({
-                from: hasExplicitRange ? query.from : deviceDate,
-                to: hasExplicitRange ? query.to : deviceDate,
-                timezone: deviceTimezone,
-            });
-
-            if (query.agent) {
-                search.set('agent', query.agent);
-            }
-
-            window.location.replace(`/lead-workflow/tele-hours?${search}`);
-
-            return;
-        }
-
         const timer = window.setInterval(() => {
             if (document.visibilityState !== 'visible') {
                 return;
@@ -380,7 +354,7 @@ export default function TeleHours({
                         type="button"
                         className="tele-hours-today"
                         onClick={() => {
-                            const today = new Date().toLocaleDateString('en-CA');
+                            const today = crmDateKey();
                             navigate({ from: today, to: today, agent: query.agent, timezone: query.timezone });
                         }}
                     >
@@ -403,7 +377,9 @@ export default function TeleHours({
                     <small>
                         Last synced:{' '}
                         {lastSyncedAt
-                            ? new Date(lastSyncedAt).toLocaleString()
+                            ? new Date(lastSyncedAt).toLocaleString('en-US', {
+                                  timeZone: CRM_TIME_ZONE,
+                              })
                             : 'Waiting for first sync'}
                     </small>
                 </section>
@@ -542,7 +518,7 @@ export default function TeleHours({
                                         {item.agent_name ?? 'Unmapped'}
                                     </strong>
                                     <span>{item.call_uuid ?? '—'}</span>
-                                    <span>{item.phone_number ?? '—'}</span>
+                                    <span>{formatPhoneNumber(item.phone_number)}</span>
                                     <span>
                                         {item.disposition_name ?? 'Unknown'}
                                     </span>

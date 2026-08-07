@@ -22,6 +22,8 @@
 
             /* Keep third-party widget failures from covering the CRM. */
             #rc-widget {
+                right: 0.75rem !important;
+                bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
                 max-width: min(24rem, calc(100vw - 2rem)) !important;
                 max-height: min(42rem, calc(100svh - 2rem)) !important;
                 overflow: hidden !important;
@@ -30,6 +32,8 @@
             }
 
             #rc-widget-adapter-frame {
+                right: 0.75rem !important;
+                bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
                 max-width: min(24rem, calc(100vw - 2rem)) !important;
                 max-height: min(42rem, calc(100svh - 2rem)) !important;
                 border-radius: 0.75rem !important;
@@ -57,7 +61,11 @@
         <x-inertia::app />
 
         @auth
-            @if (auth()->user()->role !== 'salesman' && config('services.ringcentral.embeddable_client_id'))
+            @if (
+                auth()->user()->role !== 'salesman'
+                && config('services.ringcentral.embeddable_client_id')
+                && request()->is('dashboard', 'team-dashboard', 'lead-workflow/*', 'management/*', 'settings/*')
+            )
                 <script
                     src="https://apps.ringcentral.com/integration/ringcentral-embeddable/latest/adapter.js?clientId={{ urlencode(config('services.ringcentral.embeddable_client_id')) }}"
                     async

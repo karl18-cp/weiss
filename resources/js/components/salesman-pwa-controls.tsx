@@ -1,5 +1,6 @@
 import { Bell, Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import '@/../css/pwa-controls.css';
 
 type InstallPromptEvent = Event & {
     prompt: () => Promise<void>;
@@ -24,10 +25,31 @@ const isRunningAsInstalledApp = () =>
         (navigator as Navigator & { standalone?: boolean }).standalone,
     );
 
+const registerSubscriptionForCurrentAccount = async (
+    subscription: PushSubscription,
+) => {
+    const response = await fetch('/salesman/push-subscriptions', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': csrfToken(),
+        },
+        body: JSON.stringify(subscription.toJSON()),
+    });
+
+    if (!response.ok) {
+        throw new Error(`The phone could not be registered (${response.status}).`);
+    }
+};
+
 export default function SalesmanPwaControls({
     publicKey,
+    allowInstall = true,
 }: {
     publicKey: string | null;
+    allowInstall?: boolean;
 }) {
     const [installPrompt, setInstallPrompt] =
         useState<InstallPromptEvent | null>(null);
@@ -45,11 +67,25 @@ export default function SalesmanPwaControls({
         navigator.serviceWorker
             .register('/sw.js')
             .then(async (registration) => {
-                setSubscribed(
-                    Boolean(await registration.pushManager.getSubscription()),
-                );
+                const subscription =
+                    await registration.pushManager.getSubscription();
+
+                if (subscription) {
+                    await registerSubscriptionForCurrentAccount(subscription);
+                    setSubscribed(true);
+                    return;
+                }
+
+                setSubscribed(false);
             })
-            .catch(() => setSubscribed(false));
+            .catch((error) => {
+                setSubscribed(false);
+                setMessage(
+                    error instanceof Error
+                        ? error.message
+                        : 'This phone could not register for notifications.',
+                );
+            });
 
         const capturePrompt = (event: Event) => {
             event.preventDefault();
@@ -101,21 +137,7 @@ export default function SalesmanPwaControls({
                     applicationServerKey: decodeKey(publicKey),
                 }));
 
-            const response = await fetch('/salesman/push-subscriptions', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': csrfToken(),
-                },
-                body: JSON.stringify(subscription.toJSON()),
-            });
-            if (!response.ok) {
-                throw new Error(
-                    `The phone could not be registered (${response.status}).`,
-                );
-            }
+            await registerSubscriptionForCurrentAccount(subscription);
 
             const testResponse = await fetch('/salesman/push-subscriptions/test', {
                 method: 'POST',
@@ -151,7 +173,7 @@ export default function SalesmanPwaControls({
 
     return (
         <div className="salesman-pwa">
-            {!installed && (
+            {allowInstall && !installed && (
                 <button type="button" onClick={install}>
                     <Download />
                     Install app

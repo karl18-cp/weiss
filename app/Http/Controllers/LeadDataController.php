@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\Company;
 use App\Models\Contractor;
 use App\Models\Lead;
 use App\Models\Project;
 use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
+use App\Support\ManagerAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,12 +21,33 @@ class LeadDataController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
         $agentId = $request->integer('agent') ?: null;
+        $sort = (string) $request->query('sort', 'origin');
+        $direction = $request->query('direction') === 'asc' ? 'asc' : 'desc';
+        $sortColumns = [
+            'origin' => 'created_at',
+            'customer' => 'customer_name',
+            'address' => 'address',
+            'city' => 'city',
+            'state' => 'state',
+            'zip' => 'zip_code',
+            'appointment' => 'appointment_at',
+            'lead_result' => 'status',
+            'appointment_result' => 'appointment_result',
+            'mobile' => 'mobile_number',
+            'phone' => 'primary_number',
+            'note' => 'telemarketer_notes',
+        ];
+        $sort = array_key_exists($sort, $sortColumns) || in_array($sort, ['agent', 'verified', 'rep', 'company'], true)
+            ? $sort
+            : 'origin';
 
         $leads = Lead::query()
+            ->whereDoesntHave('project', fn (Builder $query) => $query->where('tele_lead_excluded', true))
             ->with([
                 'agent:agent_id,agent_name',
                 'salesmanOne:salesman_id,salesman_name',
                 'salesmanTwo:salesman_id,salesman_name',
+                'company:com_id,prefix',
                 'latestTelemarketerNote',
                 'project:id,lead_id',
             ])
@@ -40,15 +63,40 @@ class LeadDataController extends Controller
                         ->orWhere('primary_number', 'like', "%{$search}%")
                         ->orWhere('mobile_number', 'like', "%{$search}%")
                         ->orWhereHas('agent', fn (Builder $agentQuery) => $agentQuery
-                            ->where('agent_name', 'like', "%{$search}%"));
+                            ->where('agent_name', 'like', "%{$search}%"))
+                        ->orWhereHas('salesmanOne', fn (Builder $salesmanQuery) => $salesmanQuery
+                            ->where('salesman_name', 'like', "%{$search}%"))
+                        ->orWhereHas('salesmanTwo', fn (Builder $salesmanQuery) => $salesmanQuery
+                            ->where('salesman_name', 'like', "%{$search}%"))
+                        ->orWhereHas('company', fn (Builder $companyQuery) => $companyQuery
+                            ->where('prefix', 'like', "%{$search}%"));
                 });
             })
-            ->latest()
+            ->when($sort === 'agent', fn (Builder $query) => $query
+                ->orderBy(
+                    Agent::query()->select('agent_name')->whereColumn('agents.agent_id', 'leads.agent_id'),
+                    $direction,
+                ))
+            ->when($sort === 'verified', fn (Builder $query) => $query
+                ->orderByRaw(
+                    "CASE WHEN status IN ('confirmed', 'dispatched', 'salesman_sent') OR salesman_1_id IS NOT NULL OR salesman_2_id IS NOT NULL OR appointment_result = 'Salesman Sent' THEN 1 ELSE 0 END {$direction}",
+                ))
+            ->when($sort === 'rep', fn (Builder $query) => $query->orderByRaw(
+                "COALESCE((SELECT salesman_name FROM salesmen WHERE salesmen.salesman_id = leads.salesman_1_id), (SELECT salesman_name FROM salesmen WHERE salesmen.salesman_id = leads.salesman_2_id), '') {$direction}",
+            ))
+            ->when($sort === 'company', fn (Builder $query) => $query->orderBy(
+                Company::query()->select('prefix')->whereColumn('companies.com_id', 'leads.company_id'),
+                $direction,
+            ))
+            ->when(isset($sortColumns[$sort]), fn (Builder $query) => $query
+                ->orderBy($sortColumns[$sort], $direction))
+            ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Lead $lead): array => [
                 'id' => $lead->id,
                 'origin_at' => $lead->created_at?->toIso8601String(),
+                'agent_id' => $lead->agent_id,
                 'agent' => $lead->agent?->agent_name ?? 'Unassigned',
                 'customer' => $lead->customer_name,
                 'verified' => $this->isVerified($lead),
@@ -58,7 +106,11 @@ class LeadDataController extends Controller
                 'zip' => $lead->zip_code,
                 'appointment_at' => $lead->appointment_at?->toIso8601String(),
                 'lead_result' => $this->leadResult($lead),
-                'rep' => $lead->rep ?: 'N/A',
+                'rep' => collect([
+                    $lead->salesmanOne?->salesman_name,
+                    $lead->salesmanTwo?->salesman_name,
+                ])->filter()->unique()->implode(', ') ?: 'N/A',
+                'company' => $lead->company?->prefix ?: 'N/A',
                 'appointment_result' => $lead->appointment_result ?: 'N/A',
                 'mobile' => $lead->mobile_number ?: '—',
                 'phone' => $lead->primary_number ?: '—',
@@ -68,15 +120,35 @@ class LeadDataController extends Controller
         return Inertia::render('lead-workflow/data', [
             'leads' => $leads,
             'agents' => Agent::query()
-                ->withCount('leads')
+                ->withCount(['leads' => fn (Builder $query) => $query
+                    ->whereDoesntHave('project', fn (Builder $projectQuery) => $projectQuery
+                        ->where('tele_lead_excluded', true))])
                 ->orderBy('agent_name')
                 ->get(['agent_id', 'agent_name']),
             'filters' => [
                 'search' => $search,
                 'agent' => $agentId,
+                'sort' => $sort,
+                'direction' => $direction,
             ],
-            'totalLeads' => Lead::query()->count(),
+            'totalLeads' => Lead::query()
+                ->whereDoesntHave('project', fn (Builder $query) => $query->where('tele_lead_excluded', true))
+                ->count(),
+            'canEdit' => ManagerAccess::canEdit($request->user(), 'data'),
         ]);
+    }
+
+    public function updateOriginalAgent(Request $request, Lead $lead)
+    {
+        abort_unless(ManagerAccess::canEdit($request->user(), 'data'), 403);
+
+        $validated = $request->validate([
+            'agent_id' => ['required', 'integer', 'exists:agents,agent_id'],
+        ]);
+
+        $lead->update(['agent_id' => $validated['agent_id']]);
+
+        return back()->with('success', 'Original agent updated.');
     }
 
     public function vendorInvoices(Request $request): Response

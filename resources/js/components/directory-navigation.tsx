@@ -14,6 +14,7 @@ const directoryTypes = [
 ] as const;
 
 export type DirectoryType = (typeof directoryTypes)[number];
+export type DirectoryStatus = 'active' | 'inactive';
 
 const links: Partial<Record<DirectoryType, string>> = {
     Salesman: '/management/salesmen',
@@ -29,32 +30,37 @@ const links: Partial<Record<DirectoryType, string>> = {
 export default function DirectoryNavigation({
     active,
     children,
-}: PropsWithChildren<{ active: DirectoryType }>) {
+    status = 'active',
+    onStatusChange,
+}: PropsWithChildren<{
+    active: DirectoryType;
+    status?: DirectoryStatus;
+    onStatusChange?: (status: DirectoryStatus) => void;
+}>) {
     return (
         <aside className="directory-navigation">
             <div className="directory-status" aria-label="Directory status">
                 <button
                     type="button"
-                    className="directory-status__button directory-status__button--active"
+                    className={`directory-status__button ${status === 'active' ? 'directory-status__button--active' : ''}`}
+                    onClick={() => onStatusChange?.('active')}
                 >
                     Active
                 </button>
-                <button type="button" className="directory-status__button">
-                    Archive
+                <button
+                    type="button"
+                    className={`directory-status__button ${status === 'inactive' ? 'directory-status__button--active' : ''}`}
+                    onClick={() => onStatusChange?.('inactive')}
+                >
+                    Inactive
                 </button>
             </div>
 
             <div className="directory-navigation__content">{children}</div>
 
-            <nav
-                className="directory-types"
-                aria-label="Contact and user types"
-            >
+            <nav className="directory-types" aria-label="Contact and user types">
                 {directoryTypes.map((type) => {
-                    const className =
-                        type === active
-                            ? 'directory-type directory-type--active'
-                            : 'directory-type';
+                    const className = type === active ? 'directory-type directory-type--active' : 'directory-type';
                     const href = links[type];
 
                     return href ? (

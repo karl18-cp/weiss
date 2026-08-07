@@ -1,5 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { Search } from 'lucide-react';
+import { AlertCircle, CheckCircle2, RefreshCw, Search, X } from 'lucide-react';
+import { useState } from 'react';
+import '@/../css/lead-data.css';
 
 const dataTabs = [
     { label: 'Vendor Invoices', href: '/lead-workflow/data/vendor-invoices' },
@@ -11,7 +13,21 @@ const dataTabs = [
 ] as const;
 
 type DataSection =
-    'Tele Leads' | 'Vendor Invoices' | 'Payables' | 'Receivables' | 'Tele Report' | 'Projects';
+    | 'Tele Leads'
+    | 'Vendor Invoices'
+    | 'Payables'
+    | 'Receivables'
+    | 'Tele Report'
+    | 'Projects';
+
+type DriveStatus = {
+    configured: boolean;
+    connected: boolean;
+    status: 'connected' | 'error' | 'not_configured';
+    folder?: { name: string };
+    message: string;
+    checkedAt: string;
+};
 
 function DriveIcon() {
     return (
@@ -31,72 +47,208 @@ export default function DataSectionTabs({
     active: DataSection;
     onSearch?: () => void;
 }) {
+    const [driveOpen, setDriveOpen] = useState(false);
+    const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
+    const [checkingDrive, setCheckingDrive] = useState(false);
+
+    const checkDrive = async () => {
+        setDriveOpen(true);
+        setCheckingDrive(true);
+
+        try {
+            const response = await fetch('/integrations/google-drive/status', {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+            setDriveStatus((await response.json()) as DriveStatus);
+        } catch {
+            setDriveStatus({
+                configured: true,
+                connected: false,
+                status: 'error',
+                message:
+                    'The CRM could not complete the Google Drive connection check.',
+                checkedAt: new Date().toISOString(),
+            });
+        } finally {
+            setCheckingDrive(false);
+        }
+    };
+
     return (
-        <nav className="lead-data-tabs" aria-label="Data sections">
-            {active === 'Tele Leads' ? (
-                <span className="lead-data-tab is-active">Tele Leads</span>
-            ) : (
-                <Link href="/lead-workflow/data" className="lead-data-tab">
-                    Tele Leads
-                </Link>
-            )}
-            {dataTabs.map((tab) =>
-                active === tab.label ? (
-                    <span key={tab.label} className="lead-data-tab is-active">
-                        {tab.label}
-                    </span>
-                ) : tab.href ? (
-                    <Link
-                        key={tab.label}
-                        href={tab.href}
-                        className="lead-data-tab"
-                    >
-                        {tab.label}
-                    </Link>
+        <>
+            <nav className="lead-data-tabs" aria-label="Data sections">
+                {active === 'Tele Leads' ? (
+                    <span className="lead-data-tab is-active">Tele Leads</span>
                 ) : (
+                    <Link href="/lead-workflow/data" className="lead-data-tab">
+                        Tele Leads
+                    </Link>
+                )}
+                {dataTabs.map((tab) =>
+                    active === tab.label ? (
+                        <span
+                            key={tab.label}
+                            className="lead-data-tab is-active"
+                        >
+                            {tab.label}
+                        </span>
+                    ) : tab.href ? (
+                        <Link
+                            key={tab.label}
+                            href={tab.href}
+                            className="lead-data-tab"
+                        >
+                            {tab.label}
+                        </Link>
+                    ) : (
+                        <button
+                            type="button"
+                            key={tab.label}
+                            className="lead-data-tab"
+                            title={`${tab.label} coming soon`}
+                        >
+                            {tab.label}
+                        </button>
+                    ),
+                )}
+                {active === 'Projects' ? (
+                    <span className="lead-data-tab is-active">Projects</span>
+                ) : (
+                    <Link href="/management/projects" className="lead-data-tab">
+                        Projects
+                    </Link>
+                )}
+                {onSearch ? (
                     <button
                         type="button"
-                        key={tab.label}
-                        className="lead-data-tab"
-                        title={`${tab.label} coming soon`}
+                        className="lead-data-tab lead-data-tab--search"
+                        onClick={onSearch}
                     >
-                        {tab.label}
+                        <Search />
+                        Search
                     </button>
-                ),
-            )}
-            {active === 'Projects' ? (
-                <span className="lead-data-tab is-active">Projects</span>
-            ) : (
-                <Link href="/management/projects" className="lead-data-tab">
-                    Projects
-                </Link>
-            )}
-            {onSearch ? (
+                ) : (
+                    <Link
+                        href="/lead-workflow/data"
+                        className="lead-data-tab lead-data-tab--search"
+                    >
+                        <Search />
+                        Search
+                    </Link>
+                )}
                 <button
                     type="button"
-                    className="lead-data-tab lead-data-tab--search"
-                    onClick={onSearch}
+                    className="lead-data-drive"
+                    aria-label="Check Google Drive sync status"
+                    title="Check Google Drive sync status"
+                    onClick={checkDrive}
                 >
-                    <Search />
-                    Search
+                    <DriveIcon />
+                    <span>Drive status</span>
+                    <i
+                        className={driveStatus?.connected ? 'is-connected' : ''}
+                        aria-hidden="true"
+                    />
                 </button>
-            ) : (
-                <Link
-                    href="/lead-workflow/data"
-                    className="lead-data-tab lead-data-tab--search"
+            </nav>
+            {driveOpen && (
+                <div
+                    className="drive-status-backdrop"
+                    role="presentation"
+                    onMouseDown={() => setDriveOpen(false)}
                 >
-                    <Search />
-                    Search
-                </Link>
+                    <section
+                        className="drive-status-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="drive-status-title"
+                        onMouseDown={(event) => event.stopPropagation()}
+                    >
+                        <button
+                            type="button"
+                            className="drive-status-close"
+                            aria-label="Close Google Drive status"
+                            onClick={() => setDriveOpen(false)}
+                        >
+                            <X />
+                        </button>
+                        <div className="drive-status-heading">
+                            <DriveIcon />
+                            <div>
+                                <h2 id="drive-status-title">
+                                    Google Drive sync
+                                </h2>
+                                <p>
+                                    Live connection status for project file
+                                    uploads.
+                                </p>
+                            </div>
+                        </div>
+                        {checkingDrive ? (
+                            <div className="drive-status-result is-checking">
+                                <RefreshCw className="is-spinning" />
+                                <div>
+                                    <strong>Checking connection…</strong>
+                                    <span>
+                                        Contacting Google Drive securely.
+                                    </span>
+                                </div>
+                            </div>
+                        ) : driveStatus ? (
+                            <div
+                                className={`drive-status-result ${driveStatus.connected ? 'is-success' : 'is-error'}`}
+                            >
+                                {driveStatus.connected ? (
+                                    <CheckCircle2 />
+                                ) : (
+                                    <AlertCircle />
+                                )}
+                                <div>
+                                    <strong>
+                                        {driveStatus.connected
+                                            ? 'Connected and ready'
+                                            : 'Sync unavailable'}
+                                    </strong>
+                                    <span>{driveStatus.message}</span>
+                                </div>
+                            </div>
+                        ) : null}
+                        {driveStatus?.connected && (
+                            <dl className="drive-status-details">
+                                <div>
+                                    <dt>Destination folder</dt>
+                                    <dd>
+                                        {driveStatus.folder?.name ??
+                                            'Open projects'}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Last checked</dt>
+                                    <dd>
+                                        {new Date(
+                                            driveStatus.checkedAt,
+                                        ).toLocaleString()}
+                                    </dd>
+                                </div>
+                            </dl>
+                        )}
+                        <button
+                            type="button"
+                            className="drive-status-check"
+                            onClick={checkDrive}
+                            disabled={checkingDrive}
+                        >
+                            <RefreshCw
+                                className={checkingDrive ? 'is-spinning' : ''}
+                            />
+                            {checkingDrive
+                                ? 'Checking…'
+                                : 'Test connection again'}
+                        </button>
+                    </section>
+                </div>
             )}
-            <button
-                type="button"
-                className="lead-data-drive"
-                aria-label="Google Drive"
-                title="Google Drive integration coming soon"
-            >
-                <DriveIcon />
-            </button>
-        </nav>
+        </>
     );
 }

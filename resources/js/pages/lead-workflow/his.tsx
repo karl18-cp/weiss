@@ -10,8 +10,9 @@ export default function HIS(props: LeadsShopProps) {
           "Review HIS leads, update their progress, and keep the next follow-up organized.",
         status: "his",
         listTitle: "Waiting for HIS",
-        dateLabel: "Appointment dates",
+        dateLabel: "HIS months",
         dateField: "appointment_at",
+        dateGranularity: "month",
       }}
     />
   );

@@ -33,13 +33,13 @@ export default function AccountStatusControl({
                 <span>
                     <strong className="block text-sm text-slate-800">
                         {suspended
-                            ? 'Account suspended'
+                            ? 'Account inactive'
                             : 'Account active'}
                     </strong>
                     <small className="mt-1 block text-xs leading-5 text-slate-600">
                         {suspended
-                            ? 'This user cannot sign in. Uncheck this option and save to restore access.'
-                            : 'Check this option and save to prevent this user from signing in.'}
+                            ? 'This user is inactive and cannot sign in. Uncheck this option and save to return them to Active.'
+                            : 'Check this option and save to move this user to Inactive and prevent sign-in.'}
                         {' '}Enter a new password above and save whenever you need to change their password.
                     </small>
                 </span>

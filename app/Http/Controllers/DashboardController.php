@@ -50,7 +50,7 @@ class DashboardController extends Controller
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
-        $teamTimezone = (string) config('services.calltools.report_timezone', 'Asia/Manila');
+        $teamTimezone = (string) config('app.timezone', 'America/Los_Angeles');
         [$teamFrom, $teamTo] = $this->teamDateRange($request, $teamTimezone);
         $teamLeads = Lead::query()
             ->whereBetween('created_at', [

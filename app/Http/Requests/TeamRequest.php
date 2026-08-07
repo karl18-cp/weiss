@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\ManagerAccess;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -9,7 +10,7 @@ class TeamRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'admin';
+        return $this->user() && ManagerAccess::canEdit($this->user(), 'contacts_users');
     }
 
     public function rules(): array
@@ -27,7 +28,12 @@ class TeamRequest extends FormRequest
             ],
             'manager_id' => ['required', 'integer', 'exists:managers,manager_id'],
             'agent_ids' => ['required', 'array', 'min:1'],
-            'agent_ids.*' => ['required', 'integer', 'distinct', 'exists:agents,agent_id'],
+            'agent_ids.*' => [
+                'required',
+                'integer',
+                'distinct',
+                Rule::exists('agents', 'agent_id')->whereNull('inactive_at'),
+            ],
         ];
     }
 }

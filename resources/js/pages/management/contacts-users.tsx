@@ -137,9 +137,9 @@ export default function ContactsUsers({
         }
 
         const confirmed = await confirm({
-            title: 'Archive company?',
-            message: `${selected.company} will be removed from active company selections and moved to the archive.`,
-            confirmLabel: 'Archive company',
+            title: 'Make company inactive?',
+            message: `${selected.company} will be removed from active company selections and moved to Inactive.`,
+            confirmLabel: 'Make inactive',
             tone: 'warning',
         });
 
@@ -176,7 +176,7 @@ export default function ContactsUsers({
         <>
             <Head title="Companies" />
             <main className="companies-page">
-                <header className="companies-header">
+                <header className="companies-header directory-heading-with-total">
                     <div>
                         <span className="companies-eyebrow">Management</span>
                         <h1>Companies</h1>
@@ -185,9 +185,7 @@ export default function ContactsUsers({
                             CRM.
                         </p>
                     </div>
-                </header>
-
-                <section className="companies-stats">
+                <section className="companies-stats directory-heading-total">
                     <div className="companies-stat-icon">
                         <Building2 />
                     </div>
@@ -196,39 +194,30 @@ export default function ContactsUsers({
                         <span>Total companies</span>
                     </div>
                 </section>
+                </header>
 
                 <div className="companies-workspace">
-                    <DirectoryNavigation active="Companies">
+                    <DirectoryNavigation
+                        active="Companies"
+                        status={showArchived ? 'inactive' : 'active'}
+                        onStatusChange={(status) => changeDirectory(status === 'inactive')}
+                    >
                         <div className="companies-panel-title companies-directory-title">
                             <div>
-                                <h2>
-                                    {showArchived
-                                        ? 'Archived companies'
-                                        : 'Company directory'}
-                                </h2>
+                                <div className="directory-heading-title-row">
+                                    <h2>
+                                        {showArchived
+                                            ? 'Inactive companies'
+                                            : 'Company directory'}
+                                    </h2>
+                                    <span className="directory-inline-count">{filteredCompanies.length}</span>
+                                </div>
                                 <p>
                                     {showArchived
                                         ? 'Select a company to restore'
                                         : 'Select a company to edit'}
                                 </p>
                             </div>
-                        </div>
-
-                        <div className="companies-directory-toggle">
-                            <button
-                                type="button"
-                                className={!showArchived ? 'is-active' : ''}
-                                onClick={() => changeDirectory(false)}
-                            >
-                                Active <span>{companies.length}</span>
-                            </button>
-                            <button
-                                type="button"
-                                className={showArchived ? 'is-active' : ''}
-                                onClick={() => changeDirectory(true)}
-                            >
-                                Archived <span>{archivedCompanies.length}</span>
-                            </button>
                         </div>
 
                         <label className="companies-search">
@@ -283,7 +272,7 @@ export default function ContactsUsers({
                                         {search
                                             ? 'Try another search.'
                                             : showArchived
-                                              ? 'Archived companies will appear here.'
+                                              ? 'Inactive companies will appear here.'
                                               : 'Create your first company.'}
                                     </span>
                                 </div>
@@ -297,8 +286,8 @@ export default function ContactsUsers({
                                 <h2>
                                     {showArchived
                                         ? selected
-                                            ? 'Archived company'
-                                            : 'Company archive'
+                                            ? 'Inactive company'
+                                            : 'Inactive companies'
                                         : selected
                                           ? 'Edit company'
                                           : 'Create company'}
@@ -306,8 +295,8 @@ export default function ContactsUsers({
                                 <p>
                                     {showArchived
                                         ? selected
-                                            ? `Archived company #${selected.com_id}`
-                                            : 'Select a company from the archive'
+                                            ? `Inactive company #${selected.com_id}`
+                                            : 'Select a company from the inactive list'
                                         : selected
                                           ? `Updating company #${selected.com_id}`
                                           : 'Add a company to your directory'}
@@ -318,7 +307,7 @@ export default function ContactsUsers({
                         {showArchived && !selected ? (
                             <div className="companies-archive-placeholder">
                                 <Archive />
-                                <strong>No archived company selected</strong>
+                                <strong>No inactive company selected</strong>
                                 <span>
                                     Choose one from the directory to view,
                                     restore, or permanently delete it.

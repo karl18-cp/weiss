@@ -145,6 +145,37 @@
     text-align: center;
 }
 
+.crm-sidebar__count--new-lead {
+    border-color: #ffdf66;
+    color: #07101f;
+    background: #ffe66d;
+    box-shadow:
+        0 0 0 0 rgb(255 230 109 / 75%),
+        0 0 1rem rgb(255 213 64 / 90%);
+    animation: crm-new-lead-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes crm-new-lead-pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow:
+            0 0 0 0 rgb(255 230 109 / 65%),
+            0 0 .65rem rgb(255 213 64 / 65%);
+    }
+    50% {
+        transform: scale(1.14);
+        box-shadow:
+            0 0 0 .35rem rgb(255 230 109 / 0%),
+            0 0 1.25rem rgb(255 213 64 / 100%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .crm-sidebar__count--new-lead {
+        animation: none;
+    }
+}
+
 .crm-sidebar__item:hover .crm-sidebar__count,
 .crm-sidebar__item[data-active='true'] .crm-sidebar__count {
     border-color: rgb(255 255 255 / 30%);

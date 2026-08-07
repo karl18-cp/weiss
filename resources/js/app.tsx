@@ -6,6 +6,8 @@ import AuthLoginLayout from '@/layouts/auth/auth-login-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import SalesmanLayout from '@/layouts/salesman-layout';
+import AgentLayout from '@/layouts/agent-layout';
+import { SearchInputEnhancer } from '@/components/search-input-enhancer';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -23,6 +25,8 @@ createInertiaApp({
                 return [AppLayout, SettingsLayout];
             case name.startsWith('salesman/'):
                 return SalesmanLayout;
+            case name.startsWith('agent/'):
+                return AgentLayout;
             default:
                 return AppLayout;
         }
@@ -31,6 +35,7 @@ createInertiaApp({
     withApp(app) {
         return (
             <SystemModalProvider>
+                <SearchInputEnhancer />
                 <TooltipProvider delayDuration={0}>{app}</TooltipProvider>
             </SystemModalProvider>
         );

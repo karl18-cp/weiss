@@ -171,9 +171,7 @@ class DataTeleHoursController extends Controller
 
     private function timezone(string $requested): string
     {
-        return $requested !== '' && in_array($requested, timezone_identifiers_list(), true)
-            ? $requested
-            : (string) config('services.calltools.report_timezone', 'Asia/Manila');
+        return (string) config('app.timezone', 'America/Los_Angeles');
     }
 
     private function date(string $requested, string $timezone): CarbonImmutable

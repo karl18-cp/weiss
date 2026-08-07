@@ -6,12 +6,19 @@ import {
     ClipboardCheck,
     MapPin,
     Package,
+    RotateCcw,
     Save,
     Search,
     SlidersHorizontal,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import '@/../css/quality-control.css';
+import { useSystemModal } from '@/components/system-modal-provider';
+import {
+    appointmentDate,
+    appointmentDateKey,
+    appointmentInputValue,
+} from '@/lib/appointment-date';
 import type {
     AgentOption,
     CompanyOption,
@@ -60,7 +67,6 @@ const emptyLeadForm = {
     address: '',
     zip_code: '',
     city: '',
-    county: '',
     state: '',
     email: '',
     years_in_house: '',
@@ -88,12 +94,11 @@ function toForm(lead?: Lead) {
         address: lead.address,
         zip_code: lead.zip_code,
         city: lead.city,
-        county: lead.county,
         state: lead.state,
         email: lead.email ?? '',
         years_in_house: String(lead.years_in_house),
         product_id: String(lead.product?.prod_id ?? ''),
-        appointment_at: lead.appointment_at?.slice(0, 16) ?? '',
+        appointment_at: appointmentInputValue(lead.appointment_at ?? ''),
         telemarketer_notes: lead.telemarketer_notes,
         company_id: String(lead.company?.com_id ?? ''),
         source: 'CallTools',
@@ -117,6 +122,7 @@ export default function QualityControl({
     agents,
     salesmen,
 }: QualityControlProps) {
+    const { confirm } = useSystemModal();
     const [selectedId, setSelectedId] = useState<number | null>(
         projects[0]?.id ?? null,
     );
@@ -127,6 +133,7 @@ export default function QualityControl({
     const [cityFilter, setCityFilter] = useState('all');
     const [productFilter, setProductFilter] = useState('all');
     const [isEditing, setIsEditing] = useState(false);
+    const [returningProjectId, setReturningProjectId] = useState<number | null>(null);
     const form = useForm(toForm(projects[0]?.lead));
     const noteForm = useForm({
         note_type: 'quality_control',
@@ -138,9 +145,7 @@ export default function QualityControl({
 
         projects.forEach(({ lead }) => {
             if (!lead.appointment_at) return;
-            const key = new Date(lead.appointment_at).toLocaleDateString(
-                'en-CA',
-            );
+            const key = appointmentDateKey(lead.appointment_at);
             counts.set(key, (counts.get(key) ?? 0) + 1);
         });
 
@@ -159,7 +164,7 @@ export default function QualityControl({
 
         return projects.filter(({ lead }) => {
             const appointmentDate = lead.appointment_at
-                ? new Date(lead.appointment_at).toLocaleDateString('en-CA')
+                ? appointmentDateKey(lead.appointment_at)
                 : '';
             const matchesSearch =
                 !query ||
@@ -238,6 +243,30 @@ export default function QualityControl({
                 router.flushAll();
             },
         });
+    };
+
+    const returnToDispatch = async () => {
+        if (!selected) return;
+
+        const accepted = await confirm({
+            title: 'Return this lead to Dispatch?',
+            message: `${selected.lead.customer_name} will return to Dispatch. Its project and financial records will be preserved under a canceled project status.`,
+            confirmLabel: 'Return to Dispatch',
+            tone: 'danger',
+        });
+
+        if (!accepted) return;
+
+        setReturningProjectId(selected.id);
+        router.patch(
+            `/management/quality-control/${selected.id}/return-to-dispatch`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setSelectedId(null),
+                onFinish: () => setReturningProjectId(null),
+            },
+        );
     };
 
     return (
@@ -424,12 +453,12 @@ export default function QualityControl({
                                     <span>{project.lead.city}</span>
                                     <time>
                                         {project.lead.appointment_at
-                                            ? timeFormatter.format(new Date(project.lead.appointment_at))
+                                            ? timeFormatter.format(appointmentDate(project.lead.appointment_at))
                                             : 'Not scheduled'}
                                     </time>
                                     <small>
                                         {project.lead.appointment_at
-                                            ? dateFormatter.format(new Date(project.lead.appointment_at))
+                                            ? dateFormatter.format(appointmentDate(project.lead.appointment_at))
                                             : 'No date'}
                                     </small>
                                 </button>
@@ -463,6 +492,17 @@ export default function QualityControl({
                                         </div>
                                     </div>
                                     <div>
+                                        <button
+                                            type="button"
+                                            className="quality-control-return-button"
+                                            disabled={returningProjectId === selected.id}
+                                            onClick={returnToDispatch}
+                                        >
+                                            <RotateCcw />
+                                            {returningProjectId === selected.id
+                                                ? 'Returning...'
+                                                : 'Return to Dispatch'}
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -544,19 +584,6 @@ export default function QualityControl({
                                             onChange={(event) =>
                                                 form.setData(
                                                     'city',
-                                                    event.target.value,
-                                                )
-                                            }
-                                        />
-                                    </label>
-                                    <label>
-                                        <span>County</span>
-                                        <input
-                                            disabled={!isEditing}
-                                            value={form.data.county}
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'county',
                                                     event.target.value,
                                                 )
                                             }

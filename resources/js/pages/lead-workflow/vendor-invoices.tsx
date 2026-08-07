@@ -14,6 +14,7 @@ import { useMemo, useRef, useState } from 'react';
 import '@/../css/vendor-invoices.css';
 import DataSectionTabs from '@/components/data-section-tabs';
 import { useSystemModal } from '@/components/system-modal-provider';
+import { crmDateKey } from '@/lib/crm-time';
 import {
     Dialog,
     DialogContent,
@@ -180,7 +181,7 @@ export default function VendorInvoices({
         form.setData({
             project_id: '',
             invoice_number: 'INV#',
-            invoice_date: new Date().toLocaleDateString('en-CA'),
+            invoice_date: crmDateKey(),
             contractor_id: '',
             amount: '',
             notes: '',

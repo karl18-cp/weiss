@@ -1,5 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { Headphones, PhoneCall, Search, UserRound } from 'lucide-react';
+import { formatPhoneNumber } from '@/lib/phone-number';
 import { useMemo, useState } from 'react';
 import '@/../css/call-logs.css';
 
@@ -34,6 +35,7 @@ type Call = {
 
 const when = (value: string) =>
     new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles',
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -145,7 +147,7 @@ export default function CallLogs({
                                     {selected.calls.map((call) => (
                                         <article key={call.id}>
                                             <div><strong>{call.result ?? 'Waiting for RingCentral'}</strong><time>{when(call.started_at ?? call.initiated_at)}</time></div>
-                                            <p><span>{call.phone_number}</span><b>{duration(call.duration_seconds)}</b></p>
+                                            <p><span>{formatPhoneNumber(call.phone_number)}</span><b>{duration(call.duration_seconds)}</b></p>
                                             {call.recording_path ? (
                                                 <audio controls preload="none" src={`/lead-workflow/leads-shop/${call.lead_id}/ringcentral-calls/${call.id}/recording`} />
                                             ) : (

@@ -13,7 +13,7 @@ class RingCentralRecordingController extends Controller
     {
         abort_unless($ringCentralCall->lead_id === $lead->id && $ringCentralCall->recording_path, 404);
         abort_unless(
-            request()->user()?->role === 'admin'
+            in_array(request()->user()?->role, ['admin', 'manager'], true)
             || $ringCentralCall->account_id === request()->user()?->getAuthIdentifier(),
             403,
         );

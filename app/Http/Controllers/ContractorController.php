@@ -37,7 +37,6 @@ class ContractorController extends Controller
 
     public function destroy(Contractor $contractor): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
 
         $contractor->delete();
 

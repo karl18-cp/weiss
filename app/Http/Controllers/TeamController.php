@@ -19,7 +19,9 @@ class TeamController extends Controller
             'teams' => Team::query()
                 ->with([
                     'manager:manager_id,manager_name',
-                    'agents:agents.agent_id,agent_name,company_id',
+                    'agents' => fn ($query) => $query
+                        ->whereNull('agents.inactive_at')
+                        ->select(['agents.agent_id', 'agent_name', 'company_id']),
                     'agents.company:com_id,company',
                 ])
                 ->orderBy('team_name')
@@ -28,6 +30,7 @@ class TeamController extends Controller
                 ->orderBy('manager_name')
                 ->get(['manager_id', 'manager_name']),
             'agents' => Agent::query()
+                ->whereNull('inactive_at')
                 ->with('company:com_id,company')
                 ->orderBy('agent_name')
                 ->get(['agent_id', 'agent_name', 'company_id']),
@@ -68,7 +71,6 @@ class TeamController extends Controller
 
     public function destroy(Team $team): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
 
         $team->delete();
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Team deleted.']);

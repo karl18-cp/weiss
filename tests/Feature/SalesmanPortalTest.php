@@ -6,6 +6,7 @@ use App\Models\Lead;
 use App\Models\LeadNote;
 use App\Models\PushSubscription;
 use App\Models\Salesman;
+use App\Services\WebPushService;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('the salesman leads page only returns assigned leads', function () {
@@ -51,9 +52,16 @@ test('the salesman leads page only returns assigned leads', function () {
         ]);
     };
 
-    $makeLead('Primary Assignment', $salesman->salesman_id);
+    $primary = $makeLead('Primary Assignment', $salesman->salesman_id);
     $makeLead('Secondary Assignment', $other->salesman_id, $salesman->salesman_id);
-    $makeLead('Hidden Assignment', $other->salesman_id);
+    $hidden = $makeLead('Hidden Assignment', $other->salesman_id);
+
+    LeadNote::query()->create([
+        'lead_id' => $primary->id,
+        'note_type' => 'dispatch',
+        'body' => 'Gate code is 2468. Customer prefers the side entrance.',
+        'created_by' => $agentAccount->acc_id,
+    ]);
 
     $this->actingAs($salesmanAccount)
         ->get(route('salesman.leads'))
@@ -66,6 +74,17 @@ test('the salesman leads page only returns assigned leads', function () {
                 ->values()
                 ->all() === ['Primary Assignment', 'Secondary Assignment'])
             ->where('salesman.id', $salesman->salesman_id));
+
+    $this->actingAs($salesmanAccount)
+        ->get(route('salesman.lead-information', ['lead' => $primary->id]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('salesman/lead-information')
+            ->where('lead.id', $primary->id)
+            ->where('dispatchNote', 'Gate code is 2468. Customer prefers the side entrance.'));
+
+    $this->actingAs($salesmanAccount)
+        ->get(route('salesman.lead-information', ['lead' => $hidden->id]))
+        ->assertNotFound();
 });
 
 test('non-salesman accounts cannot open the salesman portal', function () {
@@ -135,6 +154,39 @@ test('salesmen can add appointment result notes only to assigned leads', functio
         ->where('body', 'Customer requested a follow-up estimate.')
         ->exists())->toBeTrue();
 
+    $admin = Account::query()->create([
+        'username' => 'status-admin@example.com',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $manager = Account::query()->create([
+        'username' => 'status-manager@example.com',
+        'password' => 'password',
+        'role' => 'manager',
+    ]);
+    $push = Mockery::mock(WebPushService::class);
+    $push->shouldReceive('sendToAccount')
+        ->once()
+        ->with($admin->acc_id, 'Result Note Salesman: On My Way', Mockery::type('string'), "/lead-workflow/dispatch-leads?lead={$assigned->id}")
+        ->andReturn(1);
+    $push->shouldReceive('sendToAccount')
+        ->once()
+        ->with($manager->acc_id, 'Result Note Salesman: On My Way', Mockery::type('string'), "/lead-workflow/dispatch-leads?lead={$assigned->id}")
+        ->andReturn(1);
+    app()->instance(WebPushService::class, $push);
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $assigned), [
+            'action' => 'on_my_way',
+        ])
+        ->assertRedirect();
+
+    expect(LeadNote::query()
+        ->where('lead_id', $assigned->id)
+        ->where('note_type', 'appointment_result')
+        ->where('body', 'On My Way')
+        ->exists())->toBeTrue();
+
     $this->actingAs($account)
         ->post(route('salesman.leads.appointment-result-notes.store', $notAssigned), [
             'body' => 'This must not be saved.',
@@ -174,4 +226,36 @@ test('salesmen can register and remove a phone push subscription', function () {
         ->assertNoContent();
 
     expect(PushSubscription::query()->where('endpoint', $endpoint)->exists())->toBeFalse();
+});
+
+test('an existing phone subscription is reassigned to the logged in manager', function () {
+    $salesmanAccount = Account::query()->create([
+        'username' => 'previous-phone-owner@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    $managerAccount = Account::query()->create([
+        'username' => 'phone-manager@example.com',
+        'password' => 'password',
+        'role' => 'manager',
+    ]);
+    $endpoint = 'https://push.example.test/device/shared-phone';
+    PushSubscription::query()->create([
+        'account_id' => $salesmanAccount->acc_id,
+        'endpoint' => $endpoint,
+        'public_key' => 'old-public-key',
+        'auth_token' => 'old-auth-token',
+        'content_encoding' => 'aes128gcm',
+    ]);
+
+    $this->actingAs($managerAccount)
+        ->postJson(route('salesman.push-subscriptions.store'), [
+            'endpoint' => $endpoint,
+            'keys' => ['p256dh' => 'manager-public-key', 'auth' => 'manager-auth-token'],
+        ])
+        ->assertOk()
+        ->assertJson(['subscribed' => true]);
+
+    expect(PushSubscription::query()->where('endpoint', $endpoint)->value('account_id'))
+        ->toBe($managerAccount->acc_id);
 });

@@ -4,16 +4,21 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['agent_name', 'account_id', 'company_id', 'calltools_user_id'])]
+#[Fillable(['agent_name', 'account_id', 'company_id', 'calltools_user_id', 'inactive_at'])]
 class Agent extends Model
 {
     protected $primaryKey = 'agent_id';
 
     public $timestamps = false;
+
+    protected function casts(): array
+    {
+        return ['inactive_at' => 'datetime'];
+    }
 
     public function leads(): HasMany
     {
@@ -23,6 +28,11 @@ class Agent extends Model
     public function permissions(): HasMany
     {
         return $this->hasMany(AgentPermission::class, 'agent_id', 'agent_id');
+    }
+
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AgentAttendanceSession::class, 'agent_id', 'agent_id');
     }
 
     public function account(): BelongsTo

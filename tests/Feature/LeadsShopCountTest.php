@@ -5,8 +5,10 @@ use App\Models\Agent;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadMovement;
+use App\Models\Manager;
 use App\Models\Product;
 use App\Models\Salesman;
+use App\Models\Team;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('leads shop only loads and counts leads that remain in its statuses', function () {
@@ -116,6 +118,218 @@ test('a requested dispatched booking is loaded and selected in the leads shop', 
         );
 });
 
+test('leads shop defaults to today and counts current destinations for leads created today', function () {
+    $account = Account::query()->create([
+        'username' => 'movement-count-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $company = Company::query()->create([
+        'company' => 'Movement Count Company',
+        'address' => '',
+        'prefix' => 'MC',
+        'project_code' => 'MC-001',
+    ]);
+    $product = Product::query()->create(['product_name' => 'Movement Count Product']);
+    $agent = Agent::query()->create(['agent_name' => 'Movement Count Agent']);
+    $outsideTeamAgent = Agent::query()->create(['agent_name' => 'Outside Team Agent']);
+    $manager = Manager::query()->create([
+        'manager_name' => 'Movement Count Manager',
+        'account_id' => $account->acc_id,
+        'phone' => '',
+        'manager_types' => [],
+    ]);
+    $team = Team::query()->create([
+        'team_name' => 'Movement Count Team',
+        'manager_id' => $manager->manager_id,
+    ]);
+    $team->agents()->attach($agent->agent_id);
+    $lead = Lead::query()->create([
+        'customer_name' => 'Moved Today',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000009',
+        'address' => '9 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'product_id' => $product->prod_id,
+        'appointment_at' => now()->addWeek(),
+        'telemarketer_notes' => 'Test note',
+        'company_id' => $company->com_id,
+        'source' => 'CallTools',
+        'calltools_contact_id' => 'ct-moved-today',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'fresh',
+    ]);
+    $lead->update(['status' => 'confirmed']);
+
+    $californiaToday = \Carbon\CarbonImmutable::today('America/Los_Angeles');
+    $afterUtcMidnight = $californiaToday->setTime(17, 45)->utc();
+    $utcNextDateLead = Lead::query()->create([
+        'customer_name' => 'UTC Next Date California Today',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000039',
+        'address' => '39 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'product_id' => $product->prod_id,
+        'appointment_at' => now()->addWeek(),
+        'telemarketer_notes' => 'UTC boundary lead',
+        'company_id' => $company->com_id,
+        'source' => 'CallTools',
+        'calltools_contact_id' => 'ct-utc-next-date',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'fresh',
+        'created_at' => $afterUtcMidnight,
+        'updated_at' => $afterUtcMidnight,
+    ]);
+    $utcNextDateLead->movements()->update(['created_at' => $afterUtcMidnight]);
+
+    Lead::query()->create([
+        'customer_name' => 'Manual Lead Excluded From Distribution',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000029',
+        'address' => '29 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'product_id' => $product->prod_id,
+        'appointment_at' => now()->addWeek(),
+        'telemarketer_notes' => 'Manual lead',
+        'company_id' => $company->com_id,
+        // Direct projects and other records outside scored teams must not
+        // inflate the count even if legacy edits labelled them CallTools.
+        'source' => 'CallTools',
+        'agent_id' => $outsideTeamAgent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'dispatched',
+    ]);
+
+    $olderLead = Lead::query()->create([
+        'customer_name' => 'Created Earlier Moved Today',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000019',
+        'address' => '19 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'product_id' => $product->prod_id,
+        'appointment_at' => now()->addWeek(),
+        'telemarketer_notes' => 'Older test note',
+        'company_id' => $company->com_id,
+        'source' => 'CallTools',
+        'calltools_contact_id' => 'ct-created-earlier',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'fresh',
+        'created_at' => now()->subDay(),
+        'updated_at' => now()->subDay(),
+    ]);
+    $olderLead->movements()->update(['created_at' => now()->subDay()]);
+    $olderLead->update(['status' => 'confirmed']);
+    $today = now('America/Los_Angeles')->toDateString();
+
+    $this->actingAs($account)
+        ->get(route('lead-workflow.leads-shop'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedDate', $today)
+            ->where('createdDayTotal', 2)
+            ->where('movementDestinations.0.status', 'leads_shop')
+            ->where('movementDestinations.0.count', 1)
+            ->where('movementDestinations.1.status', 'confirmed')
+            ->where('movementDestinations.1.count', 1)
+            ->where('movementDestinations.2.status', 'dispatched')
+            ->where('movementDestinations.2.count', 0)
+            ->where('movementDestinations', fn ($destinations) => $destinations
+                ->sum('count') === 2));
+
+    $confirmationDate = now('America/Los_Angeles')->addWeek()->toDateString();
+
+    $this->get(route('lead-workflow.confirm-leads'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedDate', $confirmationDate));
+});
+
+test('his groups and filters leads by appointment month', function () {
+    $account = Account::query()->create([
+        'username' => 'his-month-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => 'HIS Month Agent']);
+
+    foreach ([
+        ['July One', '2026-07-02 09:00:00'],
+        ['July Two', '2026-07-29 15:30:00'],
+        ['June One', '2026-06-18 11:00:00'],
+    ] as [$name, $appointment]) {
+        Lead::query()->create([
+            'customer_name' => $name,
+            'marital_status' => 'Unknown',
+            'primary_number' => '+15550000010',
+            'address' => '10 Test Street',
+            'zip_code' => '00000',
+            'city' => 'Test City',
+            'county' => 'Test County',
+            'state' => 'CA',
+            'years_in_house' => 0,
+            'appointment_at' => $appointment,
+            'telemarketer_notes' => '',
+            'source' => 'CallTools',
+            'agent_id' => $agent->agent_id,
+            'created_by' => $account->acc_id,
+            'status' => 'his',
+        ]);
+    }
+
+    $leadWithoutAppointment = Lead::query()->create([
+        'customer_name' => 'July Without Appointment',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000011',
+        'address' => '11 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'appointment_at' => null,
+        'telemarketer_notes' => '',
+        'source' => 'CallTools',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'his',
+    ]);
+    $leadWithoutAppointment->timestamps = false;
+    $leadWithoutAppointment->forceFill([
+        'created_at' => '2026-07-12 10:00:00',
+        'updated_at' => '2026-07-12 10:00:00',
+    ])->saveQuietly();
+
+    $this->actingAs($account)
+        ->get(route('lead-workflow.his', ['date' => '2026-07']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/his')
+            ->where('dateGranularity', 'month')
+            ->where('selectedDate', '2026-07')
+            ->where('dateRows.0.key', '2026-07')
+            ->where('dateRows.0.count', 3)
+            ->where('dateRows.1.key', '2026-06')
+            ->where('dateRows.1.count', 1)
+            ->has('leads', 3));
+});
+
 test('salesmen are redirected away from the full CRM leads shop', function () {
     $agentAccount = Account::query()->create([
         'username' => 'booking-link-agent',
@@ -220,7 +434,7 @@ test('lead status changes record where it moved and who moved it', function () {
         ->and($movement->moved_by)->toBe($mover->acc_id);
 });
 
-test('an incomplete calltools lead cannot leave leads shop', function () {
+test('an incomplete calltools lead can leave leads shop', function () {
     $account = Account::query()->create([
         'username' => 'incomplete-lead-admin',
         'password' => 'password',
@@ -249,9 +463,9 @@ test('an incomplete calltools lead cannot leave leads shop', function () {
         ->patch(route('lead-workflow.leads-shop.status.update', $lead), [
             'status' => 'confirmed',
         ])
-        ->assertSessionHasErrors('status');
+        ->assertRedirect();
 
-    expect($lead->fresh()->status)->toBe('fresh');
+    expect($lead->fresh()->status)->toBe('confirmed');
 });
 
 test('admins can permanently delete sample leads', function () {

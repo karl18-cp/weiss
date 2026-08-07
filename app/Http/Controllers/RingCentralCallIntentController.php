@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\RingCentralCall;
 use App\Services\RingCentralService;
+use App\Support\ManagerAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +18,12 @@ class RingCentralCallIntentController extends Controller
             'phone_slot' => ['required', 'string', 'in:primary,secondary,mobile'],
         ]);
         $user = $request->user();
+
+        if (ManagerAccess::hasEnabledFlag($user, 'dial_raw_only') && $lead->status !== 'raw') {
+            throw ValidationException::withMessages([
+                'phone_slot' => 'Your dialing permission is limited to Raw leads. Move or select a Raw lead before dialing.',
+            ]);
+        }
 
         if ($user?->role === 'salesman') {
             $salesmanId = $user->salesman?->salesman_id;

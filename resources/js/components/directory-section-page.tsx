@@ -23,13 +23,13 @@ export default function DirectorySectionPage({
         <>
             <Head title={title} />
             <main className="directory-section-page">
-                <header className="directory-section-header">
-                    <span>Contacts &amp; Users</span>
-                    <h1>{title}</h1>
-                    <p>{description}</p>
-                </header>
-
-                <section className="directory-section-count">
+                <header className="directory-section-header directory-heading-with-total">
+                    <div className="directory-heading-copy">
+                        <span>Contacts &amp; Users</span>
+                        <h1>{title}</h1>
+                        <p>{description}</p>
+                    </div>
+                <section className="directory-section-count directory-heading-total">
                     <div>
                         <Users />
                     </div>
@@ -38,11 +38,15 @@ export default function DirectorySectionPage({
                         <small>Total {title.toLowerCase()}</small>
                     </span>
                 </section>
+                </header>
 
                 <div className="directory-section-workspace">
                     <DirectoryNavigation active={active}>
                         <div className="directory-section-heading">
-                            <h2>{title} directory</h2>
+                            <div className="directory-heading-title-row">
+                                <h2>{title} directory</h2>
+                                <span className="directory-inline-count">0</span>
+                            </div>
                             <p>Select a record to edit</p>
                         </div>
                         <label className="directory-section-search">

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AgentRequest;
-use App\Models\Agent;
 use App\Models\Account;
+use App\Models\Agent;
 use App\Models\Company;
 use App\Support\ManagerAccess;
 use Illuminate\Http\RedirectResponse;
@@ -32,6 +32,7 @@ class AgentController extends Controller
                 'agent_name' => $data['agent_name'],
                 'company_id' => $data['company_id'],
                 'account_id' => $account?->acc_id,
+                'inactive_at' => ($data['suspended'] ?? false) ? now() : null,
             ]);
             $this->syncPermissions($agent, $data['permissions']);
         });
@@ -50,6 +51,9 @@ class AgentController extends Controller
                 'agent_name' => $data['agent_name'],
                 'company_id' => $data['company_id'],
                 'account_id' => $account?->acc_id,
+                'inactive_at' => ($data['suspended'] ?? false)
+                    ? ($agent->inactive_at ?? now())
+                    : null,
             ]);
             $this->syncPermissions($agent, $data['permissions']);
         });
@@ -61,22 +65,42 @@ class AgentController extends Controller
 
     public function destroy(Agent $agent): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
+        $movedToInactive = false;
 
-        DB::transaction(function () use ($agent): void {
+        DB::transaction(function () use ($agent, &$movedToInactive): void {
             $account = $agent->account;
+
+            if ($agent->leads()->exists()) {
+                $inactiveAt = $agent->inactive_at ?? now();
+
+                $agent->update(['inactive_at' => $inactiveAt]);
+                $account?->update([
+                    'suspended_at' => $account->suspended_at ?? $inactiveAt,
+                ]);
+                $movedToInactive = true;
+
+                return;
+            }
+
             $agent->delete();
             $account?->delete();
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Agent deleted.']);
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $movedToInactive
+                ? 'Agent has existing lead history and was moved to Inactive.'
+                : 'Agent deleted.',
+        ]);
 
         return back();
     }
 
     private function createAccount(array $data, string $role): ?Account
     {
-        if (empty($data['username'])) return null;
+        if (empty($data['username'])) {
+            return null;
+        }
 
         return Account::query()->create([
             'username' => $data['username'],
@@ -90,10 +114,13 @@ class AgentController extends Controller
     {
         if (empty($data['username'])) {
             $account?->delete();
+
             return null;
         }
 
-        if (! $account) return $this->createAccount($data, $role);
+        if (! $account) {
+            return $this->createAccount($data, $role);
+        }
 
         $updates = [
             'username' => $data['username'],
@@ -102,7 +129,9 @@ class AgentController extends Controller
                 ? ($data['suspended'] ? ($account->suspended_at ?? now()) : null)
                 : $account->suspended_at,
         ];
-        if (! empty($data['password'])) $updates['password'] = $data['password'];
+        if (! empty($data['password'])) {
+            $updates['password'] = $data['password'];
+        }
         $account->update($updates);
 
         return $account;

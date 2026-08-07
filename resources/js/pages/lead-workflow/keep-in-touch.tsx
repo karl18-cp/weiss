@@ -12,12 +12,6 @@ export default function KeepInTouch(props: LeadsShopProps) {
         listTitle: "Keep in Touch leads",
         dateLabel: "Scheduled calls",
         dateField: "appointment_at",
-        statusFilters: [
-          ["kit", "KIT"],
-          ["kit_ng", "NG"],
-          ["kit_toss", "TOSS"],
-          ["kit_cb", "Call Back"],
-        ],
       }}
     />
   );

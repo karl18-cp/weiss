@@ -47,7 +47,8 @@
   gap: 0.45rem;
 }
 
-.booking-board-summary span {
+.booking-board-summary span,
+.booking-board-summary button {
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -59,9 +60,26 @@
   font-size: 0.62rem;
 }
 
+.booking-board-summary button {
+  cursor: pointer;
+}
+
+.booking-board-summary button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .booking-board-summary svg {
   width: 0.85rem;
   color: #2563eb;
+}
+
+.booking-board-refresh .is-spinning {
+  animation: booking-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes booking-refresh-spin {
+  to { transform: rotate(360deg); }
 }
 
 .booking-board-summary strong {
@@ -595,7 +613,8 @@
     width: 100%;
   }
 
-  .booking-board-summary span {
+  .booking-board-summary span,
+  .booking-board-summary button {
     flex: 1;
     justify-content: center;
   }

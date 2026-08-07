@@ -12,17 +12,31 @@ class EnforceManagerPermission
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        if (! $user || ! in_array($user->role, ['manager', 'agent', 'salesman'], true)) {
+        if (! $user || $user->role === 'admin') {
             return $next($request);
         }
 
         $permissionPath = $request->path();
+        if ($user->role === 'agent' && ! str_starts_with($permissionPath, 'agent/')) {
+            if ($request->isMethod('GET')) {
+                return redirect()->route('agent.dashboard');
+            }
+
+            abort(403, 'Agent accounts use the dedicated time clock workspace.');
+        }
         if ($user->role === 'salesman' && ! str_starts_with($permissionPath, 'salesman/')) {
             if ($request->isMethod('GET')) {
                 return redirect()->route('salesman.booking-board');
             }
 
             abort(403, 'Salesman accounts use the dedicated salesman workspace.');
+        }
+        if (
+            $user->role === 'manager'
+            && $request->isMethod('GET')
+            && preg_match('#^lead-workflow/leads-shop/\d+/ringcentral-calls/\d+/recording$#', $permissionPath) === 1
+        ) {
+            return $next($request);
         }
         if (! $request->isMethod('GET') && str_starts_with($permissionPath, 'lead-workflow/leads-shop/')) {
             $previousPath = parse_url(url()->previous(), PHP_URL_PATH);
@@ -40,6 +54,7 @@ class EnforceManagerPermission
             'manager' => $user->manager,
             'agent' => $user->agent,
             'salesman' => $user->salesman,
+            default => null,
         };
         $level = $profile?->permissions()->where('module', $module)->value('access_level') ?? 'none';
         $allowed = $request->isMethod('GET') ? in_array($level, ['view', 'edit'], true) : $level === 'edit';
@@ -57,11 +72,16 @@ class EnforceManagerPermission
 
     private function moduleFor(string $path): ?string
     {
+        if (str_starts_with($path, 'management/manager-history')) {
+            return null;
+        }
+
         $map = [
             'dashboard' => 'dashboard',
             'team-dashboard' => 'team_dashboard',
             'lead-workflow/lead-card' => 'lead_card', 'lead-workflow/leads-shop' => 'leads_shop',
             'lead-workflow/confirm-leads' => 'confirm_leads', 'lead-workflow/dispatch-leads' => 'dispatch_leads',
+            'lead-workflow/sag' => 'sag',
             'lead-workflow/reschedule' => 'reschedule', 'lead-workflow/rehash' => 'rehash',
             'lead-workflow/555' => '555', 'lead-workflow/la' => 'la', 'lead-workflow/his' => 'his',
             'lead-workflow/toss-leads' => 'toss_leads',

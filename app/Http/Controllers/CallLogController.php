@@ -13,9 +13,9 @@ class CallLogController extends Controller
     public function __invoke(Request $request): Response
     {
         $user = $request->user();
-        $isAdmin = $user?->role === 'admin';
+        $canViewAllCalls = in_array($user?->role, ['admin', 'manager'], true);
         $calls = RingCentralCall::query()
-            ->when(! $isAdmin, fn ($query) => $query->where('account_id', $user->getAuthIdentifier()))
+            ->when(! $canViewAllCalls, fn ($query) => $query->where('account_id', $user->getAuthIdentifier()))
             ->with([
                 'caller:acc_id,username,role',
                 'lead:id,customer_name,address,city,state,zip_code',
@@ -23,7 +23,7 @@ class CallLogController extends Controller
             ->latest('initiated_at')
             ->get();
 
-        $users = $isAdmin
+        $users = $canViewAllCalls
             ? Account::query()
                 ->whereIn('acc_id', $calls->pluck('account_id')->unique())
                 ->get(['acc_id', 'username', 'role'])
@@ -45,7 +45,7 @@ class CallLogController extends Controller
         return Inertia::render('lead-workflow/call-logs', [
             'calls' => $calls,
             'users' => $users,
-            'isAdmin' => $isAdmin,
+            'isAdmin' => $canViewAllCalls,
             'viewerId' => $user?->getAuthIdentifier(),
         ]);
     }

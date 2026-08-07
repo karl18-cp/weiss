@@ -1,0 +1,38 @@
+:root { font-family: Manrope, ui-sans-serif, system-ui, sans-serif; }
+body { margin: 0; background: #f3f6fb; color: #101d35; }
+.agent-portal { min-height: 100dvh; padding-bottom: 5.25rem; }
+.agent-portal__header { display: flex; align-items: center; justify-content: space-between; padding: .85rem 1rem; border-bottom: 1px solid #dfe6f1; background: #fff; }
+.agent-portal__brand { display: flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; }
+.agent-portal__brand img { width: 2.75rem; height: 2.75rem; object-fit: contain; }
+.agent-portal__brand span, .agent-portal__brand strong, .agent-portal__brand small { display: block; }
+.agent-portal__brand strong { font-size: 1rem; }
+.agent-portal__brand small { margin-top: .15rem; color: #728099; font-size: .72rem; }
+.agent-portal__header > button { width: 2.75rem; height: 2.75rem; border: 1px solid #dce4ef; border-radius: .8rem; background: #f7f9fc; color: #34435d; }
+.agent-portal__header svg { width: 1.2rem; }
+.agent-portal__content { width: min(100% - 2rem, 42rem); margin: 0 auto; padding: 1.5rem 0; }
+.agent-clock > header > span { color: #2865df; font-size: .72rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.agent-clock h1 { margin: .35rem 0 0; font-size: clamp(1.65rem, 8vw, 2.4rem); }
+.agent-clock > header p { margin: .45rem 0 0; color: #71809a; line-height: 1.5; }
+.agent-clock__card { margin-top: 1.5rem; padding: 2rem 1.25rem; border: 1px solid #dce4ef; border-radius: 1.25rem; background: #fff; text-align: center; box-shadow: 0 1rem 2.5rem rgba(31,54,94,.08); }
+.agent-clock__card.is-active { border-color: #9dd9b8; background: linear-gradient(180deg,#f6fff9,#fff); }
+.agent-clock__icon { display: grid; width: 3.5rem; height: 3.5rem; margin: 0 auto 1rem; place-items: center; border-radius: 1rem; background: #e9f0ff; color: #2865df; }
+.agent-clock__card.is-active .agent-clock__icon { background: #dcf7e7; color: #168249; }
+.agent-clock__card small { color: #71809a; font-weight: 750; text-transform: uppercase; }
+.agent-clock__card > strong { display: block; margin-top: .5rem; font-size: clamp(2.25rem,12vw,4rem); font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.agent-clock__card p { margin: .5rem 0 1.5rem; color: #71809a; }
+.agent-clock__card button { display: inline-flex; width: 100%; min-height: 3.65rem; align-items: center; justify-content: center; gap: .55rem; border: 0; border-radius: .9rem; color: #fff; font: inherit; font-size: 1rem; font-weight: 850; }
+.agent-clock__card button:disabled { opacity: .65; }
+.agent-clock__card button svg { width: 1.2rem; }
+.agent-clock__card .is-time-in { background: #179453; }
+.agent-clock__card .is-time-out { background: #df3547; }
+.agent-clock__history { margin-top: 1rem; padding: 1.15rem; border: 1px solid #dce4ef; border-radius: 1rem; background: #fff; }
+.agent-clock__history h2 { margin: 0 0 .75rem; font-size: 1rem; }
+.agent-clock__history > div { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-top: 1px solid #e8edf5; }
+.agent-clock__history span, .agent-clock__history strong, .agent-clock__history small { display: block; }
+.agent-clock__history strong { font-size: .78rem; }
+.agent-clock__history small { margin-top: .2rem; color: #7b889d; font-size: .68rem; }
+.agent-clock__history b { font-size: .8rem; font-variant-numeric: tabular-nums; }
+.agent-clock__history > p { color: #7b889d; }
+.agent-portal__nav { position: fixed; z-index: 20; right: 0; bottom: 0; left: 0; display: flex; justify-content: center; padding: .55rem max(1rem,env(safe-area-inset-right)) calc(.55rem + env(safe-area-inset-bottom)); border-top: 1px solid #dfe6f1; background: rgba(255,255,255,.96); backdrop-filter: blur(12px); }
+.agent-portal__nav a { display: flex; min-width: 9rem; align-items: center; justify-content: center; gap: .45rem; padding: .75rem 1rem; border-radius: .8rem; background: #eaf1ff; color: #2865df; font-size: .78rem; font-weight: 850; text-decoration: none; }
+.agent-portal__nav svg { width: 1rem; }

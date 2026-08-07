@@ -168,7 +168,7 @@ return contractors;
         <>
             <Head title="Contractors" />
             <main className="contractors-page">
-                <header className="contractors-header">
+                <header className="contractors-header directory-heading-with-total">
                     <div>
                         <span>Contacts &amp; Users</span>
                         <h1>Contractors</h1>
@@ -176,9 +176,7 @@ return contractors;
                             Create and maintain contractor records in Weiss CRM.
                         </p>
                     </div>
-                </header>
-
-                <section className="contractors-count">
+                <section className="contractors-count directory-heading-total">
                     <div className="contractors-count__icon">
                         <BriefcaseBusiness />
                     </div>
@@ -187,11 +185,15 @@ return contractors;
                         <span>Total contractors</span>
                     </div>
                 </section>
+                </header>
 
                 <div className="contractors-workspace">
                     <DirectoryNavigation active="Contractor">
                         <div className="contractors-directory-heading">
-                            <h2>Contractor directory</h2>
+                            <div className="directory-heading-title-row">
+                                <h2>Contractor directory</h2>
+                                <span className="directory-inline-count">{filteredContractors.length}</span>
+                            </div>
                             <p>Select a contractor to edit</p>
                         </div>
                         <label className="contractors-search">

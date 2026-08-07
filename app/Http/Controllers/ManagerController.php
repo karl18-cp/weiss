@@ -69,7 +69,6 @@ class ManagerController extends Controller
 
     public function destroy(Manager $manager): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
         $manager->account->delete();
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Manager deleted.']);
 

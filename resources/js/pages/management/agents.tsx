@@ -14,13 +14,12 @@ import '@/../css/agents.css';
 import DirectoryNavigation from '@/components/directory-navigation';
 import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
-import ModulePermissionsEditor, {
-    type PermissionAccess,
-} from '@/components/module-permissions-editor';
+import type { PermissionAccess } from '@/components/module-permissions-editor';
 
 type Agent = {
     agent_id: number;
     agent_name: string;
+    inactive_at: string | null;
     account: { acc_id: number; username: string; suspended_at: string | null } | null;
     company: { com_id: number; company: string } | null;
     permissions: { module: string; access_level: PermissionAccess }[];
@@ -40,6 +39,7 @@ export default function Agents({
     const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Agent | null>(null);
     const [search, setSearch] = useState('');
+    const [directoryStatus, setDirectoryStatus] = useState<'active' | 'inactive'>('active');
     const blankPermissions = Object.fromEntries(
         Object.keys(permissionModules).map((module) => [module, 'none']),
     ) as Record<string, PermissionAccess>;
@@ -54,13 +54,18 @@ export default function Agents({
 
     const filteredAgents = useMemo(() => {
         const query = search.trim().toLowerCase();
+        const statusFiltered = agents.filter((agent) =>
+            directoryStatus === 'inactive'
+                ? Boolean(agent.inactive_at)
+                : !agent.inactive_at,
+        );
 
         return query
-            ? agents.filter((agent) =>
+            ? statusFiltered.filter((agent) =>
                   agent.agent_name.toLowerCase().includes(query),
               )
-            : agents;
-    }, [agents, search]);
+            : statusFiltered;
+    }, [agents, directoryStatus, search]);
 
     const resetForm = () => {
         setSelected(null);
@@ -82,7 +87,7 @@ export default function Agents({
             company_id: String(agent.company?.com_id ?? ''),
             username: agent.account?.username ?? '',
             password: '',
-            suspended: Boolean(agent.account?.suspended_at),
+            suspended: Boolean(agent.inactive_at),
             permissions: {
                 ...blankPermissions,
                 ...Object.fromEntries(
@@ -116,7 +121,7 @@ export default function Agents({
 
         const confirmed = await confirm({
             title: 'Delete agent?',
-            message: `${selected.agent_name} will be permanently removed from the agent directory.`,
+            message: `${selected.agent_name} will be deleted if they have no lead history. If leads reference this agent, they will be moved to Inactive instead.`,
             confirmLabel: 'Delete agent',
             tone: 'danger',
         });
@@ -135,26 +140,33 @@ export default function Agents({
         <>
             <Head title="Agents" />
             <main className="agents-page">
-                <header className="agents-header">
-                    <span>Contacts &amp; Users</span>
-                    <h1>Agents</h1>
-                    <p>Create and maintain agent records in Weiss CRM.</p>
+                <header className="agents-header directory-heading-with-total">
+                    <div className="directory-heading-copy">
+                        <span>Contacts &amp; Users</span>
+                        <h1>Agents</h1>
+                        <p>Create and maintain agent records in Weiss CRM.</p>
+                    </div>
+                    <section className="agents-count directory-heading-total">
+                        <div><Users /></div>
+                        <span><strong>{agents.length}</strong><small>Total agents</small></span>
+                    </section>
                 </header>
 
-                <section className="agents-count">
-                    <div>
-                        <Users />
-                    </div>
-                    <span>
-                        <strong>{agents.length}</strong>
-                        <small>Total agents</small>
-                    </span>
-                </section>
-
                 <div className="agents-workspace">
-                    <DirectoryNavigation active="Agent">
+                    <DirectoryNavigation
+                        active="Agent"
+                        status={directoryStatus}
+                        onStatusChange={(status) => {
+                            setDirectoryStatus(status);
+                            resetForm();
+                            setSearch('');
+                        }}
+                    >
                         <div className="agents-directory-heading">
-                            <h2>Agent directory</h2>
+                            <div className="directory-heading-title-row">
+                                <h2>Agent directory</h2>
+                                <span className="directory-inline-count">{filteredAgents.length}</span>
+                            </div>
                             <p>Select an agent to edit</p>
                         </div>
                         <label className="agents-search">
@@ -198,7 +210,7 @@ export default function Agents({
                                         <small>
                                             {agent.company?.company ??
                                                 'No company'}{' '}
-                                            · Agent #{agent.agent_id}
+                                            - Agent #{agent.agent_id}
                                         </small>
                                     </span>
                                 </button>
@@ -326,17 +338,8 @@ export default function Agents({
                             </label>
                             <AccountStatusControl
                                 suspended={form.data.suspended}
-                                disabled={!form.data.username.trim()}
                                 onChange={(suspended) =>
                                     form.setData('suspended', suspended)
-                                }
-                            />
-                            <ModulePermissionsEditor
-                                roleLabel="agent"
-                                modules={permissionModules}
-                                permissions={form.data.permissions}
-                                onChange={(permissions) =>
-                                    form.setData('permissions', permissions)
                                 }
                             />
                             <div className="agents-form-actions">
@@ -366,7 +369,7 @@ export default function Agents({
                                 >
                                     <Save />
                                     {form.processing
-                                        ? 'Saving…'
+                                        ? 'Saving...'
                                         : selected
                                           ? 'Save changes'
                                           : 'Create agent'}

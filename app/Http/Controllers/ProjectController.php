@@ -7,8 +7,12 @@ use App\Http\Requests\ProjectDetailsRequest;
 use App\Http\Requests\ProjectInvoiceRequest;
 use App\Http\Requests\ProjectInvoiceStatusRequest;
 use App\Http\Requests\ProjectSaleRequest;
+use App\Http\Requests\ProjectStoreRequest;
 use App\Http\Requests\ScheduledPaymentRequest;
+use App\Models\Agent;
+use App\Models\Company;
 use App\Models\Contractor;
+use App\Models\Lead;
 use App\Models\Manager;
 use App\Models\Product;
 use App\Models\Project;
@@ -16,16 +20,24 @@ use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
 use App\Models\ProjectSale;
 use App\Models\ScheduledPayment;
+use App\Models\Salesman;
+use App\Services\GoogleDriveProjectStorage;
+use App\Services\ProjectNumberAllocator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class ProjectController extends Controller
 {
+    public function __construct(private readonly GoogleDriveProjectStorage $googleDrive) {}
+
     public function index(): Response
     {
         return Inertia::render('management/projects', [
@@ -35,8 +47,8 @@ class ProjectController extends Controller
                     'lead.product:prod_id,product_name',
                     'lead.agent:agent_id,agent_name',
                     'lead.secondAgent:agent_id,agent_name',
-                    'lead.salesmanOne:salesman_id,salesman_name',
-                    'lead.salesmanTwo:salesman_id,salesman_name',
+                    'lead.salesmanOne:salesman_id,salesman_name,phone',
+                    'lead.salesmanTwo:salesman_id,salesman_name,phone',
                     'lead.notes:id,lead_id,note_type,body,created_at',
                     'sales.product:prod_id,product_name',
                     'scheduledPayments',
@@ -44,14 +56,169 @@ class ProjectController extends Controller
                     'accountingTransactions.scheduledPayments',
                     'accountingTransactions.invoice.contractor:con_id,contractor',
                     'accountingTransactions.contractor:con_id,contractor',
+                    'company:com_id,company,prefix',
+                    'product:prod_id,product_name',
+                    'telemarketer:agent_id,agent_name',
+                    'salesman:salesman_id,salesman_name,phone',
+                    'manager:manager_id,manager_name',
                 ])
                 ->latest()
-                ->get(),
+                ->get()
+                ->each(fn (Project $project) => $this->hydrateStandaloneProject($project)),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
+            'companies' => Company::query()->orderBy('company')->get(['com_id', 'company', 'prefix']),
+            'agents' => Agent::query()
+                ->whereNull('inactive_at')
+                ->orderBy('agent_name')
+                ->get(['agent_id', 'agent_name']),
+            'salesmen' => Salesman::query()
+                ->orderBy('salesman_name')
+                ->get(['salesman_id', 'salesman_name', 'phone']),
+            'managers' => Manager::query()
+                ->orderBy('manager_name')
+                ->get(['manager_id', 'manager_name']),
             'contractors' => Contractor::query()->orderBy('contractor')->get(['con_id', 'contractor']),
             'requesters' => Manager::query()->orderBy('manager_name')->pluck('manager_name')->values(),
             'currentRequester' => request()->user()?->manager?->manager_name ?: request()->user()?->username,
+            'googleDriveUrl' => filled(config('services.google_drive.root_folder_id'))
+                ? 'https://drive.google.com/drive/folders/'.config('services.google_drive.root_folder_id')
+                : null,
         ]);
+    }
+
+    public function store(ProjectStoreRequest $request, ProjectNumberAllocator $projectNumbers): RedirectResponse
+    {
+        $data = $request->validated();
+
+        $project = DB::transaction(function () use ($request, $data, $projectNumbers): Project {
+            $project = Project::query()->create([
+                'lead_id' => null,
+                'project_number' => filled($data['project_number'] ?? null)
+                    ? trim($data['project_number'])
+                    : $projectNumbers->allocateForCompany((int) $data['company_id']),
+                'customer_name' => $data['customer_name'],
+                'contact_name' => $data['contact_name'] ?? null,
+                'company_id' => $data['company_id'],
+                'product_id' => $data['product_id'],
+                'telemarketer_id' => $data['telemarketer_id'] ?? null,
+                'salesman_id' => $data['salesman_id'] ?? null,
+                'manager_id' => $data['manager_id'] ?? null,
+                'primary_number' => $data['primary_number'],
+                'mobile_number' => $data['mobile_number'] ?? null,
+                'email' => $data['email'] ?? null,
+                'address' => $data['address'] ?? null,
+                'city' => $data['city'] ?? null,
+                'state' => $data['state'] ?? null,
+                'zip_code' => $data['zip_code'] ?? null,
+                'amount' => $data['amount'],
+                'budget' => $data['budget'] ?? null,
+                'manual_notes' => $data['notes'] ?? null,
+                'status' => $data['status'],
+                'created_by' => $request->user()->getAuthIdentifier(),
+            ]);
+
+            $project->forceFill([
+                'created_at' => $data['signed_date'].' 12:00:00',
+                'updated_at' => now(),
+            ])->saveQuietly();
+
+            $project->sales()->create([
+                'type' => 'original',
+                'amount' => $data['amount'],
+                'sale_date' => $data['signed_date'],
+                'product_id' => $data['product_id'],
+            ]);
+
+            return $project;
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Project added successfully.']);
+
+        return to_route('management.projects', ['project' => $project->id]);
+    }
+
+    public function updateTeleLeadVisibility(Project $project): RedirectResponse
+    {
+        if (! $project->lead_id) {
+            Inertia::flash('toast', [
+                'type' => 'info',
+                'message' => 'This standalone project is already project-only.',
+            ]);
+
+            return back();
+        }
+
+        $data = request()->validate([
+            'project_only' => ['required', 'boolean'],
+        ]);
+
+        $project->update([
+            'tele_lead_excluded' => $data['project_only'],
+        ]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $data['project_only']
+                ? 'Project removed from Tele Leads.'
+                : 'Project restored to Tele Leads.',
+        ]);
+
+        return back();
+    }
+
+    public function bulkUpdateTeleLeadVisibility(): RedirectResponse
+    {
+        $data = request()->validate([
+            'project_ids' => ['required', 'array', 'min:1'],
+            'project_ids.*' => ['required', 'integer', 'distinct', 'exists:projects,id'],
+            'project_only' => ['required', 'boolean'],
+        ]);
+
+        $updated = Project::query()
+            ->whereIn('id', $data['project_ids'])
+            ->whereNotNull('lead_id')
+            ->update(['tele_lead_excluded' => $data['project_only']]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $data['project_only']
+                ? "{$updated} projects removed from Tele Leads."
+                : "{$updated} projects restored to Tele Leads.",
+        ]);
+
+        return back();
+    }
+
+    private function hydrateStandaloneProject(Project $project): void
+    {
+        if ($project->lead !== null) {
+            return;
+        }
+
+        $lead = new Lead([
+            'customer_name' => $project->customer_name,
+            'primary_number' => $project->primary_number,
+            'secondary_number' => null,
+            'mobile_number' => $project->mobile_number,
+            'email' => $project->email,
+            'address' => $project->address ?? '',
+            'city' => $project->city ?? '',
+            'state' => $project->state ?? '',
+            'zip_code' => $project->zip_code ?? '',
+            'source' => 'Manual Project',
+            'appointment_at' => null,
+            'telemarketer_notes' => $project->manual_notes ?? '',
+        ]);
+        $lead->id = 0;
+        $lead->created_at = $project->created_at;
+        $lead->setRelation('company', $project->company);
+        $lead->setRelation('product', $project->product);
+        $lead->setRelation('agent', $project->telemarketer);
+        $lead->setRelation('secondAgent', null);
+        $lead->setRelation('salesmanOne', $project->salesman);
+        $lead->setRelation('salesmanTwo', null);
+        $lead->setRelation('notes', $lead->newCollection());
+        $project->setRelation('lead', $lead);
     }
 
     public function storeReferral(ProjectSaleRequest $request, Project $project): RedirectResponse
@@ -68,9 +235,88 @@ class ProjectController extends Controller
 
     public function updateDetails(ProjectDetailsRequest $request, Project $project): RedirectResponse
     {
-        $project->update($request->validated());
+        $data = $request->validated();
+
+        DB::transaction(function () use ($project, $data): void {
+            $project->update([
+                'project_number' => $data['project_number'],
+                'status' => $data['status'],
+            ]);
+            $lead = $project->lead()->first();
+
+            if (! $lead) {
+                $project->update([
+                    'company_id' => $data['company_id'],
+                    'product_id' => $data['product_id'],
+                    'customer_name' => $data['customer_name'],
+                    'primary_number' => $data['primary_number'],
+                    'mobile_number' => $data['mobile_number'] ?? null,
+                    'email' => $data['email'] ?? null,
+                    'address' => $data['address'],
+                    'city' => $data['city'],
+                    'state' => $data['state'],
+                    'zip_code' => $data['zip_code'],
+                ]);
+                $project->forceFill([
+                    'created_at' => Carbon::parse($data['lead_created_at'], config('app.timezone')),
+                ])->saveQuietly();
+                $project->sales()->where('type', 'original')->update([
+                    'product_id' => $data['product_id'],
+                ]);
+
+                return;
+            }
+
+            $lead->fill([
+                'company_id' => $data['company_id'],
+                'product_id' => $data['product_id'],
+                'customer_name' => $data['customer_name'],
+                'primary_number' => $data['primary_number'],
+                'secondary_number' => $data['secondary_number'] ?? null,
+                'mobile_number' => $data['mobile_number'] ?? null,
+                'email' => $data['email'] ?? null,
+                'address' => $data['address'],
+                'city' => $data['city'],
+                'state' => $data['state'],
+                'zip_code' => $data['zip_code'],
+                'source' => $data['source'],
+                'appointment_at' => $data['appointment_at'] ?? null,
+            ]);
+            $lead->created_at = Carbon::parse($data['lead_created_at'], config('app.timezone'));
+            $lead->save();
+            $project->sales()->where('type', 'original')->update([
+                'product_id' => $data['product_id'],
+            ]);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Project details updated.']);
+
+        return back();
+    }
+
+    public function syncDriveFolders(): RedirectResponse
+    {
+        try {
+            $result = $this->googleDrive->syncProjectFolders(
+                Project::query()->with('lead:id,customer_name')->lazyById(),
+            );
+
+            $message = "Google Drive folder sync finished: {$result['created']} created, {$result['skipped']} already existed";
+            if ($result['failed'] > 0) {
+                $message .= ", {$result['failed']} failed";
+            }
+
+            Inertia::flash('toast', [
+                'type' => $result['failed'] > 0 ? 'warning' : 'success',
+                'message' => $message.'.',
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('Google Drive project folder sync failed.', ['exception' => $exception]);
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'Google Drive folder sync could not be completed. Test the Drive connection and try again.',
+            ]);
+        }
 
         return back();
     }
@@ -89,7 +335,11 @@ class ProjectController extends Controller
 
             if ($sale->type === 'original') {
                 $project->update(['amount' => $request->validated('amount')]);
-                $project->lead()->update(['product_id' => $request->validated('product_id')]);
+                if ($project->lead_id) {
+                    $project->lead()->update(['product_id' => $request->validated('product_id')]);
+                } else {
+                    $project->update(['product_id' => $request->validated('product_id')]);
+                }
             }
         });
 
@@ -178,9 +428,15 @@ class ProjectController extends Controller
             ];
         }
 
-        $project->invoices()->create($data);
+        $invoice = $project->invoices()->create($data);
+        $driveSync = $this->mirrorProjectFile(
+            $project,
+            $invoice->file_path,
+            $invoice->file_name,
+            $invoice->file_mime,
+        );
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Vendor invoice added.']);
+        Inertia::flash('toast', $this->driveSyncToast('Vendor invoice added.', $driveSync));
 
         return back();
     }
@@ -210,7 +466,16 @@ class ProjectController extends Controller
             Storage::disk('local')->delete($oldFilePath);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Vendor invoice updated.']);
+        $driveSync = $request->hasFile('file')
+            ? $this->mirrorProjectFile(
+                $project,
+                $invoice->file_path,
+                $invoice->file_name,
+                $invoice->file_mime,
+            )
+            : null;
+
+        Inertia::flash('toast', $this->driveSyncToast('Vendor invoice updated.', $driveSync));
 
         return back();
     }
@@ -270,12 +535,21 @@ class ProjectController extends Controller
         $this->ensurePayableFitsInvoice($data);
         $data = $this->withAccountingFile($request, $project, $data);
 
-        DB::transaction(function () use ($project, $data, $scheduledPaymentIds): void {
+        $transaction = DB::transaction(function () use ($project, $data, $scheduledPaymentIds): ProjectAccountingTransaction {
             $transaction = $project->accountingTransactions()->create($data);
             $transaction->scheduledPayments()->sync($scheduledPaymentIds);
+
+            return $transaction;
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => ucfirst($data['type']).' added.']);
+        $driveSync = $this->mirrorProjectFile(
+            $project,
+            $transaction->file_path,
+            $transaction->file_name,
+            $transaction->file_mime,
+        );
+
+        Inertia::flash('toast', $this->driveSyncToast(ucfirst($data['type']).' added.', $driveSync));
 
         return back();
     }
@@ -307,7 +581,16 @@ class ProjectController extends Controller
             Storage::disk('local')->delete($oldFilePath);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => ucfirst($data['type']).' updated.']);
+        $driveSync = $request->hasFile('file')
+            ? $this->mirrorProjectFile(
+                $project,
+                $accountingTransaction->file_path,
+                $accountingTransaction->file_name,
+                $accountingTransaction->file_mime,
+            )
+            : null;
+
+        Inertia::flash('toast', $this->driveSyncToast(ucfirst($data['type']).' updated.', $driveSync));
 
         return back();
     }
@@ -350,10 +633,45 @@ class ProjectController extends Controller
     private function accountingCounterparty(Project $project, string $type, ?int $contractorId): ?string
     {
         if ($type === 'receivable') {
-            return $project->lead()->value('customer_name');
+            return $project->lead()->value('customer_name') ?: $project->customer_name;
         }
 
         return $contractorId ? Contractor::query()->whereKey($contractorId)->value('contractor') : null;
+    }
+
+    private function mirrorProjectFile(
+        Project $project,
+        ?string $path,
+        ?string $fileName,
+        ?string $mimeType,
+    ): ?bool {
+        if (! $path || ! $fileName || ! $this->googleDrive->configured()) {
+            return null;
+        }
+
+        try {
+            $this->googleDrive->mirror($project, $path, $fileName, $mimeType);
+
+            return true;
+        } catch (Throwable $exception) {
+            Log::error('Google Drive project file sync failed.', [
+                'project_id' => $project->id,
+                'file_path' => $path,
+                'exception' => $exception,
+            ]);
+
+            return false;
+        }
+    }
+
+    /** @return array{type: string, message: string} */
+    private function driveSyncToast(string $message, ?bool $driveSync): array
+    {
+        return match ($driveSync) {
+            true => ['type' => 'success', 'message' => $message.' Synced to Google Drive.'],
+            false => ['type' => 'warning', 'message' => $message.' Google Drive sync failed; the CRM copy is safe.'],
+            null => ['type' => 'success', 'message' => $message],
+        };
     }
 
     private function withAccountingFile(

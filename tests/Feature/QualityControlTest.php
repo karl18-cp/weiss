@@ -95,3 +95,31 @@ test('a quality control note is saved on the project lead', function () {
         'body' => 'Customer details verified.',
     ]);
 });
+
+test('a mistaken project can be returned to dispatch without deleting project records', function () {
+    ['account' => $account, 'projectLead' => $projectLead] = qualityControlFixtures();
+    $project = $projectLead->project()->firstOrFail();
+
+    $this->actingAs($account)
+        ->patch(route('management.quality-control.return-to-dispatch', $project))
+        ->assertRedirect(route('management.quality-control'));
+
+    expect($projectLead->refresh()->status)->toBe('dispatched')
+        ->and($project->refresh()->status)->toBe('canceled');
+
+    $this->assertDatabaseHas('projects', ['id' => $project->id]);
+    $this->assertDatabaseHas('lead_movements', [
+        'lead_id' => $projectLead->id,
+        'from_status' => 'project',
+        'to_status' => 'dispatched',
+        'moved_by' => $account->acc_id,
+    ]);
+    $this->assertDatabaseHas('lead_notes', [
+        'lead_id' => $projectLead->id,
+        'note_type' => 'quality_control',
+        'created_by' => $account->acc_id,
+    ]);
+
+    $this->get(route('management.quality-control'))
+        ->assertInertia(fn (Assert $page) => $page->has('projects', 0));
+});

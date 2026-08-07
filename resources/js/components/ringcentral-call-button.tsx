@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { useSystemModal } from '@/components/system-modal-provider';
 
 type RingCentralCallButtonProps = {
     phone: string;
@@ -24,6 +25,7 @@ export function RingCentralCallButton({
     title = 'Call with RingCentral',
 }: RingCentralCallButtonProps) {
     const [opening, setOpening] = useState(false);
+    const { notify } = useSystemModal();
     const callWithRingCentral = (dialPhone = phone) => {
         if (typeof window.RCAdapter?.clickToCall === 'function') {
             window.RCAdapter.clickToCall(dialPhone, true);
@@ -96,11 +98,14 @@ export function RingCentralCallButton({
             const call = await prepareCall();
             dialPhone = call.phone ?? phone;
         } catch (error) {
-            window.alert(
-                error instanceof Error
-                    ? error.message
-                    : 'The call could not be started. Please check your connection and try again.',
-            );
+            notify({
+                title: 'Call could not be started',
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : 'The call could not be started. Please check your connection and try again.',
+                tone: 'error',
+            });
 
             return;
         } finally {
@@ -113,9 +118,12 @@ export function RingCentralCallButton({
                 setOpening(false);
 
                 if (!callWithRingCentral(dialPhone)) {
-                    window.alert(
-                        'The RingCentral browser phone is still loading. Please try again in a moment.',
-                    );
+                    notify({
+                        title: 'RingCentral is still loading',
+                        message:
+                            'The RingCentral browser phone is still loading. Please try again in a moment.',
+                        tone: 'warning',
+                    });
                 }
             }, 1200);
         }

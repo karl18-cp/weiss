@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Lead;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class LeadRequest extends FormRequest
 {
@@ -14,6 +16,21 @@ class LeadRequest extends FormRequest
     public function rules(): array
     {
         $isUpdate = $this->isMethod('PUT') || $this->isMethod('PATCH');
+        $validAppointmentResults = [
+            'PNS',
+            'PNS No Rehash',
+            '2 ND Meeting',
+            'Salesman Sent',
+            'Sold and Cancel',
+        ];
+        $lead = $this->route('lead');
+
+        // Imported and older leads can contain appointment-result labels that
+        // predate the current dropdown. Permit that exact existing value on a
+        // general edit so an unrelated field can still be saved.
+        if ($isUpdate && $lead instanceof Lead && filled($lead->appointment_result)) {
+            $validAppointmentResults[] = $lead->appointment_result;
+        }
 
         return [
             'customer_name' => ['required', 'string', 'max:255'],
@@ -24,7 +41,7 @@ class LeadRequest extends FormRequest
             'address' => ['required', 'string', 'max:255'],
             'zip_code' => ['required', 'string', 'max:15'],
             'city' => ['required', 'string', 'max:100'],
-            'county' => ['required', 'string', 'max:100'],
+            'county' => ['nullable', 'string', 'max:100'],
             'state' => ['required', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'years_in_house' => [$isUpdate ? 'nullable' : 'required', 'integer', 'min:0', 'max:150'],
@@ -32,12 +49,12 @@ class LeadRequest extends FormRequest
             // newer qualification fields. Do not block an unrelated edit there;
             // updateStatus() still requires them before a Leads Shop lead moves
             // into a downstream queue.
-            'house_age' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'house_age' => ['nullable', 'integer', 'min:0'],
             'needs_financing' => ['nullable', 'boolean'],
             'house_value' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
             'product_id' => ['required', 'integer', 'exists:products,prod_id'],
             'appointment_at' => ['required', 'date'],
-            'appointment_result' => ['nullable', 'string', 'in:PNS,PNS No Rehash,2 ND Meeting,Salesman Sent,Sold and Cancel'],
+            'appointment_result' => ['nullable', 'string', Rule::in(array_unique($validAppointmentResults))],
             // Telemarketer notes are locked after creation and are saved through
             // the notes history. Older imported leads may not have this field.
             'telemarketer_notes' => [$isUpdate ? 'nullable' : 'required', 'string', 'max:5000'],

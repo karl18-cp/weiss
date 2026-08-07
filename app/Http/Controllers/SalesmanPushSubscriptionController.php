@@ -10,9 +10,14 @@ use Illuminate\Http\Response;
 
 class SalesmanPushSubscriptionController extends Controller
 {
+    private function ensureAllowedRole(Request $request): void
+    {
+        abort_unless(in_array($request->user()?->role, ['admin', 'manager', 'salesman'], true), 403);
+    }
+
     public function store(Request $request): JsonResponse
     {
-        abort_unless($request->user()?->role === 'salesman', 403);
+        $this->ensureAllowedRole($request);
 
         $data = $request->validate([
             'endpoint' => ['required', 'url', 'max:2048'],
@@ -35,7 +40,7 @@ class SalesmanPushSubscriptionController extends Controller
 
     public function destroy(Request $request): Response
     {
-        abort_unless($request->user()?->role === 'salesman', 403);
+        $this->ensureAllowedRole($request);
 
         $data = $request->validate(['endpoint' => ['required', 'url', 'max:2048']]);
         PushSubscription::query()
@@ -48,12 +53,15 @@ class SalesmanPushSubscriptionController extends Controller
 
     public function test(Request $request, WebPushService $push): JsonResponse
     {
-        abort_unless($request->user()?->role === 'salesman', 403);
+        $this->ensureAllowedRole($request);
 
         $push->sendToAccount(
             $request->user()->getAuthIdentifier(),
-            'Weiss Sales notifications are ready',
-            'You will receive updates for your assigned appointments.',
+            'Weiss CRM notifications are ready',
+            $request->user()->role === 'salesman'
+                ? 'You will receive updates for your assigned appointments.'
+                : 'You will receive salesman appointment status updates.',
+            $request->user()->role === 'salesman' ? '/salesman/booking-board' : '/dashboard',
         );
 
         return response()->json(['sent' => true]);

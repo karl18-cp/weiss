@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\Salesman;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('guests are redirected to the login page', function () {
@@ -94,11 +95,14 @@ test('team performance uses lead creation dates and reports confirmed and sold t
         ]);
         $lead->timestamps = false;
         $lead->forceFill(['created_at' => $createdAt])->saveQuietly();
+        DB::table('lead_movements')
+            ->where('lead_id', $lead->id)
+            ->update(['created_at' => $createdAt, 'updated_at' => $createdAt]);
 
         return $lead;
     };
 
-    $inside = CarbonImmutable::create(2026, 7, 29, 10, 0, 0, 'Asia/Manila')->utc();
+    $inside = CarbonImmutable::create(2026, 7, 29, 10, 0, 0, 'America/Los_Angeles')->utc();
     $makeLead('Confirmed Lead', 'confirmed', $inside->toDateTimeString());
     $sold = $makeLead('Sold Lead', 'project', $inside->addHour()->toDateTimeString());
     $makeLead('Dispatched Lead', 'dispatched', $inside->addHours(2)->toDateTimeString());
@@ -155,7 +159,12 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
     ]);
     $team->agents()->attach($agent->agent_id);
 
-    $makeLead = function (string $name, string $status, string $createdAt) use ($account, $agent, $company, $product): Lead {
+    $makeLead = function (
+        string $name,
+        string $status,
+        string $createdAt,
+        string $appointmentAt = '2026-07-30 12:00:00',
+    ) use ($account, $agent, $company, $product): Lead {
         $lead = Lead::create([
             'customer_name' => $name,
             'marital_status' => 'Single',
@@ -167,7 +176,7 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
             'state' => 'CA',
             'years_in_house' => 1,
             'product_id' => $product->prod_id,
-            'appointment_at' => '2026-07-30 12:00:00',
+            'appointment_at' => $appointmentAt,
             'telemarketer_notes' => 'Test',
             'company_id' => $company->com_id,
             'source' => 'Test',
@@ -177,18 +186,50 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
         ]);
         $lead->timestamps = false;
         $lead->forceFill(['created_at' => $createdAt])->saveQuietly();
+        DB::table('lead_movements')
+            ->where('lead_id', $lead->id)
+            ->update(['created_at' => $createdAt, 'updated_at' => $createdAt]);
 
         return $lead;
     };
 
-    $inside = CarbonImmutable::create(2026, 7, 29, 10, 0, 0, 'Asia/Manila')->utc();
+    $inside = CarbonImmutable::create(2026, 7, 29, 10, 0, 0, 'America/Los_Angeles')->utc();
     $makeLead('Confirmed Score', 'confirmed', $inside->toDateTimeString());
     $makeLead('Dispatched Score', 'dispatched', $inside->addHour()->toDateTimeString());
-    $sold = $makeLead('Sold Score', 'project', $inside->addHours(2)->toDateTimeString());
+    $sold = $makeLead(
+        'Sold Score',
+        'project',
+        $inside->addHours(2)->toDateTimeString(),
+        '2026-07-29 12:00:00',
+    );
     $makeLead('Outside Score', 'confirmed', $inside->subDay()->toDateTimeString());
     Project::create([
         'lead_id' => $sold->id,
         'amount' => 1000,
+        'status' => 'new',
+        'created_by' => $account->acc_id,
+    ]);
+    $earlierSold = $makeLead(
+        'Earlier Lead Sold On Appointment Day',
+        'project',
+        $inside->subDays(5)->toDateTimeString(),
+        '2026-07-29 15:00:00',
+    );
+    Project::create([
+        'lead_id' => $earlierSold->id,
+        'amount' => 2000,
+        'status' => 'new',
+        'created_by' => $account->acc_id,
+    ]);
+    $differentAppointmentDay = $makeLead(
+        'Created Today But Sold On Another Appointment Day',
+        'project',
+        $inside->addHours(3)->toDateTimeString(),
+        '2026-07-30 09:00:00',
+    );
+    Project::create([
+        'lead_id' => $differentAppointmentDay->id,
+        'amount' => 3000,
         'status' => 'new',
         'created_by' => $account->acc_id,
     ]);
@@ -197,8 +238,13 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
         ->get(route('team-dashboard', ['period' => 'daily', 'date' => '2026-07-29']))
         ->assertInertia(fn (Assert $page) => $page
             ->component('team-dashboard')
+            ->where('filters.timezone', 'America/Los_Angeles')
             ->where('teams.0.name', 'Scoreboard Team')
-            ->where('teams.0.total', 3)
+            ->where('teams.0.total', 4)
             ->where('teams.0.confirmed', 2)
-            ->where('teams.0.sold', 1));
+            ->where('teams.0.sold', 2)
+            ->where('teams.0.agents.0.name', 'Scoreboard Agent')
+            ->where('teams.0.agents.0.total', 4)
+            ->where('teams.0.agents.0.confirmed', 2)
+            ->where('teams.0.agents.0.sold', 2));
 });

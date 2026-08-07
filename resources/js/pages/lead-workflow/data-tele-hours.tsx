@@ -1,7 +1,8 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import { CalendarDays, Clock3, Plus, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import DataSectionTabs from '@/components/data-section-tabs';
+import { CRM_TIME_ZONE, crmDateKey } from '@/lib/crm-time';
 import '@/../css/lead-data.css';
 import '@/../css/data-tele-hours.css';
 
@@ -36,7 +37,6 @@ const duration = (seconds: number) => {
 export default function DataTeleHours({
     hours,
     agents,
-    timezone,
     selectedDate,
 }: {
     hours: HourRow[];
@@ -46,10 +46,6 @@ export default function DataTeleHours({
 }) {
     const [open, setOpen] = useState(false);
     const [date, setDate] = useState(selectedDate);
-    const deviceTimezone = useMemo(
-        () => Intl.DateTimeFormat().resolvedOptions().timeZone || timezone,
-        [timezone],
-    );
     const time = useMemo(
         () => new Intl.DateTimeFormat(undefined, {
             month: 'short',
@@ -57,29 +53,23 @@ export default function DataTeleHours({
             year: 'numeric',
             hour: 'numeric',
             minute: '2-digit',
-            timeZone: deviceTimezone,
+            timeZone: CRM_TIME_ZONE,
             timeZoneName: 'short',
         }),
-        [deviceTimezone],
+        [],
     );
     const form = useForm({
         agent_ids: [] as number[],
-        work_date: new Date().toLocaleDateString('en-CA'),
+        work_date: crmDateKey(),
         first_login: '',
         first_logout: '',
         lunch_hours: '0',
         note: '',
     });
 
-    useEffect(() => {
-        if (timezone !== deviceTimezone) {
-            window.location.replace(`/lead-workflow/data/tele-hours?date=${selectedDate}&timezone=${encodeURIComponent(deviceTimezone)}`);
-        }
-    }, [deviceTimezone, selectedDate, timezone]);
-
     const applyDate = (event: React.FormEvent) => {
         event.preventDefault();
-        router.get('/lead-workflow/data/tele-hours', { date, timezone: deviceTimezone }, {
+        router.get('/lead-workflow/data/tele-hours', { date }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -119,9 +109,9 @@ export default function DataTeleHours({
                     </label>
                     <button type="submit">Apply filter</button>
                     <button type="button" className="data-hours-today" onClick={() => {
-                        const today = new Date().toLocaleDateString('en-CA');
+                        const today = crmDateKey();
                         setDate(today);
-                        router.get('/lead-workflow/data/tele-hours', { date: today, timezone: deviceTimezone });
+                        router.get('/lead-workflow/data/tele-hours', { date: today });
                     }}>Today</button>
                     <p>Viewing agent hours for <strong>{selectedDate}</strong></p>
                     <button className="data-hours-add" type="button" onClick={() => setOpen(true)}>
@@ -131,7 +121,7 @@ export default function DataTeleHours({
 
                 <section className="data-hours-card">
                     <div className="data-hours-card-title">
-                        <div><Clock3 /><div><h2>Agent hour history</h2><span>Times shown in {deviceTimezone}</span></div></div>
+                        <div><Clock3 /><div><h2>Agent hour history</h2><span>Times shown in California time</span></div></div>
                         <strong>{hours.length.toLocaleString()} agents with hours</strong>
                     </div>
                     <div className="data-hours-table-wrap">

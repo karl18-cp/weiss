@@ -7,7 +7,6 @@ use App\Http\Requests\LeadNoteRequest;
 use App\Http\Requests\LeadRequest;
 use App\Http\Requests\LeadSaleRequest;
 use App\Http\Requests\LeadSalesmenRequest;
-use App\Http\Requests\LeadSecondAgentRequest;
 use App\Http\Requests\LeadStatusRequest;
 use App\Models\Agent;
 use App\Models\Company;
@@ -18,7 +17,10 @@ use App\Models\Product;
 use App\Models\Project;
 use App\Models\Salesman;
 use App\Services\ProjectNumberAllocator;
+use App\Support\ManagerAccess;
 use App\Support\PhoneNumberVisibility;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,9 +31,39 @@ use Inertia\Response;
 
 class LeadsShopController extends Controller
 {
+    public function latestMarker(): JsonResponse
+    {
+        $latestLead = Lead::query()
+            ->inLeadsShop()
+            ->latest('created_at')
+            ->latest('id')
+            ->first(['id', 'created_at']);
+
+        return response()->json([
+            'latest' => $latestLead ? [
+                'id' => $latestLead->id,
+                'created_at' => $latestLead->created_at?->toISOString(),
+            ] : null,
+        ]);
+    }
+
     public function index(Request $request): Response
     {
         $requestedLeadId = $request->integer('lead') ?: null;
+        $search = trim((string) $request->query('search', ''));
+        $selectedCity = trim((string) $request->query('city', ''));
+        $dateField = $request->query('date_field') === 'appointment_at'
+            ? 'appointment_at'
+            : 'created_at';
+        // Workflow dates are business dates, so their default must not depend
+        // on the server, browser, or APP_TIMEZONE setting.
+        $crmTimezone = 'America/Los_Angeles';
+        $effectiveCreatedAtExpression = Schema::hasTable('lead_movements')
+            ? 'COALESCE((SELECT MIN(lm.created_at) FROM lead_movements lm WHERE lm.lead_id = leads.id), leads.created_at)'
+            : 'leads.created_at';
+        $dateExpression = $dateField === 'created_at'
+            ? $effectiveCreatedAtExpression
+            : 'leads.appointment_at';
 
         if ($requestedLeadId && $request->user()?->role === 'salesman') {
             $salesmanId = $request->user()->salesman?->salesman_id;
@@ -48,28 +80,159 @@ class LeadsShopController extends Controller
             );
         }
 
+        $queueQuery = Lead::query()
+            ->where(function ($query) use ($requestedLeadId): void {
+                $query->whereIn('status', Lead::LEADS_SHOP_STATUSES)
+                    ->when(
+                        $requestedLeadId,
+                        fn ($query) => $query->orWhere('id', $requestedLeadId),
+                    );
+            })
+            ->when($search !== '', function ($query) use ($search): void {
+                $like = '%'.$search.'%';
+                $query->where(function ($query) use ($like): void {
+                    $query->where('customer_name', 'like', $like)
+                        ->orWhere('address', 'like', $like)
+                        ->orWhere('city', 'like', $like)
+                        ->orWhere('state', 'like', $like)
+                        ->orWhere('zip_code', 'like', $like)
+                        ->orWhere('email', 'like', $like)
+                        ->orWhere('primary_number', 'like', $like)
+                        ->orWhere('secondary_number', 'like', $like)
+                        ->orWhere('mobile_number', 'like', $like)
+                        ->orWhereHas('company', fn ($relation) => $relation->where('company', 'like', $like))
+                        ->orWhereHas('product', fn ($relation) => $relation->where('product_name', 'like', $like))
+                        ->orWhereHas('agent', fn ($relation) => $relation->where('agent_name', 'like', $like));
+                });
+            });
+
+        $dateRows = (clone $queueQuery)
+            ->whereNotNull($dateField)
+            ->selectRaw("{$dateExpression} as date_value")
+            ->get()
+            ->pluck('date_value')
+            ->filter()
+            ->map(fn ($value): string => $dateField === 'created_at'
+                ? CarbonImmutable::parse((string) $value, 'UTC')->setTimezone($crmTimezone)->toDateString()
+                : substr((string) $value, 0, 10))
+            ->countBy()
+            ->sortKeysDesc()
+            ->map(fn (int $count, string $date): array => [
+                'key' => $date,
+                'count' => $count,
+            ])
+            ->values();
+
+        $requestedLeadDate = $requestedLeadId
+            ? (clone $queueQuery)
+                ->whereKey($requestedLeadId)
+                ->selectRaw("{$dateExpression} as date_value")
+                ->first()?->date_value
+            : null;
+        $requestedDateKey = $requestedLeadDate
+            ? ($dateField === 'created_at'
+                ? CarbonImmutable::parse((string) $requestedLeadDate, 'UTC')->setTimezone($crmTimezone)->toDateString()
+                : substr((string) $requestedLeadDate, 0, 10))
+            : null;
+        $todayDateKey = now($crmTimezone)->toDateString();
+        $selectedDate = collect($dateRows)->contains('key', $request->query('date'))
+            ? $request->query('date')
+            : ($requestedDateKey ?: ($search !== '' ? data_get($dateRows, '0.key') : $todayDateKey));
+
+        // These summary cards describe what happened to the leads created on
+        // the selected day. Counting LeadMovement timestamps here made the
+        // cards change whenever an older lead was moved through the workflow.
+        // Match TeamDashboardController exactly: a selected California date
+        // is converted to its corresponding UTC start/end boundaries before
+        // filtering the UTC timestamps stored in the database.
+        $selectedCaliforniaDay = CarbonImmutable::parse($selectedDate, $crmTimezone);
+        $createdFrom = $selectedCaliforniaDay->startOfDay()->utc();
+        $createdTo = $selectedCaliforniaDay->endOfDay()->utc();
+
+        $createdDayQuery = Lead::query()
+            // Use the same scored population as TeamDashboardController. A
+            // legacy CallTools lead can predate provider contact IDs, while
+            // direct projects assigned outside a team must not inflate this
+            // operational count.
+            ->whereIn('agent_id', DB::table('agent_team')->select('agent_id')->distinct())
+            ->whereNotNull('created_at')
+            ->whereBetween(DB::raw($effectiveCreatedAtExpression), [$createdFrom, $createdTo]);
+        $createdDayTotal = (clone $createdDayQuery)->count();
+        $movementCounts = (clone $createdDayQuery)
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $movementDestinations = collect([[
+            'status' => 'leads_shop',
+            'label' => 'Leads Shop',
+            'count' => collect(Lead::LEADS_SHOP_STATUSES)
+                ->sum(fn (string $status): int => (int) ($movementCounts[$status] ?? 0)),
+        ]]);
+        $movementDestinations->push(...collect([
+            'confirmed' => 'Confirm',
+            'dispatched' => 'Dispatch',
+            'reschedule' => 'Reschedule',
+            'rehash' => 'Rehash',
+            '555' => '555',
+            'kit' => 'Keep in Touch',
+            'toss' => 'TOSS',
+            'project' => 'Projects',
+        ])->map(fn (string $label, string $status): array => [
+            'status' => $status,
+            'label' => $label,
+            'count' => (int) ($movementCounts[$status] ?? 0),
+        ])->values()->all());
+
+        $knownDestinations = $movementDestinations->pluck('status');
+        $otherMovementCount = $movementCounts
+            ->except([
+                ...$knownDestinations->all(),
+                ...Lead::LEADS_SHOP_STATUSES,
+            ])
+            ->sum();
+        if ($otherMovementCount > 0) {
+            $movementDestinations->push([
+                'status' => 'other',
+                'label' => 'Other',
+                'count' => (int) $otherMovementCount,
+            ]);
+        }
+
         return Inertia::render('lead-workflow/leads-shop', [
-            'leads' => Lead::query()
-                ->where(function ($query) use ($requestedLeadId): void {
-                    $query->whereIn('status', Lead::LEADS_SHOP_STATUSES)
-                        ->when(
-                            $requestedLeadId,
-                            fn ($query) => $query->orWhere('id', $requestedLeadId),
-                        );
-                })
+            'leads' => (clone $queueQuery)
+                ->when(
+                    $selectedCity !== '' && $selectedCity !== 'all',
+                    fn ($query) => $query->where('city', $selectedCity),
+                    fn ($query) => $query->when(
+                        $selectedDate,
+                        fn ($query) => $dateField === 'created_at'
+                            ? $query->whereBetween(DB::raw($effectiveCreatedAtExpression), [$createdFrom, $createdTo])
+                            : $query->whereDate('appointment_at', $selectedDate),
+                        fn ($query) => $query->whereRaw('1 = 0'),
+                    ),
+                )
                 ->with([
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',
                     'agent:agent_id,agent_name',
                     'secondAgent:agent_id,agent_name',
+                    'secondManager:manager_id,manager_name',
                     'salesmanOne:salesman_id,salesman_name',
                     'salesmanTwo:salesman_id,salesman_name',
+                    'notes' => fn ($query) => $query->latest()->limit(25),
                     'notes.creator:acc_id,username',
                     ...(Schema::hasTable('ringcentral_calls')
-                        ? ['ringCentralCalls.caller:acc_id,username']
+                        ? [
+                            'ringCentralCalls' => fn ($query) => $query->latest('initiated_at')->limit(20),
+                            'ringCentralCalls.caller:acc_id,username',
+                        ]
                         : []),
                     ...(Schema::hasTable('lead_movements')
-                        ? ['movements.mover:acc_id,username']
+                        ? [
+                            'movements' => fn ($query) => $query->latest()->limit(30),
+                            'movements.mover:acc_id,username',
+                        ]
                         : []),
                     ...(class_exists(LeadAgentAssignment::class) && Schema::hasTable('lead_agent_assignments')
                         ? [
@@ -78,8 +241,16 @@ class LeadsShopController extends Controller
                         ]
                         : []),
                 ])
+                ->when($requestedLeadId, fn ($query) => $query->orderByRaw('id = ? DESC', [$requestedLeadId]))
                 ->latest()
                 ->get(),
+            'dateRows' => $dateRows,
+            'selectedDate' => $selectedDate,
+            'selectedCity' => $selectedCity !== '' ? $selectedCity : 'all',
+            'dateField' => $dateField,
+            'timezoneOffset' => (int) ($selectedCaliforniaDay->utcOffset() / 60),
+            'movementDestinations' => $movementDestinations,
+            'createdDayTotal' => $createdDayTotal,
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
             'cities' => Lead::query()
@@ -119,7 +290,6 @@ class LeadsShopController extends Controller
 
             $lead->update([
                 ...$data,
-                'source' => 'CallTools',
                 'crm_qualification_completed_at' => now(),
             ]);
 
@@ -128,6 +298,48 @@ class LeadsShopController extends Controller
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead updated.']);
+
+        return back();
+    }
+
+    public function updateAppointment(Request $request, Lead $lead): RedirectResponse
+    {
+        $data = $request->validate([
+            'appointment_at' => ['nullable', 'date'],
+        ]);
+
+        $previousAppointment = $lead->appointment_at?->copy();
+        $nextAppointment = filled($data['appointment_at'] ?? null)
+            ? now()->parse($data['appointment_at'])
+            : null;
+
+        $appointmentChanged = $previousAppointment?->timestamp !== $nextAppointment?->timestamp;
+
+        DB::transaction(function () use ($request, $lead, $previousAppointment, $nextAppointment, $appointmentChanged): void {
+            $lead->update([
+                'appointment_at' => $nextAppointment,
+            ]);
+
+            if (! $appointmentChanged) {
+                return;
+            }
+
+            $formatAppointment = static fn ($appointment): string => $appointment
+                ? $appointment->timezone(config('app.timezone'))->format('M j, Y, g:i A T')
+                : 'No appointment';
+
+            $lead->notes()->create([
+                'note_type' => 'appointment_date_change',
+                'body' => sprintf(
+                    'Appointment changed from %s to %s.',
+                    $formatAppointment($previousAppointment),
+                    $formatAppointment($nextAppointment),
+                ),
+                'created_by' => $request->user()?->getAuthIdentifier(),
+            ]);
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Appointment updated.']);
 
         return back();
     }
@@ -150,7 +362,7 @@ class LeadsShopController extends Controller
         $locked = $noteType === 'telemarketer'
             || (
                 $lead->status === 'dispatched'
-                && in_array($noteType, ['confirmation', 'appointment_result'], true)
+                && $noteType === 'confirmation'
             );
 
         if ($locked) {
@@ -174,25 +386,53 @@ class LeadsShopController extends Controller
 
     public function updateStatus(LeadStatusRequest $request, Lead $lead): RedirectResponse
     {
-        $status = $request->validated('status');
-        $leavingLeadsShop = in_array($lead->status, Lead::LEADS_SHOP_STATUSES, true)
-            && ! in_array($status, Lead::LEADS_SHOP_STATUSES, true);
+        $validated = $request->validated();
+        $status = $validated['status'];
+        $appointmentResultNote = trim((string) ($validated['appointment_result_note'] ?? ''));
 
-        if ($leavingLeadsShop && (
-            ! $lead->crm_qualification_completed_at
-            || ! $lead->marital_status
-            || $lead->marital_status === 'Unknown'
-            || $lead->years_in_house === null
-            || $lead->house_age === null
-            || $lead->needs_financing === null
-            || $lead->house_value === null
-        )) {
-            throw ValidationException::withMessages([
-                'status' => 'Complete the homeowner qualification fields before moving this lead out of Leads Shop.',
+        if ($status === 'toss' && ! ManagerAccess::canEdit($request->user(), 'toss_action')) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'title' => 'Permission required',
+                'message' => 'You do not have permission to move leads to TOSS.',
             ]);
+
+            return back();
         }
 
-        $lead->update(['status' => $status]);
+        $updates = ['status' => $status];
+        $manager = $request->user()?->role === 'manager'
+            ? $request->user()->manager
+            : null;
+
+        if (
+            in_array($status, ['confirmed', 'dispatched', 'kit'], true)
+            && $manager
+            && ! $lead->manager_2_id
+        ) {
+            $updates['manager_2_id'] = $manager->manager_id;
+        }
+
+        DB::transaction(function () use ($request, $lead, $updates, $appointmentResultNote): void {
+            $lead->update($updates);
+
+            if ($appointmentResultNote === '') {
+                return;
+            }
+
+            $latestBody = $lead->notes()
+                ->where('note_type', 'appointment_result')
+                ->latest('id')
+                ->value('body');
+
+            if ($latestBody !== $appointmentResultNote) {
+                $lead->notes()->create([
+                    'note_type' => 'appointment_result',
+                    'body' => $appointmentResultNote,
+                    'created_by' => $request->user()->getAuthIdentifier(),
+                ]);
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead status updated.']);
 
@@ -255,6 +495,26 @@ class LeadsShopController extends Controller
                 ],
             );
 
+            if ($lead->status !== 'project') {
+                $salesmanNames = Salesman::query()
+                    ->whereIn('salesman_id', array_filter([
+                        $lead->salesman_1_id,
+                        $lead->salesman_2_id,
+                    ]))
+                    ->pluck('salesman_name', 'salesman_id');
+
+                LeadNote::query()->create([
+                    'lead_id' => $lead->id,
+                    'note_type' => 'salesman_assignment',
+                    'body' => sprintf(
+                        'Moved to Projects with Salesman 1: %s; Salesman 2: %s.',
+                        $lead->salesman_1_id ? ($salesmanNames[$lead->salesman_1_id] ?? 'Unknown salesman') : 'Unassigned',
+                        $lead->salesman_2_id ? ($salesmanNames[$lead->salesman_2_id] ?? 'Unknown salesman') : 'Unassigned',
+                    ),
+                    'created_by' => $request->user()->getAuthIdentifier(),
+                ]);
+            }
+
             $lead->update([
                 'status' => 'project',
                 'appointment_result' => 'Sold',
@@ -266,18 +526,6 @@ class LeadsShopController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Sale accepted and project created.']);
 
         return to_route('management.projects', ['project' => $project->id]);
-    }
-
-    public function assignSecondAgent(LeadSecondAgentRequest $request, Lead $lead): RedirectResponse
-    {
-        DB::transaction(fn () => $this->appendAgentAssignment(
-            $request,
-            $lead,
-            (int) $request->validated('agent_2_id'),
-        ));
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Agent assignment added.']);
-
-        return back();
     }
 
     private function appendAgentAssignment(Request $request, Lead $lead, int $agentId): void

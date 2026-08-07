@@ -77,7 +77,7 @@
     display: grid;
     min-height: 0;
     flex: 1;
-    grid-template-columns: 14rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
     gap: 1.25rem;
 }

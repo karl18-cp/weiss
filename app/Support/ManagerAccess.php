@@ -12,12 +12,16 @@ class ManagerAccess
         'dashboard' => 'Dashboard',
         'team_dashboard' => 'Team Dashboard',
         'lead_card' => 'Lead Card', 'leads_shop' => 'Leads Shop',
-        'confirm_leads' => 'Confirm Leads', 'dispatch_leads' => 'Dispatch Leads',
+        'confirm_leads' => 'Confirm Leads', 'dispatch_leads' => 'Dispatch Leads', 'sag' => 'SAG',
         'reschedule' => 'Reschedule', 'rehash' => 'Rehash', '555' => '555',
         'la' => 'LA', 'his' => 'HIS', 'toss_leads' => 'TOSS Leads', 'keep_in_touch' => 'Keep in Touch',
         'data' => 'Data', 'booking_board' => 'Booking Board', 'tele_hours' => 'Tele Report',
         'quality_control' => 'Quality Control', 'projects' => 'Projects',
+        'manager_history' => 'View All Manager Activity',
         'contacts_users' => 'Contacts & Users',
+        'view_all_kit_managers' => "View All Managers' Keep in Touch Leads",
+        'toss_action' => 'Move Leads to TOSS',
+        'dial_raw_only' => 'Leads Shop Dialing: Raw Leads Only',
         'full_phone_numbers' => 'View Full Phone Numbers',
     ];
 
@@ -28,6 +32,7 @@ class ManagerAccess
         'leads_shop' => '/lead-workflow/leads-shop',
         'confirm_leads' => '/lead-workflow/confirm-leads',
         'dispatch_leads' => '/lead-workflow/dispatch-leads',
+        'sag' => '/lead-workflow/sag',
         'reschedule' => '/lead-workflow/reschedule',
         'rehash' => '/lead-workflow/rehash',
         '555' => '/lead-workflow/555',
@@ -42,6 +47,44 @@ class ManagerAccess
         'projects' => '/management/projects',
         'contacts_users' => '/management/contacts-users',
     ];
+
+    public static function canEdit(Account $user, string $module): bool
+    {
+        if ($user->role === 'admin') {
+            return true;
+        }
+
+        $profile = match ($user->role) {
+            'manager' => $user->manager,
+            'agent' => $user->agent,
+            'salesman' => $user->salesman,
+            default => null,
+        };
+
+        return $profile?->permissions()
+            ->where('module', $module)
+            ->where('access_level', 'edit')
+            ->exists() ?? false;
+    }
+
+    public static function hasEnabledFlag(Account $user, string $module): bool
+    {
+        if ($user->role === 'admin') {
+            return false;
+        }
+
+        $profile = match ($user->role) {
+            'manager' => $user->manager,
+            'agent' => $user->agent,
+            'salesman' => $user->salesman,
+            default => null,
+        };
+
+        return $profile?->permissions()
+            ->where('module', $module)
+            ->where('access_level', 'edit')
+            ->exists() ?? false;
+    }
 
     public static function firstAllowedPath(Account $user): ?string
     {

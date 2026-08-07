@@ -1,3657 +1,4978 @@
-import { Head, router, useForm, usePage } from "@inertiajs/react";
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
-  Archive,
-  Ban,
-  Building2,
-  CalendarClock,
-  CheckCircle2,
-  CircleDollarSign,
-  Clock3,
-  History,
-  Headphones,
-  LockKeyhole,
-  Mail,
-  MapPin,
-  Maximize2,
-  MessageCircle,
-  Package,
-  Pencil,
-  Phone,
-  PhoneCall,
-  RotateCcw,
-  Search,
-  Save,
-  SlidersHorizontal,
-  ShoppingBag,
-  Trash2,
-  Truck,
-  UserRound,
-  X,
-} from "lucide-react";
+    Archive,
+    Ban,
+    Building2,
+    CalendarClock,
+    CheckCircle2,
+    CircleDollarSign,
+    Clock3,
+    History,
+    Headphones,
+    LockKeyhole,
+    Mail,
+    MapPin,
+    Maximize2,
+    MessageCircle,
+    Package,
+    Pencil,
+    Phone,
+    PhoneCall,
+    RotateCcw,
+    Search,
+    Save,
+    SlidersHorizontal,
+    ShoppingBag,
+    Trash2,
+    Truck,
+    UserRound,
+    X,
+} from 'lucide-react';
 import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
-import "@/../css/leads-shop.css";
-import { RingCentralCallButton } from "@/components/ringcentral-call-button";
-import { useSystemModal } from "@/components/system-modal-provider";
-import { zillowSearchUrl } from "@/lib/address-search";
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type PointerEvent as ReactPointerEvent,
+} from 'react';
+import '@/../css/leads-shop.css';
+import { RingCentralCallButton } from '@/components/ringcentral-call-button';
+import { useSystemModal } from '@/components/system-modal-provider';
+import { zillowSearchUrl } from '@/lib/address-search';
 import {
-  appointmentInputValue,
-  formatAppointmentDate,
-} from "@/lib/appointment-date";
+    appointmentDate,
+    appointmentInputValue,
+    formatAppointmentDate,
+} from '@/lib/appointment-date';
+import { formatPhoneNumber } from '@/lib/phone-number';
+
+const CONFIRM_URGENCY_WINDOW_MS = 2 * 60 * 60 * 1000;
+const CRM_TIMEZONE = 'America/Los_Angeles';
+const crmClockFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: CRM_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+});
+
+const crmWallClockNow = (): Date => {
+    const parts = Object.fromEntries(
+        crmClockFormatter
+            .formatToParts(new Date())
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, Number(part.value)]),
+    );
+
+    return new Date(
+        parts.year,
+        parts.month - 1,
+        parts.day,
+        parts.hour,
+        parts.minute,
+        parts.second,
+    );
+};
+
+const isUrgentConfirmLead = (lead: Lead): boolean => {
+    if (lead.status !== 'confirmed' || !lead.appointment_at) return false;
+
+    const appointment = appointmentDate(lead.appointment_at);
+    const millisecondsUntilAppointment =
+        appointment.getTime() - crmWallClockNow().getTime();
+
+    return (
+        millisecondsUntilAppointment >= 0 &&
+        millisecondsUntilAppointment <= CONFIRM_URGENCY_WINDOW_MS
+    );
+};
 
 export type Lead = {
-  id: number;
-  customer_name: string;
-  marital_status: string;
-  primary_number: string;
-  secondary_number: string | null;
-  mobile_number: string | null;
-  address: string;
-  zip_code: string;
-  city: string;
-  county: string;
-  state: string;
-  email: string | null;
-  years_in_house: number;
-  house_age: number | null;
-  needs_financing: boolean | null;
-  house_value: string | null;
-  appointment_at: string | null;
-  appointment_result: string | null;
-  telemarketer_notes: string;
-  source: string;
-  status: string;
-  confirmation_notes: string | null;
-  created_at: string;
-  company: { com_id: number; company: string; prefix: string } | null;
-  product: { prod_id: number; product_name: string } | null;
-  agent: { agent_id: number; agent_name: string } | null;
-  second_agent: { agent_id: number; agent_name: string } | null;
-  agent_assignments?: LeadAgentAssignment[];
-  salesman_one: { salesman_id: number; salesman_name: string } | null;
-  salesman_two: { salesman_id: number; salesman_name: string } | null;
-  notes: LeadNote[];
-  movements?: LeadMovement[];
-  ring_central_calls?: RingCentralCall[];
+    id: number;
+    customer_name: string;
+    marital_status: string;
+    primary_number: string;
+    secondary_number: string | null;
+    mobile_number: string | null;
+    address: string;
+    zip_code: string;
+    city: string;
+    state: string;
+    latitude: number | null;
+    longitude: number | null;
+    email: string | null;
+    years_in_house: number;
+    house_age: number | null;
+    needs_financing: boolean | null;
+    house_value: string | null;
+    appointment_at: string | null;
+    appointment_result: string | null;
+    telemarketer_notes: string;
+    source: string;
+    status: string;
+    confirmation_notes: string | null;
+    created_at: string;
+    company: { com_id: number; company: string; prefix: string } | null;
+    product: { prod_id: number; product_name: string } | null;
+    agent: { agent_id: number; agent_name: string } | null;
+    second_agent: { agent_id: number; agent_name: string } | null;
+    second_manager: { manager_id: number; manager_name: string } | null;
+    agent_assignments?: LeadAgentAssignment[];
+    salesman_one: { salesman_id: number; salesman_name: string } | null;
+    salesman_two: { salesman_id: number; salesman_name: string } | null;
+    notes: LeadNote[];
+    appointment_result_notes?: LeadNote[];
+    movements?: LeadMovement[];
+    ring_central_calls?: RingCentralCall[];
 };
 
 type RingCentralCall = {
-  id: number;
-  phone_number: string;
-  result: string | null;
-  duration_seconds: number;
-  initiated_at: string;
-  started_at: string | null;
-  recording_path: string | null;
-  caller: { acc_id: number; username: string } | null;
+    id: number;
+    phone_number: string;
+    result: string | null;
+    duration_seconds: number;
+    initiated_at: string;
+    started_at: string | null;
+    recording_path: string | null;
+    caller: { acc_id: number; username: string } | null;
 };
 
 type LeadNote = {
-  id: number;
-  note_type: string;
-  body: string;
-  created_at: string;
-  creator: { acc_id: number; username: string } | null;
+    id: number;
+    note_type: string;
+    body: string;
+    created_at: string;
+    creator: { acc_id: number; username: string } | null;
 };
 
 type LeadMovement = {
-  id: number;
-  from_status: string | null;
-  to_status: string;
-  created_at: string;
-  mover: { acc_id: number; username: string } | null;
+    id: number;
+    from_status: string | null;
+    to_status: string;
+    created_at: string;
+    mover: { acc_id: number; username: string } | null;
 };
 
 type LeadAgentAssignment = {
-  id: number;
-  is_original: boolean;
-  created_at: string;
-  agent: { agent_id: number; agent_name: string } | null;
-  assigner: { acc_id: number; username: string } | null;
+    id: number;
+    is_original: boolean;
+    created_at: string;
+    agent: { agent_id: number; agent_name: string } | null;
+    assigner: { acc_id: number; username: string } | null;
 };
 
 type SmsTemplateField =
-  | "heading"
-  | "customer"
-  | "address"
-  | "phones"
-  | "email"
-  | "project"
-  | "confirmation"
-  | "appointment";
+    | 'heading'
+    | 'customer'
+    | 'address'
+    | 'phones'
+    | 'email'
+    | 'project'
+    | 'confirmation'
+    | 'appointment';
 
 type EditableNoteType =
-  "telemarketer" | "confirmation" | "dispatch" | "appointment_result";
-type DateField = "created_at" | "appointment_at";
+    'telemarketer' | 'confirmation' | 'dispatch' | 'appointment_result';
+type DateField = 'created_at' | 'appointment_at';
 type LeadCardLayout = {
-  primaryColumn: number;
-  informationRow: number;
+    primaryColumn: number;
+    informationRow: number;
 };
 
-const LEAD_CARD_LAYOUT_KEY = "weiss:lead-card-layout";
+const LEAD_CARD_LAYOUT_KEY = 'weiss:lead-card-layout';
 const DEFAULT_LEAD_CARD_LAYOUT: LeadCardLayout = {
-  primaryColumn: 66,
-  informationRow: 62,
+    primaryColumn: 66,
+    informationRow: 62,
+};
+
+const permissionModuleForPath = (path: string): string | null => {
+    const modules: [string, string][] = [
+        ['/lead-workflow/leads-shop', 'leads_shop'],
+        ['/lead-workflow/confirm-leads', 'confirm_leads'],
+        ['/lead-workflow/dispatch-leads', 'dispatch_leads'],
+        ['/lead-workflow/sag', 'sag'],
+        ['/lead-workflow/reschedule', 'reschedule'],
+        ['/lead-workflow/rehash', 'rehash'],
+        ['/lead-workflow/555', '555'],
+        ['/lead-workflow/la', 'la'],
+        ['/lead-workflow/his', 'his'],
+        ['/lead-workflow/toss-leads', 'toss_leads'],
+        ['/lead-workflow/keep-in-touch', 'keep_in_touch'],
+    ];
+
+    return modules.find(([prefix]) => path.startsWith(prefix))?.[1] ?? null;
 };
 
 const loadLeadCardLayout = (): LeadCardLayout => {
-  try {
-    const saved = JSON.parse(
-      window.localStorage.getItem(LEAD_CARD_LAYOUT_KEY) ?? "null",
-    ) as Partial<LeadCardLayout> | null;
+    try {
+        const saved = JSON.parse(
+            window.localStorage.getItem(LEAD_CARD_LAYOUT_KEY) ?? 'null',
+        ) as Partial<LeadCardLayout> | null;
 
-    return {
-      primaryColumn:
-        typeof saved?.primaryColumn === "number"
-          ? Math.min(78, Math.max(50, saved.primaryColumn))
-          : DEFAULT_LEAD_CARD_LAYOUT.primaryColumn,
-      informationRow:
-        typeof saved?.informationRow === "number"
-          ? Math.min(75, Math.max(38, saved.informationRow))
-          : DEFAULT_LEAD_CARD_LAYOUT.informationRow,
-    };
-  } catch {
-    return DEFAULT_LEAD_CARD_LAYOUT;
-  }
+        return {
+            primaryColumn:
+                typeof saved?.primaryColumn === 'number'
+                    ? Math.min(78, Math.max(50, saved.primaryColumn))
+                    : DEFAULT_LEAD_CARD_LAYOUT.primaryColumn,
+            informationRow:
+                typeof saved?.informationRow === 'number'
+                    ? Math.min(75, Math.max(38, saved.informationRow))
+                    : DEFAULT_LEAD_CARD_LAYOUT.informationRow,
+        };
+    } catch {
+        return DEFAULT_LEAD_CARD_LAYOUT;
+    }
 };
 
 const latestNoteBody = (lead: Lead | null, noteType: string): string => {
-  if (!lead) return "";
+    if (!lead) return '';
 
-  const latest = [...lead.notes]
-    .filter((note) => note.note_type === noteType)
-    .sort((a, b) => b.id - a.id)[0];
+    const latest = [...lead.notes]
+        .filter((note) => note.note_type === noteType)
+        .sort((a, b) => b.id - a.id)[0];
 
-  if (latest) return latest.body;
+    if (latest) return latest.body;
 
-  return noteType === "telemarketer" ? (lead.telemarketer_notes ?? "") : "";
+    if (noteType === 'appointment_result') {
+        return lead.appointment_result_notes?.[0]?.body ?? '';
+    }
+
+    return noteType === 'telemarketer' ? (lead.telemarketer_notes ?? '') : '';
 };
+
+const latestLeadNote = (
+    lead: Lead | null,
+    noteType: string,
+): LeadNote | null => {
+    if (!lead) return null;
+
+    return (
+        [...lead.notes]
+            .filter((note) => note.note_type === noteType)
+            .sort((a, b) => b.id - a.id)[0] ?? null
+    );
+};
+
+const formatCity = (city?: string | null) =>
+    (city ?? '').replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
 
 export type CompanyOption = { com_id: number; company: string };
 export type ProductOption = { prod_id: number; product_name: string };
 export type AgentOption = { agent_id: number; agent_name: string };
 export type SalesmanOption = { salesman_id: number; salesman_name: string };
 
+type DateRow = { key: string; count: number };
+type MovementDestination = { status: string; label: string; count: number };
+type QueueManager = { id: string; name: string; count: number };
+
+type PaginatedLeads = {
+    data: Lead[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    prev_page_url: string | null;
+    next_page_url: string | null;
+};
+
 export type LeadsShopProps = {
-  leads: Lead[];
-  companies: CompanyOption[];
-  products: ProductOption[];
-  cities: string[];
-  agents: AgentOption[];
-  salesmen?: SalesmanOption[];
-  queue?: {
-    title: string;
-    description: string;
-    status: string;
-    listTitle: string;
-    dateLabel: string;
-    dateField: "created_at" | "appointment_at";
-    sortDirection?: "asc" | "desc";
-    statusFilters?: [string, string][];
-  };
+    leads: PaginatedLeads | Lead[];
+    companies: CompanyOption[];
+    products: ProductOption[];
+    cities: string[];
+    agents: AgentOption[];
+    salesmen?: SalesmanOption[];
+    dateRows: DateRow[];
+    queueTotal?: number;
+    queueManagers?: QueueManager[];
+    selectedQueueManager?: string;
+    canViewAllQueueManagers?: boolean;
+    selectedDate: string | null;
+    selectedCity?: string;
+    dateField: DateField;
+    dateGranularity?: 'day' | 'month';
+    timezoneOffset: number;
+    movementDestinations?: MovementDestination[];
+    createdDayTotal?: number;
+    queue?: {
+        title: string;
+        description: string;
+        status: string;
+        listTitle: string;
+        dateLabel: string;
+        dateField: 'created_at' | 'appointment_at';
+        dateGranularity?: 'day' | 'month';
+        sortDirection?: 'asc' | 'desc';
+        statusFilters?: [string, string][];
+    };
 };
 
 const emptyLeadForm = {
-  customer_name: "",
-  marital_status: "",
-  primary_number: "",
-  secondary_number: "",
-  mobile_number: "",
-  address: "",
-  zip_code: "",
-  city: "",
-  county: "",
-  state: "",
-  email: "",
-  years_in_house: "",
-  house_age: "",
-  needs_financing: "",
-  house_value: "",
-  product_id: "",
-  appointment_at: "",
-  appointment_result: "",
-  telemarketer_notes: "",
-  company_id: "",
-  source: "CallTools",
-  agent_id: "",
-  salesman_1_id: "",
-  salesman_2_id: "",
+    customer_name: '',
+    marital_status: '',
+    primary_number: '',
+    secondary_number: '',
+    mobile_number: '',
+    address: '',
+    zip_code: '',
+    city: '',
+    state: '',
+    email: '',
+    years_in_house: '',
+    house_age: '',
+    needs_financing: '',
+    house_value: '',
+    product_id: '',
+    appointment_at: '',
+    appointment_result: '',
+    telemarketer_notes: '',
+    company_id: '',
+    source: 'CallTools',
+    agent_id: '',
+    salesman_1_id: '',
+    salesman_2_id: '',
 };
 
 const leadFormData = (lead: Lead) => ({
-  customer_name: lead.customer_name,
-  marital_status: lead.marital_status ?? "",
-  primary_number: lead.primary_number,
-  secondary_number: lead.secondary_number ?? "",
-  mobile_number: lead.mobile_number ?? "",
-  address: lead.address,
-  zip_code: lead.zip_code,
-  city: lead.city,
-  county: lead.county,
-  state: lead.state,
-  email: lead.email ?? "",
-  years_in_house:
-    lead.years_in_house == null ? "" : String(lead.years_in_house),
-  house_age: lead.house_age == null ? "" : String(lead.house_age),
-  needs_financing:
-    lead.needs_financing == null ? "" : lead.needs_financing ? "1" : "0",
-  house_value: lead.house_value ?? "",
-  product_id: String(lead.product?.prod_id ?? ""),
-  appointment_at: appointmentInputValue(lead.appointment_at ?? ""),
-  appointment_result: lead.appointment_result ?? "",
-  telemarketer_notes: lead.telemarketer_notes ?? "",
-  company_id: String(lead.company?.com_id ?? ""),
-  source: "CallTools",
-  agent_id: String(lead.agent?.agent_id ?? ""),
-  salesman_1_id: String(lead.salesman_one?.salesman_id ?? ""),
-  salesman_2_id: String(lead.salesman_two?.salesman_id ?? ""),
+    customer_name: lead.customer_name,
+    marital_status: lead.marital_status ?? '',
+    primary_number: lead.primary_number,
+    secondary_number: lead.secondary_number ?? '',
+    mobile_number: lead.mobile_number ?? '',
+    address: lead.address,
+    zip_code: lead.zip_code,
+    city: lead.city,
+    state: lead.state,
+    email: lead.email ?? '',
+    years_in_house:
+        lead.years_in_house == null ? '' : String(lead.years_in_house),
+    house_age: lead.house_age == null ? '' : String(lead.house_age),
+    needs_financing:
+        lead.needs_financing == null ? '' : lead.needs_financing ? '1' : '0',
+    house_value: lead.house_value ?? '',
+    product_id: String(lead.product?.prod_id ?? ''),
+    appointment_at: appointmentInputValue(lead.appointment_at ?? ''),
+    appointment_result: lead.appointment_result ?? '',
+    telemarketer_notes: lead.telemarketer_notes ?? '',
+    company_id: String(lead.company?.com_id ?? ''),
+    source: 'CallTools',
+    agent_id: String(lead.agent?.agent_id ?? ''),
+    salesman_1_id: String(lead.salesman_one?.salesman_id ?? ''),
+    salesman_2_id: String(lead.salesman_two?.salesman_id ?? ''),
 });
 
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+    new Intl.DateTimeFormat('en-US', {
+        timeZone: CRM_TIMEZONE,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(new Date(value));
 
 const workflowLocation = (status: string | null) => {
-  const locations: Record<string, string> = {
-    fresh: "Leads Shop / Freshly In",
-    raw: "Leads Shop / Raw",
-    cb: "Leads Shop / Call Back",
-    naov: "Leads Shop / NAOV",
-    toss: "Leads Shop / TOSS",
-    confirmed: "Confirm Leads",
-    dispatched: "Dispatch Leads",
-    reschedule: "Reschedule",
-    rehash: "Rehash",
-    rehash_ng: "Rehash / NG",
-    rehash_toss: "Rehash / TOSS",
-    rehash_cb: "Rehash / Call Back",
-    "555": "555",
-    kit: "Keep in Touch",
-    kit_ng: "Keep in Touch / NG",
-    kit_toss: "Keep in Touch / TOSS",
-    kit_cb: "Keep in Touch / Call Back",
-    la: "LA",
-    his: "HIS",
-    project: "Projects",
-  };
+    const locations: Record<string, string> = {
+        fresh: 'Leads Shop / Freshly In',
+        raw: 'Leads Shop / Raw',
+        cb: 'Leads Shop / Call Back',
+        naov: 'Leads Shop / NAOV',
+        toss: 'Leads Shop / TOSS',
+        confirmed: 'Confirm Leads',
+        dispatched: 'Dispatch Leads',
+        reschedule: 'Reschedule',
+        rehash: 'Rehash',
+        rehash_ng: 'Rehash / NG',
+        rehash_toss: 'Rehash / TOSS',
+        rehash_cb: 'Rehash / Call Back',
+        '555': '555',
+        kit: 'Keep in Touch',
+        kit_ng: 'Keep in Touch / NG',
+        kit_toss: 'Keep in Touch / TOSS',
+        kit_cb: 'Keep in Touch / Call Back',
+        la: 'LA',
+        his: 'HIS',
+        project: 'Projects',
+    };
 
-  return status
-    ? (locations[status] ?? status.replaceAll("_", " "))
-    : "New lead";
+    return status
+        ? (locations[status] ?? status.replaceAll('_', ' '))
+        : 'New lead';
 };
 
 const historyNoteLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    telemarketer: "Telemarketer note",
-    confirmation: "Confirmation note",
-    dispatch: "Dispatch note",
-    appointment_result: "Appointment result",
-    salesman_sent: "Salesman Sent",
-    salesman_assignment: "Salesman assignment",
-    agent_reassigned: "Agent reassigned",
-  };
+    const labels: Record<string, string> = {
+        telemarketer: 'Telemarketer note',
+        confirmation: 'Confirmation note',
+        dispatch: 'Dispatch note',
+        appointment_result: 'Appointment result',
+        appointment_date_change: 'Appointment date changed',
+        salesman_sent: 'Salesman Sent',
+        salesman_assignment: 'Salesman assignment',
+        agent_reassigned: 'Agent reassigned',
+    };
 
-  return labels[type] ?? "Lead note";
+    return labels[type] ?? 'Lead note';
 };
 
 const calendarDateKey = (value: string | null | undefined) => {
-  if (!value) return null;
+    if (!value) return null;
 
-  const datePart = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+    const datePart = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
 
-  if (datePart) return datePart;
+    if (datePart) return datePart;
 
-  const parsed = new Date(value);
+    const parsed = new Date(value);
 
-  return Number.isNaN(parsed.getTime())
-    ? null
-    : parsed.toLocaleDateString("en-CA");
+    return Number.isNaN(parsed.getTime())
+        ? null
+        : new Intl.DateTimeFormat('en-CA', {
+              timeZone: CRM_TIMEZONE,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+          }).format(parsed);
 };
 
-const deviceDateKey = (value: string | null | undefined) => {
-  if (!value) return null;
+const californiaDateKey = (value: string | null | undefined) => {
+    if (!value) return null;
 
-  const date = new Date(value);
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$/.test(value)) {
+        return value.slice(0, 10);
+    }
 
-  return Number.isNaN(date.getTime())
-    ? null
-    : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? null
+        : new Intl.DateTimeFormat('en-CA', {
+              timeZone: CRM_TIMEZONE,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+          }).format(date);
 };
 
 const isInstantAppointment = (lead: Lead) => {
-  const createdDate = deviceDateKey(lead.created_at);
-  const appointmentDate = deviceDateKey(lead.appointment_at);
+    const createdDate = californiaDateKey(lead.created_at);
+    const appointmentDate = californiaDateKey(lead.appointment_at);
 
-  return Boolean(
-    createdDate && appointmentDate && createdDate === appointmentDate,
-  );
+    return Boolean(
+        createdDate && appointmentDate && createdDate === appointmentDate,
+    );
 };
 
 const leadAddress = (lead: Lead) =>
-  [lead.address, lead.city, lead.state, lead.zip_code]
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join(", ");
+    [lead.address, lead.city, lead.state, lead.zip_code]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(', ');
+
+const UNION_CITY_CA_COORDINATES = {
+    latitude: 37.5934,
+    longitude: -122.0438,
+};
+const EARTH_RADIUS_MILES = 3958.7613;
+
+const distanceFromUnionCityMiles = (lead: Lead): number | null => {
+    if (lead.latitude == null || lead.longitude == null) {
+        return null;
+    }
+
+    const latitude = Number(lead.latitude);
+    const longitude = Number(lead.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return null;
+    }
+
+    const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+    const latitudeDelta = toRadians(
+        latitude - UNION_CITY_CA_COORDINATES.latitude,
+    );
+    const longitudeDelta = toRadians(
+        longitude - UNION_CITY_CA_COORDINATES.longitude,
+    );
+    const originLatitude = toRadians(UNION_CITY_CA_COORDINATES.latitude);
+    const leadLatitude = toRadians(latitude);
+    const haversine =
+        Math.sin(latitudeDelta / 2) ** 2 +
+        Math.cos(originLatitude) *
+            Math.cos(leadLatitude) *
+            Math.sin(longitudeDelta / 2) ** 2;
+
+    return (
+        2 *
+        EARTH_RADIUS_MILES *
+        Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+    );
+};
 
 const leadAddressLinks = (lead: Lead) => {
-  const address = encodeURIComponent(leadAddress(lead));
+    const address = encodeURIComponent(leadAddress(lead));
 
-  return {
-    googleMaps: `https://www.google.com/maps/search/?api=1&query=${address}`,
-    zillow: zillowSearchUrl([
-      lead.address,
-      lead.city,
-      lead.state,
-      lead.zip_code,
-    ]),
-  };
+    return {
+        googleMaps: `https://www.google.com/maps/search/?api=1&query=${address}`,
+        zillow: zillowSearchUrl([
+            lead.address,
+            lead.city,
+            lead.state,
+            lead.zip_code,
+        ]),
+    };
 };
 
 function ZillowIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        d="m4.1 9.4 7.7-6.1 8.1 6.2c-3-.8-6-.7-8.8.3-2.6.9-4.9 2.5-6.9 4.4l-.1-4.8Z"
-        fill="currentColor"
-      />
-      <path
-        d="M4.4 15.7c2.2-2.2 4.7-3.8 7.6-4.7 2.4-.8 4.9-.9 7.5-.4L4.7 21l-.3-5.3Z"
-        fill="currentColor"
-        opacity=".72"
-      />
-    </svg>
-  );
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+                d="m4.1 9.4 7.7-6.1 8.1 6.2c-3-.8-6-.7-8.8.3-2.6.9-4.9 2.5-6.9 4.4l-.1-4.8Z"
+                fill="currentColor"
+            />
+            <path
+                d="M4.4 15.7c2.2-2.2 4.7-3.8 7.6-4.7 2.4-.8 4.9-.9 7.5-.4L4.7 21l-.3-5.3Z"
+                fill="currentColor"
+                opacity=".72"
+            />
+        </svg>
+    );
 }
 
 function GoogleMapsIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        d="M12 2a7.2 7.2 0 0 0-7.2 7.2c0 5.2 7.2 12.8 7.2 12.8s7.2-7.6 7.2-12.8A7.2 7.2 0 0 0 12 2Z"
-        fill="#4285f4"
-      />
-      <path
-        d="M12 2a7.2 7.2 0 0 1 6.2 3.5l-5.1 5.1-4.5-4.5L12 2Z"
-        fill="#34a853"
-      />
-      <path d="m8.6 6.1-3.1 6.2c-1-2.5-.9-4.9.4-7L8.6 6Z" fill="#fbbc04" />
-      <path
-        d="m5.5 12.3 6.5 9.6V12a3.2 3.2 0 0 1-3.4-5.9l-2.7-.8a7.2 7.2 0 0 0-.4 7Z"
-        fill="#ea4335"
-      />
-      <circle cx="12" cy="9.2" r="2.8" fill="#fff" />
-    </svg>
-  );
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+                d="M12 2a7.2 7.2 0 0 0-7.2 7.2c0 5.2 7.2 12.8 7.2 12.8s7.2-7.6 7.2-12.8A7.2 7.2 0 0 0 12 2Z"
+                fill="#4285f4"
+            />
+            <path
+                d="M12 2a7.2 7.2 0 0 1 6.2 3.5l-5.1 5.1-4.5-4.5L12 2Z"
+                fill="#34a853"
+            />
+            <path
+                d="m8.6 6.1-3.1 6.2c-1-2.5-.9-4.9.4-7L8.6 6Z"
+                fill="#fbbc04"
+            />
+            <path
+                d="m5.5 12.3 6.5 9.6V12a3.2 3.2 0 0 1-3.4-5.9l-2.7-.8a7.2 7.2 0 0 0-.4 7Z"
+                fill="#ea4335"
+            />
+            <circle cx="12" cy="9.2" r="2.8" fill="#fff" />
+        </svg>
+    );
 }
 
 function BlankLeadDetail({ queueStatus }: { queueStatus?: string }) {
-  const showsDispatchNotes = [
-    "dispatched",
-    "rehash",
-    "555",
-    "la",
-    "his",
-    "kit",
-  ].includes(queueStatus ?? "");
-  const detailGridClass =
-    queueStatus === "dispatched"
-      ? "lead-detail__grid--dispatch"
-      : showsDispatchNotes
-        ? "lead-detail__grid--three-notes"
-        : "";
+    const showsDispatchNotes =
+        Boolean(queueStatus) &&
+        !['fresh', 'raw', 'cb', 'naov'].includes(queueStatus ?? '');
+    const detailGridClass =
+        queueStatus === 'dispatched'
+            ? 'lead-detail__grid--dispatch'
+            : showsDispatchNotes
+              ? 'lead-detail__grid--three-notes'
+              : '';
 
-  return (
-    <>
-      <div className="lead-detail__header lead-detail__header--blank">
-        <div className="lead-detail__identity">
-          <span>—</span>
-          <div>
-            <small>Lead #—</small>
-            <h2>Select a lead</h2>
-          </div>
-        </div>
-        <div>
-          <span className="lead-status">No lead selected</span>
-          <small className="lead-created">Created —</small>
-        </div>
-      </div>
-      <div className={`lead-detail__grid ${detailGridClass}`}>
-        <article className="lead-detail-card lead-detail-card--customer">
-          <h3>
-            <UserRound />
-            Customer information
-          </h3>
-          <div className="lead-detail-fields">
-            <div>
-              <span>Marital status</span>
-              <strong>—</strong>
+    return (
+        <>
+            <div className="lead-detail__header lead-detail__header--blank">
+                <div className="lead-detail__identity">
+                    <span>—</span>
+                    <div>
+                        <small>Lead #—</small>
+                        <h2>Select a lead</h2>
+                    </div>
+                </div>
+                <div>
+                    <span className="lead-status">No lead selected</span>
+                    <small className="lead-created">Created —</small>
+                </div>
             </div>
-            <div>
-              <span>Years in house</span>
-              <strong>—</strong>
+            <div className={`lead-detail__grid ${detailGridClass}`}>
+                <article className="lead-detail-card lead-detail-card--customer">
+                    <h3>
+                        <UserRound />
+                        Customer information
+                    </h3>
+                    <div className="lead-detail-fields">
+                        <div>
+                            <span>Primary phone</span>
+                            <strong>
+                                <Phone />—
+                            </strong>
+                        </div>
+                        <div>
+                            <span>Years in house</span>
+                            <strong>—</strong>
+                        </div>
+                        <div>
+                            <span>Marital status</span>
+                            <strong>—</strong>
+                        </div>
+                        <div>
+                            <span>House built</span>
+                            <strong>—</strong>
+                        </div>
+                        <div>
+                            <span>Needs financing?</span>
+                            <strong>—</strong>
+                        </div>
+                        <div>
+                            <span>House value</span>
+                            <strong>—</strong>
+                        </div>
+                        <div className="lead-detail-field--wide">
+                            <span>Address</span>
+                            <strong>
+                                <MapPin />—
+                            </strong>
+                        </div>
+                        <div>
+                            <span>Secondary phone</span>
+                            <strong>—</strong>
+                        </div>
+                        <div>
+                            <span>Mobile number</span>
+                            <strong>—</strong>
+                        </div>
+                        <div className="lead-detail-field--wide">
+                            <span>Email</span>
+                            <strong>
+                                <Mail />—
+                            </strong>
+                        </div>
+                    </div>
+                </article>
+                <article className="lead-detail-card">
+                    <h3>
+                        <CalendarClock />
+                        Project &amp; appointment
+                    </h3>
+                    <div className="lead-summary-list">
+                        <div>
+                            <Package />
+                            <span>
+                                <small>Product</small>
+                                <strong>—</strong>
+                            </span>
+                        </div>
+                        <div>
+                            <CalendarClock />
+                            <span>
+                                <small>Appointment</small>
+                                <strong>—</strong>
+                            </span>
+                        </div>
+                        <div>
+                            <Building2 />
+                            <span>
+                                <small>Company</small>
+                                <strong>—</strong>
+                            </span>
+                        </div>
+                        <div>
+                            <UserRound />
+                            <span>
+                                <small>Assigned agent</small>
+                                <strong>—</strong>
+                            </span>
+                        </div>
+                        <div>
+                            <Clock3 />
+                            <span>
+                                <small>Lead source</small>
+                                <strong>—</strong>
+                            </span>
+                        </div>
+                    </div>
+                </article>
+                <article className="lead-detail-card lead-detail-card--notes lead-note-card--telemarketer">
+                    <h3>Telemarketer notes</h3>
+                    <p>—</p>
+                </article>
+                <article className="lead-detail-card lead-detail-card--notes lead-note-card--confirmation">
+                    <h3>Confirmation notes</h3>
+                    <p>—</p>
+                </article>
+                {showsDispatchNotes && (
+                    <article className="lead-detail-card lead-detail-card--notes lead-note-card--dispatch">
+                        <h3>Dispatch notes</h3>
+                        <p>Select a lead to view or add dispatch notes.</p>
+                    </article>
+                )}
+                {showsDispatchNotes && (
+                    <article className="lead-detail-card lead-detail-card--notes lead-note-card--appointment-result">
+                        <h3>Appointment result notes</h3>
+                        <p>Select a lead to view or add appointment notes.</p>
+                    </article>
+                )}
             </div>
-            <div>
-              <span>House age</span>
-              <strong>—</strong>
-            </div>
-            <div>
-              <span>Needs financing?</span>
-              <strong>—</strong>
-            </div>
-            <div>
-              <span>House value</span>
-              <strong>—</strong>
-            </div>
-            <div className="lead-detail-field--wide">
-              <span>Address</span>
-              <strong>
-                <MapPin />—
-              </strong>
-            </div>
-            <div>
-              <span>Primary phone</span>
-              <strong>
-                <Phone />—
-              </strong>
-            </div>
-            <div>
-              <span>Secondary phone</span>
-              <strong>—</strong>
-            </div>
-            <div>
-              <span>Mobile number</span>
-              <strong>—</strong>
-            </div>
-            <div className="lead-detail-field--wide">
-              <span>Email</span>
-              <strong>
-                <Mail />—
-              </strong>
-            </div>
-          </div>
-        </article>
-        <article className="lead-detail-card">
-          <h3>
-            <CalendarClock />
-            Project &amp; appointment
-          </h3>
-          <div className="lead-summary-list">
-            <div>
-              <Package />
-              <span>
-                <small>Product</small>
-                <strong>—</strong>
-              </span>
-            </div>
-            <div>
-              <CalendarClock />
-              <span>
-                <small>Appointment</small>
-                <strong>—</strong>
-              </span>
-            </div>
-            <div>
-              <Building2 />
-              <span>
-                <small>Company</small>
-                <strong>—</strong>
-              </span>
-            </div>
-            <div>
-              <UserRound />
-              <span>
-                <small>Assigned agent</small>
-                <strong>—</strong>
-              </span>
-            </div>
-            <div>
-              <Clock3 />
-              <span>
-                <small>Lead source</small>
-                <strong>—</strong>
-              </span>
-            </div>
-          </div>
-        </article>
-        <article className="lead-detail-card lead-detail-card--notes lead-note-card--telemarketer">
-          <h3>Telemarketer notes</h3>
-          <p>—</p>
-        </article>
-        <article className="lead-detail-card lead-detail-card--notes lead-note-card--confirmation">
-          <h3>Confirmation notes</h3>
-          <p>—</p>
-        </article>
-        {showsDispatchNotes && (
-          <article className="lead-detail-card lead-detail-card--notes lead-note-card--dispatch">
-            <h3>Dispatch notes</h3>
-            <p>Select a lead to view or add dispatch notes.</p>
-          </article>
-        )}
-        {queueStatus === "dispatched" && (
-          <article className="lead-detail-card lead-detail-card--notes lead-note-card--appointment-result">
-            <h3>Appointment result notes</h3>
-            <p>Select a lead to view or add appointment notes.</p>
-          </article>
-        )}
-      </div>
-    </>
-  );
+        </>
+    );
 }
 
 export default function LeadsShop({
-  leads,
-  companies,
-  products,
-  cities,
-  agents,
-  salesmen = [],
-  queue,
+    leads: leadsPage,
+    companies,
+    products,
+    cities,
+    agents,
+    salesmen = [],
+    dateRows,
+    queueTotal = 0,
+    queueManagers = [],
+    selectedQueueManager = 'all',
+    canViewAllQueueManagers = false,
+    selectedDate,
+    selectedCity = 'all',
+    dateField: serverDateField,
+    dateGranularity = 'day',
+    timezoneOffset,
+    movementDestinations = [],
+    createdDayTotal = 0,
+    queue,
 }: LeadsShopProps) {
-  const requestedLeadId =
-    Number(new URLSearchParams(window.location.search).get("lead")) || null;
-  const requestedLead =
-    leads.find((lead) => lead.id === requestedLeadId) ?? null;
-  const requestedTelemarketerNote = latestNoteBody(
-    requestedLead,
-    "telemarketer",
-  );
-  const requestedConfirmationNote = latestNoteBody(
-    requestedLead,
-    "confirmation",
-  );
-  const requestedDispatchNote = latestNoteBody(requestedLead, "dispatch");
-  const requestedAppointmentResultNote = latestNoteBody(
-    requestedLead,
-    "appointment_result",
-  );
-  const { auth } = usePage().props;
-  const { confirm, notify } = useSystemModal();
-  const [search, setSearch] = useState("");
-  const [selectedDate, setSelectedDate] = useState<string>("all");
-  const [dateField, setDateField] = useState<DateField>(
-    queue?.dateField ?? "created_at",
-  );
-  const [selectedStatus, setSelectedStatus] = useState(
-    requestedLead?.status ?? queue?.status ?? "fresh",
-  );
-  const [companyFilter, setCompanyFilter] = useState("all");
-  const [sourceFilter, setSourceFilter] = useState("all");
-  const [cityFilter, setCityFilter] = useState("all");
-  const [productFilter, setProductFilter] = useState("all");
-  const [agentFilter, setAgentFilter] = useState("all");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(requestedLeadId);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [appointmentResultDraft, setAppointmentResultDraft] = useState("");
-  const [salesmanOneDraft, setSalesmanOneDraft] = useState("");
-  const [salesmanTwoDraft, setSalesmanTwoDraft] = useState("");
-  const [savingAssignment, setSavingAssignment] = useState<
-    "appointment" | "salesman_1" | "salesman_2" | null
-  >(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [saleModalOpen, setSaleModalOpen] = useState(false);
-  const [smsTemplateOpen, setSmsTemplateOpen] = useState(false);
-  const [smsTemplateFields, setSmsTemplateFields] = useState<
-    SmsTemplateField[]
-  >([]);
-  const [recordingsOpen, setRecordingsOpen] = useState(false);
-  const detailGridRef = useRef<HTMLDivElement>(null);
-  const [leadCardLayout, setLeadCardLayout] =
-    useState<LeadCardLayout>(loadLeadCardLayout);
-  const [newCallAttempts, setNewCallAttempts] = useState<
-    Record<number, number>
-  >({});
-  const [historyType, setHistoryType] = useState<
-    | "telemarketer"
-    | "confirmation"
-    | "dispatch"
-    | "appointment_result"
-    | "all"
-    | null
-  >(null);
-  const [expandedNoteType, setExpandedNoteType] =
-    useState<EditableNoteType | null>(null);
-  const form = useForm(
-    requestedLead ? leadFormData(requestedLead) : emptyLeadForm,
-  );
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      LEAD_CARD_LAYOUT_KEY,
-      JSON.stringify(leadCardLayout),
+    const pagination: PaginatedLeads = Array.isArray(leadsPage)
+        ? {
+              data: leadsPage,
+              current_page: 1,
+              last_page: 1,
+              per_page: leadsPage.length,
+              total: leadsPage.length,
+              prev_page_url: null,
+              next_page_url: null,
+          }
+        : leadsPage;
+    const leads = pagination.data;
+    const movementCount = (status: string) =>
+        movementDestinations.find(
+            (destination) => destination.status === status,
+        )?.count ?? 0;
+    const confirmedDayTotal = movementCount('confirmed');
+    const dispatchedDayTotal = movementCount('dispatched');
+    const otherDayTotal = Math.max(
+        0,
+        createdDayTotal - confirmedDayTotal - dispatchedDayTotal,
     );
-  }, [leadCardLayout]);
-
-  const resizeLeadCards = (
-    axis: "horizontal" | "vertical",
-    event: ReactPointerEvent<HTMLButtonElement>,
-  ) => {
-    const grid = detailGridRef.current;
-    if (!grid) return;
-
-    event.preventDefault();
-    const rectangle = grid.getBoundingClientRect();
-    document.body.classList.add("is-resizing-lead-cards");
-
-    const handlePointerMove = (pointerEvent: PointerEvent) => {
-      if (axis === "horizontal") {
-        const percentage =
-          ((pointerEvent.clientX - rectangle.left) / rectangle.width) * 100;
-        setLeadCardLayout((current) => ({
-          ...current,
-          primaryColumn: Math.min(78, Math.max(50, percentage)),
-        }));
-        return;
-      }
-
-      const percentage =
-        ((pointerEvent.clientY - rectangle.top) / rectangle.height) * 100;
-      setLeadCardLayout((current) => ({
-        ...current,
-        informationRow: Math.min(75, Math.max(38, percentage)),
-      }));
-    };
-
-    const stopResizing = () => {
-      document.body.classList.remove("is-resizing-lead-cards");
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopResizing);
-      window.removeEventListener("pointercancel", stopResizing);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopResizing, { once: true });
-    window.addEventListener("pointercancel", stopResizing, { once: true });
-  };
-
-  const leadCardLayoutStyle = {
-    "--lead-detail-primary-column": `${leadCardLayout.primaryColumn}%`,
-    "--lead-detail-information-row": `${leadCardLayout.informationRow}%`,
-  } as CSSProperties;
-
-  useEffect(() => {
-    const handleTrackedCall = (event: Event) => {
-      const leadId = (event as CustomEvent<{ leadId?: number }>).detail?.leadId;
-      if (!leadId) return;
-      setNewCallAttempts((current) => ({
-        ...current,
-        [leadId]: (current[leadId] ?? 0) + 1,
-      }));
-    };
-
-    window.addEventListener(
-      "weiss:ringcentral-call-tracked",
-      handleTrackedCall,
+    const requestedLeadId =
+        Number(new URLSearchParams(window.location.search).get('lead')) || null;
+    const requestedLead =
+        leads.find((lead) => lead.id === requestedLeadId) ?? null;
+    const requestedTelemarketerNote = latestNoteBody(
+        requestedLead,
+        'telemarketer',
     );
-    return () =>
-      window.removeEventListener(
-        "weiss:ringcentral-call-tracked",
-        handleTrackedCall,
-      );
-  }, []);
-  const telemarketerNoteForm = useForm({
-    note_type: "telemarketer",
-    body: requestedTelemarketerNote,
-  });
-  const [loadedTelemarketerNote, setLoadedTelemarketerNote] = useState(
-    requestedTelemarketerNote,
-  );
-  const confirmationNoteForm = useForm({
-    note_type: "confirmation",
-    body: requestedConfirmationNote,
-  });
-  const [loadedConfirmationNote, setLoadedConfirmationNote] = useState(
-    requestedConfirmationNote,
-  );
-  const dispatchNoteForm = useForm({
-    note_type: "dispatch",
-    body: requestedDispatchNote,
-  });
-  const [loadedDispatchNote, setLoadedDispatchNote] = useState(
-    requestedDispatchNote,
-  );
-  const appointmentResultNoteForm = useForm({
-    note_type: "appointment_result",
-    body: requestedAppointmentResultNote,
-  });
-  const [loadedAppointmentResultNote, setLoadedAppointmentResultNote] =
-    useState(requestedAppointmentResultNote);
-  const saleForm = useForm<{ amount: string; salesman?: string }>({
-    amount: "",
-  });
-  const effectiveDateField = queue?.dateField ?? dateField;
+    const requestedConfirmationNote = latestNoteBody(
+        requestedLead,
+        'confirmation',
+    );
+    const requestedDispatchNote = latestNoteBody(requestedLead, 'dispatch');
+    const requestedAppointmentResultNote = latestNoteBody(
+        requestedLead,
+        'appointment_result',
+    );
+    const { auth } = usePage().props;
+    const { confirm, notify } = useSystemModal();
+    const isKeepInTouchQueue = queue?.status === 'kit';
+    const managerQuery =
+        isKeepInTouchQueue && selectedQueueManager !== 'all'
+            ? { manager: selectedQueueManager }
+            : {};
+    const [search, setSearch] = useState(
+        new URLSearchParams(window.location.search).get('search') ?? '',
+    );
+    useEffect(() => {
+        const activeSearch =
+            new URLSearchParams(window.location.search).get('search') ?? '';
+        const nextSearch = search.trim();
 
-  useEffect(() => {
-    let refreshing = false;
+        if (nextSearch === activeSearch) return;
 
-    const refreshLeads = () => {
-      if (
-        refreshing ||
-        document.hidden ||
-        isEditing ||
-        saleModalOpen ||
-        form.processing ||
-        telemarketerNoteForm.processing ||
-        confirmationNoteForm.processing ||
-        dispatchNoteForm.processing ||
-        appointmentResultNoteForm.processing ||
-        saleForm.processing
-      ) {
-        return;
-      }
+        const timer = window.setTimeout(() => {
+            router.get(
+                window.location.pathname,
+                nextSearch
+                    ? {
+                      search: nextSearch,
+                      date_field: serverDateField,
+                      ...managerQuery,
+                  }
+                : {
+                      date_field: serverDateField,
+                      ...managerQuery,
+                  },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    replace: true,
+                    only: ['leads', 'dateRows', 'selectedDate', 'dateField'],
+                },
+            );
+        }, 350);
 
-      refreshing = true;
-      router.reload({
-        only: ["leads"],
-        showProgress: false,
-        onFinish: () => {
-          refreshing = false;
-        },
-      });
-    };
+        return () => window.clearTimeout(timer);
+    }, [search, selectedQueueManager]);
 
-    const interval = window.setInterval(refreshLeads, 5000);
-    const refreshWhenVisible = () => {
-      if (!document.hidden) {
-        refreshLeads();
-      }
-    };
+    const [dateField, setDateField] = useState<DateField>(serverDateField);
+    const [selectedStatus, setSelectedStatus] = useState(
+        requestedLead?.status ?? queue?.status ?? 'fresh',
+    );
+    const [companyFilter, setCompanyFilter] = useState('all');
+    const [sourceFilter, setSourceFilter] = useState('all');
+    const [cityFilter, setCityFilter] = useState(selectedCity);
+    const [productFilter, setProductFilter] = useState('all');
+    const [agentFilter, setAgentFilter] = useState('all');
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [selectedId, setSelectedId] = useState<number | null>(
+        requestedLeadId,
+    );
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [appointmentDateDraft, setAppointmentDateDraft] = useState(
+        appointmentInputValue(requestedLead?.appointment_at ?? ''),
+    );
+    const appointmentDraftDate = appointmentDateDraft.slice(0, 10);
+    const appointmentDraftTime = appointmentDateDraft.slice(11, 16);
+    const currentPermissionModule = permissionModuleForPath(
+        window.location.pathname,
+    );
+    const canEditCurrentTab =
+        auth.user.role === 'admin' ||
+        (currentPermissionModule !== null &&
+            auth.permissions?.[currentPermissionModule] === 'edit');
+    const [appointmentResultDraft, setAppointmentResultDraft] = useState('');
+    const [salesmanOneDraft, setSalesmanOneDraft] = useState('');
+    const [salesmanTwoDraft, setSalesmanTwoDraft] = useState('');
+    const [savingAssignment, setSavingAssignment] = useState<
+        'appointment_date' | 'appointment' | 'salesman_1' | 'salesman_2' | null
+    >(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [saleModalOpen, setSaleModalOpen] = useState(false);
+    const [smsTemplateOpen, setSmsTemplateOpen] = useState(false);
+    const [smsTemplateFields, setSmsTemplateFields] = useState<
+        SmsTemplateField[]
+    >([]);
+    const [recordingsOpen, setRecordingsOpen] = useState(false);
+    const detailGridRef = useRef<HTMLDivElement>(null);
+    const [leadCardLayout, setLeadCardLayout] =
+        useState<LeadCardLayout>(loadLeadCardLayout);
+    const [newCallAttempts, setNewCallAttempts] = useState<
+        Record<number, number>
+    >({});
+    const [historyType, setHistoryType] = useState<
+        | 'telemarketer'
+        | 'confirmation'
+        | 'dispatch'
+        | 'appointment_result'
+        | 'all'
+        | null
+    >(null);
+    const [expandedNoteType, setExpandedNoteType] =
+        useState<EditableNoteType | null>(null);
+    const form = useForm(
+        requestedLead ? leadFormData(requestedLead) : emptyLeadForm,
+    );
 
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
-  }, [
-    appointmentResultNoteForm.processing,
-    confirmationNoteForm.processing,
-    dispatchNoteForm.processing,
-    form.processing,
-    isEditing,
-    saleForm.processing,
-    saleModalOpen,
-    telemarketerNoteForm.processing,
-  ]);
-
-  const availableDateRows = useMemo(() => {
-    const counts = new Map<string, number>();
-    leads.forEach((lead) => {
-      const key = calendarDateKey(lead[effectiveDateField]);
-      if (!key) return;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-
-    if (effectiveDateField === "appointment_at") {
-      return [...counts.entries()]
-        .sort(([first], [second]) => second.localeCompare(first))
-        .map(([key, count]) => {
-          const date = new Date(`${key}T12:00:00`);
-
-          return {
-            key,
-            date: new Intl.DateTimeFormat("en-US", {
-              month: "2-digit",
-              day: "2-digit",
-              year: "2-digit",
-            }).format(date),
-            day: new Intl.DateTimeFormat("en-US", {
-              weekday: "short",
-            }).format(date),
-            count,
-          };
-        });
-    }
-
-    return Array.from({ length: 30 }, (_, index) => {
-      const date = new Date();
-      date.setHours(12, 0, 0, 0);
-      date.setDate(date.getDate() - index);
-      const key = date.toLocaleDateString("en-CA");
-
-      return {
-        key,
-        date: new Intl.DateTimeFormat("en-US", {
-          month: "2-digit",
-          day: "2-digit",
-          year: "2-digit",
-        }).format(date),
-        day: new Intl.DateTimeFormat("en-US", {
-          weekday: "short",
-        }).format(date),
-        count: counts.get(key) ?? 0,
-      };
-    }).filter((day) => day.count > 0);
-  }, [effectiveDateField, leads]);
-
-  const filterOptions = useMemo(
-    () => ({
-      companies: companies.map(
-        (company) =>
-          [String(company.com_id), company.company] as [string, string],
-      ),
-      sources: Array.from(new Set(leads.map((lead) => lead.source))).sort(),
-      cities,
-      products: products.map(
-        (product) =>
-          [String(product.prod_id), product.product_name] as [string, string],
-      ),
-      agents: Array.from(
-        new Map(
-          leads.flatMap((lead) => [
-            ...(lead.agent
-              ? [
-                  [String(lead.agent.agent_id), lead.agent.agent_name] as [
-                    string,
-                    string,
-                  ],
-                ]
-              : []),
-            ...(lead.agent_assignments ?? []).flatMap((assignment) =>
-              assignment.agent
-                ? [
-                    [
-                      String(assignment.agent.agent_id),
-                      assignment.agent.agent_name,
-                    ] as [string, string],
-                  ]
-                : [],
-            ),
-          ]),
-        ),
-      ).sort((a, b) => a[1].localeCompare(b[1])),
-      hasUnassignedAgents: leads.some((lead) => !lead.agent),
-    }),
-    [cities, companies, leads, products],
-  );
-
-  const statusFilters = useMemo(
-    () =>
-      queue?.statusFilters
-        ? queue.statusFilters
-        : queue
-          ? ([[queue.status, queue.listTitle]] as const)
-          : ([
-              ["fresh", "Freshly In"],
-              ["raw", "Raw"],
-              ["cb", "CB"],
-              ["naov", "NAOV"],
-              ["toss", "TOSS"],
-            ] as const),
-    [queue],
-  );
-
-  const statusCounts = useMemo(
-    () =>
-      Object.fromEntries(
-        statusFilters.map(([status]) => [
-          status,
-          leads.filter((lead) => (lead.status || "fresh") === status).length,
-        ]),
-      ),
-    [leads, statusFilters],
-  );
-
-  const filteredLeads = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const todayInDeviceTimezone = deviceDateKey(new Date().toISOString());
-
-    return leads
-      .filter((lead) => {
-        const matchesDate =
-          selectedDate === "all" ||
-          calendarDateKey(lead[effectiveDateField]) === selectedDate;
-        const matchesSearch =
-          !query ||
-          [
-            lead.customer_name,
-            lead.city,
-            lead.company?.company,
-            lead.product?.product_name,
-            lead.agent?.agent_name,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(query);
-
-        const matchesStatus = (lead.status || "fresh") === selectedStatus;
-        const matchesCompany =
-          companyFilter === "all" ||
-          String(lead.company?.com_id) === companyFilter;
-        const matchesSource =
-          sourceFilter === "all" || lead.source === sourceFilter;
-        const matchesCity = cityFilter === "all" || lead.city === cityFilter;
-        const matchesProduct =
-          productFilter === "all" ||
-          String(lead.product?.prod_id) === productFilter;
-        const matchesAgent =
-          agentFilter === "all" ||
-          (agentFilter === "unassigned"
-            ? !lead.agent
-            : String(lead.agent?.agent_id) === agentFilter ||
-              (lead.agent_assignments ?? []).some(
-                (assignment) =>
-                  String(assignment.agent?.agent_id) === agentFilter,
-              ));
-
-        return (
-          matchesDate &&
-          matchesSearch &&
-          matchesStatus &&
-          matchesCompany &&
-          matchesSource &&
-          matchesCity &&
-          matchesProduct &&
-          matchesAgent
+    useEffect(() => {
+        window.localStorage.setItem(
+            LEAD_CARD_LAYOUT_KEY,
+            JSON.stringify(leadCardLayout),
         );
-      })
-      .sort((first, second) => {
-        const firstIsToday =
-          deviceDateKey(first.appointment_at) === todayInDeviceTimezone;
-        const secondIsToday =
-          deviceDateKey(second.appointment_at) === todayInDeviceTimezone;
+    }, [leadCardLayout]);
 
-        if (firstIsToday !== secondIsToday) {
-          return firstIsToday ? -1 : 1;
+    const resizeLeadCards = (
+        axis: 'horizontal' | 'vertical',
+        event: ReactPointerEvent<HTMLButtonElement>,
+    ) => {
+        const grid = detailGridRef.current;
+        if (!grid) return;
+
+        event.preventDefault();
+        const rectangle = grid.getBoundingClientRect();
+        document.body.classList.add('is-resizing-lead-cards');
+
+        const handlePointerMove = (pointerEvent: PointerEvent) => {
+            if (axis === 'horizontal') {
+                const percentage =
+                    ((pointerEvent.clientX - rectangle.left) /
+                        rectangle.width) *
+                    100;
+                setLeadCardLayout((current) => ({
+                    ...current,
+                    primaryColumn: Math.min(78, Math.max(50, percentage)),
+                }));
+                return;
+            }
+
+            const percentage =
+                ((pointerEvent.clientY - rectangle.top) / rectangle.height) *
+                100;
+            setLeadCardLayout((current) => ({
+                ...current,
+                informationRow: Math.min(75, Math.max(38, percentage)),
+            }));
+        };
+
+        const stopResizing = () => {
+            document.body.classList.remove('is-resizing-lead-cards');
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', stopResizing);
+            window.removeEventListener('pointercancel', stopResizing);
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', stopResizing, { once: true });
+        window.addEventListener('pointercancel', stopResizing, { once: true });
+    };
+
+    const leadCardLayoutStyle = {
+        '--lead-detail-primary-column': `${leadCardLayout.primaryColumn}%`,
+        '--lead-detail-information-row': `${leadCardLayout.informationRow}%`,
+    } as CSSProperties;
+
+    useEffect(() => {
+        const handleTrackedCall = (event: Event) => {
+            const leadId = (event as CustomEvent<{ leadId?: number }>).detail
+                ?.leadId;
+            if (!leadId) return;
+            setNewCallAttempts((current) => ({
+                ...current,
+                [leadId]: (current[leadId] ?? 0) + 1,
+            }));
+        };
+
+        window.addEventListener(
+            'weiss:ringcentral-call-tracked',
+            handleTrackedCall,
+        );
+        return () =>
+            window.removeEventListener(
+                'weiss:ringcentral-call-tracked',
+                handleTrackedCall,
+            );
+    }, []);
+    const telemarketerNoteForm = useForm({
+        note_type: 'telemarketer',
+        body: requestedTelemarketerNote,
+    });
+    const [loadedTelemarketerNote, setLoadedTelemarketerNote] = useState(
+        requestedTelemarketerNote,
+    );
+    const confirmationNoteForm = useForm({
+        note_type: 'confirmation',
+        body: requestedConfirmationNote,
+    });
+    const [loadedConfirmationNote, setLoadedConfirmationNote] = useState(
+        requestedConfirmationNote,
+    );
+    const dispatchNoteForm = useForm({
+        note_type: 'dispatch',
+        body: requestedDispatchNote,
+    });
+    const [loadedDispatchNote, setLoadedDispatchNote] = useState(
+        requestedDispatchNote,
+    );
+    const appointmentResultNoteForm = useForm({
+        note_type: 'appointment_result',
+        body: requestedAppointmentResultNote,
+    });
+    const [loadedAppointmentResultNote, setLoadedAppointmentResultNote] =
+        useState(requestedAppointmentResultNote);
+    const saleForm = useForm<{ amount: string; salesman?: string }>({
+        amount: '',
+    });
+    const effectiveDateField = queue?.dateField ?? dateField;
+
+    useEffect(() => {
+        let refreshing = false;
+
+        const refreshLeads = () => {
+            if (
+                refreshing ||
+                document.hidden ||
+                isEditing ||
+                saleModalOpen ||
+                form.processing ||
+                telemarketerNoteForm.processing ||
+                confirmationNoteForm.processing ||
+                dispatchNoteForm.processing ||
+                appointmentResultNoteForm.processing ||
+                saleForm.processing
+            ) {
+                return;
+            }
+
+            refreshing = true;
+            router.reload({
+                only: ['leads'],
+                showProgress: false,
+                onFinish: () => {
+                    refreshing = false;
+                },
+            });
+        };
+
+        const interval = window.setInterval(refreshLeads, 5000);
+        const refreshWhenVisible = () => {
+            if (!document.hidden) {
+                refreshLeads();
+            }
+        };
+
+        document.addEventListener('visibilitychange', refreshWhenVisible);
+
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener(
+                'visibilitychange',
+                refreshWhenVisible,
+            );
+        };
+    }, [
+        appointmentResultNoteForm.processing,
+        confirmationNoteForm.processing,
+        dispatchNoteForm.processing,
+        form.processing,
+        isEditing,
+        saleForm.processing,
+        saleModalOpen,
+        telemarketerNoteForm.processing,
+    ]);
+
+    const availableDateRows = useMemo(
+        () =>
+            dateRows.map(({ key, count }) => {
+                if (key === 'unscheduled') {
+                    return {
+                        key,
+                        count,
+                        date: 'Unscheduled',
+                        day: '',
+                    };
+                }
+
+                const isMonth = dateGranularity === 'month';
+                const date = new Date(
+                    `${isMonth ? `${key}-01` : key}T12:00:00`,
+                );
+                return {
+                    key,
+                    count,
+                    date: new Intl.DateTimeFormat(
+                        'en-US',
+                        isMonth
+                            ? { month: 'long', year: 'numeric' }
+                            : {
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  year: '2-digit',
+                              },
+                    ).format(date),
+                    day: isMonth
+                        ? ''
+                        : new Intl.DateTimeFormat('en-US', {
+                              weekday: 'short',
+                          }).format(date),
+                };
+            }),
+        [dateGranularity, dateRows],
+    );
+
+    const openDate = (
+        key: string,
+        nextDateField: DateField = effectiveDateField,
+    ) => {
+        setCityFilter('all');
+        router.get(
+            window.location.pathname,
+            {
+                date: key,
+                date_field: nextDateField,
+                ...managerQuery,
+            },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
+    const filterByCity = (city: string) => {
+        setCityFilter(city);
+        setSelectedId(null);
+
+        router.get(
+            window.location.pathname,
+            {
+                date_field: effectiveDateField,
+                ...managerQuery,
+                ...(city !== 'all' ? { city } : {}),
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                only: ['leads', 'selectedCity'],
+            },
+        );
+    };
+
+    const filterOptions = useMemo(
+        () => ({
+            companies: companies.map(
+                (company) =>
+                    [String(company.com_id), company.company] as [
+                        string,
+                        string,
+                    ],
+            ),
+            sources: Array.from(
+                new Set(leads.map((lead) => lead.source)),
+            ).sort(),
+            cities,
+            products: products.map(
+                (product) =>
+                    [String(product.prod_id), product.product_name] as [
+                        string,
+                        string,
+                    ],
+            ),
+            agents: Array.from(
+                new Map(
+                    leads.flatMap((lead) => [
+                        ...(lead.agent
+                            ? [
+                                  [
+                                      String(lead.agent.agent_id),
+                                      lead.agent.agent_name,
+                                  ] as [string, string],
+                              ]
+                            : []),
+                        ...(lead.agent_assignments ?? []).flatMap(
+                            (assignment) =>
+                                assignment.agent
+                                    ? [
+                                          [
+                                              String(assignment.agent.agent_id),
+                                              assignment.agent.agent_name,
+                                          ] as [string, string],
+                                      ]
+                                    : [],
+                        ),
+                    ]),
+                ),
+            ).sort((a, b) => a[1].localeCompare(b[1])),
+            hasUnassignedAgents: leads.some((lead) => !lead.agent),
+        }),
+        [cities, companies, leads, products],
+    );
+
+    const statusFilters = useMemo(
+        () =>
+            queue?.statusFilters
+                ? queue.statusFilters
+                : queue
+                  ? ([[queue.status, queue.listTitle]] as const)
+                  : ([
+                        ['fresh', 'Freshly In'],
+                        ['raw', 'Raw'],
+                        ['cb', 'CB'],
+                    ] as const),
+        [queue],
+    );
+
+    const statusCounts = useMemo(
+        () =>
+            Object.fromEntries(
+                statusFilters.map(([status]) => [
+                    status,
+                    leads.filter((lead) => (lead.status || 'fresh') === status)
+                        .length,
+                ]),
+            ),
+        [leads, statusFilters],
+    );
+
+    const filteredLeads = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        const todayInCalifornia = californiaDateKey(new Date().toISOString());
+
+        return leads
+            .filter((lead) => {
+                // The server already returns only the selected business-date
+                // slice. Avoid filtering it again in the browser's timezone.
+                const matchesDate = true;
+                const matchesSearch =
+                    !query ||
+                    [
+                        lead.customer_name,
+                        lead.city,
+                        lead.company?.company,
+                        lead.product?.product_name,
+                        lead.agent?.agent_name,
+                    ]
+                        .join(' ')
+                        .toLowerCase()
+                        .includes(query);
+
+                const matchesStatus =
+                    isKeepInTouchQueue ||
+                    (lead.status || 'fresh') === selectedStatus;
+                const matchesCompany =
+                    companyFilter === 'all' ||
+                    String(lead.company?.com_id) === companyFilter;
+                const matchesSource =
+                    sourceFilter === 'all' || lead.source === sourceFilter;
+                const matchesCity =
+                    cityFilter === 'all' || lead.city === cityFilter;
+                const matchesProduct =
+                    productFilter === 'all' ||
+                    String(lead.product?.prod_id) === productFilter;
+                const matchesAgent =
+                    agentFilter === 'all' ||
+                    (agentFilter === 'unassigned'
+                        ? !lead.agent
+                        : String(lead.agent?.agent_id) === agentFilter ||
+                          (lead.agent_assignments ?? []).some(
+                              (assignment) =>
+                                  String(assignment.agent?.agent_id) ===
+                                  agentFilter,
+                          ));
+
+                return (
+                    matchesDate &&
+                    matchesSearch &&
+                    matchesStatus &&
+                    matchesCompany &&
+                    matchesSource &&
+                    matchesCity &&
+                    matchesProduct &&
+                    matchesAgent
+                );
+            })
+            .sort((first, second) => {
+                const firstIsToday =
+                    californiaDateKey(first.appointment_at) ===
+                    todayInCalifornia;
+                const secondIsToday =
+                    californiaDateKey(second.appointment_at) ===
+                    todayInCalifornia;
+
+                if (firstIsToday !== secondIsToday) {
+                    return firstIsToday ? -1 : 1;
+                }
+
+                const firstTime = first[effectiveDateField]
+                    ? new Date(first[effectiveDateField] as string).getTime()
+                    : Number.POSITIVE_INFINITY;
+                const secondTime = second[effectiveDateField]
+                    ? new Date(second[effectiveDateField] as string).getTime()
+                    : Number.POSITIVE_INFINITY;
+                const missingTime =
+                    queue?.sortDirection === 'asc'
+                        ? Number.POSITIVE_INFINITY
+                        : Number.NEGATIVE_INFINITY;
+                const firstSortableTime =
+                    Number.isNaN(firstTime) || !first[effectiveDateField]
+                        ? missingTime
+                        : firstTime;
+                const secondSortableTime =
+                    Number.isNaN(secondTime) || !second[effectiveDateField]
+                        ? missingTime
+                        : secondTime;
+                const dateDifference =
+                    queue?.sortDirection === 'asc'
+                        ? firstSortableTime - secondSortableTime
+                        : secondSortableTime - firstSortableTime;
+
+                return dateDifference || second.id - first.id;
+            });
+    }, [
+        leads,
+        search,
+        selectedDate,
+        selectedStatus,
+        companyFilter,
+        sourceFilter,
+        cityFilter,
+        productFilter,
+        agentFilter,
+        effectiveDateField,
+        isKeepInTouchQueue,
+        queue?.sortDirection,
+    ]);
+
+    const clearListFilters = () => {
+        setSearch('');
+        setSelectedStatus(queue?.status ?? 'fresh');
+        setCompanyFilter('all');
+        setSourceFilter('all');
+        setCityFilter('all');
+        setProductFilter('all');
+        setAgentFilter('all');
+        setIsRefreshing(true);
+
+        router.get(
+            window.location.pathname,
+            {
+                date: selectedDate,
+                date_field: effectiveDateField,
+                ...managerQuery,
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                only: ['leads', 'selectedCity'],
+                onFinish: () => setIsRefreshing(false),
+            },
+        );
+    };
+
+    const selected = leads.find((lead) => lead.id === selectedId) ?? null;
+
+    const smsTemplateSections = useMemo(() => {
+        if (!selected) return [];
+
+        const appointment = selected.appointment_at
+            ? new Date(selected.appointment_at)
+            : null;
+        const validAppointment =
+            appointment && !Number.isNaN(appointment.getTime())
+                ? appointment
+                : null;
+        const appointmentEnd = validAppointment
+            ? new Date(validAppointment.getTime() + 60 * 60 * 1000)
+            : null;
+        const time = (date: Date) =>
+            date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+            });
+        const shortDate = (date: Date) =>
+            date.toLocaleDateString('en-US', {
+                month: '2-digit',
+                day: '2-digit',
+            });
+        const setDate = new Date(selected.created_at);
+        const agentNames = [
+            selected.agent?.agent_name,
+            selected.second_agent?.agent_name,
+        ].filter(Boolean);
+        const salesmanNames = [
+            selected.salesman_one?.salesman_name,
+            selected.salesman_two?.salesman_name,
+        ].filter(Boolean);
+        const address = [
+            selected.address,
+            [selected.city, selected.state].filter(Boolean).join(', '),
+            selected.zip_code,
+        ]
+            .filter(Boolean)
+            .join(' ');
+        const phones = [
+            selected.primary_number,
+            selected.secondary_number,
+            selected.mobile_number,
+        ].filter(Boolean);
+        const confirmation =
+            latestNoteBody(selected, 'confirmation') ||
+            selected.confirmation_notes ||
+            '';
+        const project = [
+            selected.product?.product_name,
+            latestNoteBody(selected, 'telemarketer') ||
+                selected.telemarketer_notes,
+        ]
+            .filter(Boolean)
+            .join(' – ');
+        const assignment =
+            validAppointment &&
+            !Number.isNaN(setDate.getTime()) &&
+            (agentNames.length > 0 || salesmanNames.length > 0)
+                ? `${agentNames.join(' & ') || 'Agent'} – ${salesmanNames.join(' & ') || 'Salesman'}: Set ${shortDate(setDate)} (${setDate.toLocaleDateString('en-US', { weekday: 'long' })}), ${time(validAppointment)}–${appointmentEnd ? time(appointmentEnd) : ''}.`
+                : '';
+
+        return [
+            {
+                key: 'heading' as const,
+                label: 'Confirmed lead heading',
+                value: validAppointment
+                    ? `CONFIRMED LEAD ${time(validAppointment)}`
+                    : 'CONFIRMED LEAD',
+            },
+            {
+                key: 'customer' as const,
+                label: 'Customer name',
+                value: selected.customer_name?.toUpperCase() ?? '',
+            },
+            { key: 'address' as const, label: 'Address', value: address },
+            {
+                key: 'phones' as const,
+                label: 'Phone numbers',
+                value: phones.join('\n'),
+            },
+            {
+                key: 'email' as const,
+                label: 'Email',
+                value: selected.email ?? '',
+            },
+            {
+                key: 'project' as const,
+                label: 'Project and telemarketer notes',
+                value: project,
+            },
+            {
+                key: 'confirmation' as const,
+                label: 'Confirmation note',
+                value: confirmation,
+            },
+            {
+                key: 'appointment' as const,
+                label: 'Agent, salesman, and appointment',
+                value: assignment,
+            },
+        ].filter((section) => section.value.trim() !== '');
+    }, [selected]);
+
+    const smsTemplateText = useMemo(
+        () =>
+            smsTemplateSections
+                .filter((section) => smsTemplateFields.includes(section.key))
+                .map((section) => section.value.trim())
+                .join('\n\n'),
+        [smsTemplateFields, smsTemplateSections],
+    );
+
+    const openSmsTemplate = () => {
+        setSmsTemplateFields(smsTemplateSections.map((section) => section.key));
+        setSmsTemplateOpen(true);
+    };
+
+    const copySmsTemplate = async () => {
+        if (!smsTemplateText) return;
+
+        try {
+            await navigator.clipboard.writeText(smsTemplateText);
+            setSmsTemplateOpen(false);
+            notify({
+                title: 'Lead message copied',
+                message:
+                    'The selected lead information is ready to paste into SMS.',
+                tone: 'success',
+            });
+        } catch {
+            notify({
+                title: 'Could not copy message',
+                message:
+                    'Your browser blocked clipboard access. Select and copy the preview manually.',
+                tone: 'warning',
+            });
+        }
+    };
+
+    const selectLead = (lead: Lead) => {
+        const latestTelemarketerNote = latestNoteBody(lead, 'telemarketer');
+        const latestConfirmationNote = latestNoteBody(lead, 'confirmation');
+        const latestDispatchNote = latestNoteBody(lead, 'dispatch');
+        const latestAppointmentResultNote = latestNoteBody(
+            lead,
+            'appointment_result',
+        );
+        setSelectedId(lead.id);
+        setAppointmentDateDraft(
+            appointmentInputValue(lead.appointment_at ?? ''),
+        );
+        setAppointmentResultDraft(lead.appointment_result ?? '');
+        setSalesmanOneDraft(String(lead.salesman_one?.salesman_id ?? ''));
+        setSalesmanTwoDraft(String(lead.salesman_two?.salesman_id ?? ''));
+        setIsEditing(false);
+        setHistoryType(null);
+        setRecordingsOpen(false);
+        telemarketerNoteForm.setData('body', latestTelemarketerNote);
+        setLoadedTelemarketerNote(latestTelemarketerNote);
+        telemarketerNoteForm.clearErrors();
+        confirmationNoteForm.setData('body', latestConfirmationNote);
+        setLoadedConfirmationNote(latestConfirmationNote);
+        confirmationNoteForm.clearErrors();
+        dispatchNoteForm.setData('body', latestDispatchNote);
+        setLoadedDispatchNote(latestDispatchNote);
+        dispatchNoteForm.clearErrors();
+        appointmentResultNoteForm.setData('body', latestAppointmentResultNote);
+        setLoadedAppointmentResultNote(latestAppointmentResultNote);
+        appointmentResultNoteForm.clearErrors();
+        form.setData(leadFormData(lead));
+        form.clearErrors();
+    };
+
+    useEffect(() => {
+        if (requestedLead && selectedId !== requestedLead.id) {
+            selectLead(requestedLead);
+        }
+    }, [requestedLead?.id]);
+
+    useEffect(() => {
+        if (!search.trim() || requestedLeadId) return;
+
+        const firstMatch = leads[0] ?? null;
+        if (!firstMatch) {
+            setSelectedId(null);
+
+            return;
         }
 
-        const firstTime = first[effectiveDateField]
-          ? new Date(first[effectiveDateField] as string).getTime()
-          : Number.POSITIVE_INFINITY;
-        const secondTime = second[effectiveDateField]
-          ? new Date(second[effectiveDateField] as string).getTime()
-          : Number.POSITIVE_INFINITY;
-        const missingTime =
-          queue?.sortDirection === "asc"
-            ? Number.POSITIVE_INFINITY
-            : Number.NEGATIVE_INFINITY;
-        const firstSortableTime =
-          Number.isNaN(firstTime) || !first[effectiveDateField]
-            ? missingTime
-            : firstTime;
-        const secondSortableTime =
-          Number.isNaN(secondTime) || !second[effectiveDateField]
-            ? missingTime
-            : secondTime;
-        const dateDifference =
-          queue?.sortDirection === "asc"
-            ? firstSortableTime - secondSortableTime
-            : secondSortableTime - firstSortableTime;
+        if (selectedId !== firstMatch.id) {
+            selectLead(firstMatch);
+        }
 
-        return dateDifference || second.id - first.id;
-      });
-  }, [
-    leads,
-    search,
-    selectedDate,
-    selectedStatus,
-    companyFilter,
-    sourceFilter,
-    cityFilter,
-    productFilter,
-    agentFilter,
-    effectiveDateField,
-    queue?.sortDirection,
-  ]);
+        const url = new URL(window.location.href);
+        url.searchParams.set('lead', String(firstMatch.id));
+        url.searchParams.set('date', selectedDate ?? '');
+        url.searchParams.set('date_field', serverDateField);
+        url.searchParams.delete('timezone_offset');
+        window.history.replaceState(window.history.state, '', url);
+    }, [leads, requestedLeadId, search, selectedDate, serverDateField]);
 
-  const clearListFilters = () => {
-    setSearch("");
-    setSelectedDate("all");
-    setSelectedStatus(queue?.status ?? "fresh");
-    setCompanyFilter("all");
-    setSourceFilter("all");
-    setCityFilter("all");
-    setProductFilter("all");
-    setAgentFilter("all");
-    setIsRefreshing(true);
+    const saveLead = () => {
+        if (!selected) {
+            return;
+        }
 
-    router.reload({
-      only: ["leads"],
-      showProgress: false,
-      onFinish: () => setIsRefreshing(false),
-    });
-  };
-
-  const selected = leads.find((lead) => lead.id === selectedId) ?? null;
-
-  const smsTemplateSections = useMemo(() => {
-    if (!selected) return [];
-
-    const appointment = selected.appointment_at
-      ? new Date(selected.appointment_at)
-      : null;
-    const validAppointment =
-      appointment && !Number.isNaN(appointment.getTime()) ? appointment : null;
-    const appointmentEnd = validAppointment
-      ? new Date(validAppointment.getTime() + 60 * 60 * 1000)
-      : null;
-    const time = (date: Date) =>
-      date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    const shortDate = (date: Date) =>
-      date.toLocaleDateString("en-US", {
-        month: "2-digit",
-        day: "2-digit",
-      });
-    const setDate = new Date(selected.created_at);
-    const agentNames = [
-      selected.agent?.agent_name,
-      selected.second_agent?.agent_name,
-    ].filter(Boolean);
-    const salesmanNames = [
-      selected.salesman_one?.salesman_name,
-      selected.salesman_two?.salesman_name,
-    ].filter(Boolean);
-    const address = [
-      selected.address,
-      [selected.city, selected.state].filter(Boolean).join(", "),
-      selected.zip_code,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const phones = [
-      selected.primary_number,
-      selected.secondary_number,
-      selected.mobile_number,
-    ].filter(Boolean);
-    const confirmation =
-      latestNoteBody(selected, "confirmation") ||
-      selected.confirmation_notes ||
-      "";
-    const project = [
-      selected.product?.product_name,
-      latestNoteBody(selected, "telemarketer") || selected.telemarketer_notes,
-    ]
-      .filter(Boolean)
-      .join(" – ");
-    const assignment =
-      validAppointment &&
-      !Number.isNaN(setDate.getTime()) &&
-      (agentNames.length > 0 || salesmanNames.length > 0)
-        ? `${agentNames.join(" & ") || "Agent"} – ${salesmanNames.join(" & ") || "Salesman"}: Set ${shortDate(setDate)} (${setDate.toLocaleDateString("en-US", { weekday: "long" })}), ${time(validAppointment)}–${appointmentEnd ? time(appointmentEnd) : ""}.`
-        : "";
-
-    return [
-      {
-        key: "heading" as const,
-        label: "Confirmed lead heading",
-        value: validAppointment
-          ? `CONFIRMED LEAD ${time(validAppointment)}`
-          : "CONFIRMED LEAD",
-      },
-      {
-        key: "customer" as const,
-        label: "Customer name",
-        value: selected.customer_name?.toUpperCase() ?? "",
-      },
-      { key: "address" as const, label: "Address", value: address },
-      {
-        key: "phones" as const,
-        label: "Phone numbers",
-        value: phones.join("\n"),
-      },
-      {
-        key: "email" as const,
-        label: "Email",
-        value: selected.email ?? "",
-      },
-      {
-        key: "project" as const,
-        label: "Project and telemarketer notes",
-        value: project,
-      },
-      {
-        key: "confirmation" as const,
-        label: "Confirmation note",
-        value: confirmation,
-      },
-      {
-        key: "appointment" as const,
-        label: "Agent, salesman, and appointment",
-        value: assignment,
-      },
-    ].filter((section) => section.value.trim() !== "");
-  }, [selected]);
-
-  const smsTemplateText = useMemo(
-    () =>
-      smsTemplateSections
-        .filter((section) => smsTemplateFields.includes(section.key))
-        .map((section) => section.value.trim())
-        .join("\n\n"),
-    [smsTemplateFields, smsTemplateSections],
-  );
-
-  const openSmsTemplate = () => {
-    setSmsTemplateFields(smsTemplateSections.map((section) => section.key));
-    setSmsTemplateOpen(true);
-  };
-
-  const copySmsTemplate = async () => {
-    if (!smsTemplateText) return;
-
-    try {
-      await navigator.clipboard.writeText(smsTemplateText);
-      setSmsTemplateOpen(false);
-      notify({
-        title: "Lead message copied",
-        message: "The selected lead information is ready to paste into SMS.",
-        tone: "success",
-      });
-    } catch {
-      notify({
-        title: "Could not copy message",
-        message:
-          "Your browser blocked clipboard access. Select and copy the preview manually.",
-        tone: "warning",
-      });
-    }
-  };
-
-  const selectLead = (lead: Lead) => {
-    const latestTelemarketerNote = latestNoteBody(lead, "telemarketer");
-    const latestConfirmationNote = latestNoteBody(lead, "confirmation");
-    const latestDispatchNote = latestNoteBody(lead, "dispatch");
-    const latestAppointmentResultNote = latestNoteBody(
-      lead,
-      "appointment_result",
-    );
-    setSelectedId(lead.id);
-    setAppointmentResultDraft(lead.appointment_result ?? "");
-    setSalesmanOneDraft(String(lead.salesman_one?.salesman_id ?? ""));
-    setSalesmanTwoDraft(String(lead.salesman_two?.salesman_id ?? ""));
-    setIsEditing(false);
-    setHistoryType(null);
-    setRecordingsOpen(false);
-    telemarketerNoteForm.setData("body", latestTelemarketerNote);
-    setLoadedTelemarketerNote(latestTelemarketerNote);
-    telemarketerNoteForm.clearErrors();
-    confirmationNoteForm.setData("body", latestConfirmationNote);
-    setLoadedConfirmationNote(latestConfirmationNote);
-    confirmationNoteForm.clearErrors();
-    dispatchNoteForm.setData("body", latestDispatchNote);
-    setLoadedDispatchNote(latestDispatchNote);
-    dispatchNoteForm.clearErrors();
-    appointmentResultNoteForm.setData("body", latestAppointmentResultNote);
-    setLoadedAppointmentResultNote(latestAppointmentResultNote);
-    appointmentResultNoteForm.clearErrors();
-    form.setData(leadFormData(lead));
-    form.clearErrors();
-  };
-
-  const saveLead = () => {
-    if (!selected) {
-      return;
-    }
-
-    form.put(`/lead-workflow/leads-shop/${selected.id}`, {
-      preserveScroll: true,
-      onSuccess: () => {
-        setAppointmentResultDraft(form.data.appointment_result);
-        setSalesmanOneDraft(form.data.salesman_1_id);
-        setSalesmanTwoDraft(form.data.salesman_2_id);
-        setIsEditing(false);
-        router.flushAll();
-      },
-      onError: (errors) => {
-        const firstError = Object.values(errors)[0];
-        notify({
-          tone: "error",
-          message:
-            typeof firstError === "string"
-              ? firstError
-              : "The lead could not be saved. Check the highlighted fields.",
+        form.put(`/lead-workflow/leads-shop/${selected.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setAppointmentResultDraft(form.data.appointment_result);
+                setSalesmanOneDraft(form.data.salesman_1_id);
+                setSalesmanTwoDraft(form.data.salesman_2_id);
+                setIsEditing(false);
+                router.flushAll();
+            },
+            onError: (errors) => {
+                const firstError = Object.values(errors)[0];
+                notify({
+                    tone: 'error',
+                    message:
+                        typeof firstError === 'string'
+                            ? firstError
+                            : 'The lead could not be saved. Check the highlighted fields.',
+                });
+            },
         });
-      },
-    });
-  };
+    };
 
-  const deleteSampleLead = async () => {
-    if (!selected || isDeleting) {
-      return;
-    }
+    const deleteSampleLead = async () => {
+        if (!selected || isDeleting) {
+            return;
+        }
 
-    const approved = await confirm({
-      title: "Delete sample lead?",
-      message: `${selected.customer_name} and all of its notes and activity will be permanently deleted. This cannot be undone.`,
-      confirmLabel: "Delete lead",
-      tone: "danger",
-    });
+        const approved = await confirm({
+            title: 'Delete sample lead?',
+            message: `${selected.customer_name} and all of its notes and activity will be permanently deleted. This cannot be undone.`,
+            confirmLabel: 'Delete lead',
+            tone: 'danger',
+        });
 
-    if (!approved) {
-      return;
-    }
+        if (!approved) {
+            return;
+        }
 
-    setIsDeleting(true);
-    router.delete(`/lead-workflow/leads-shop/${selected.id}`, {
-      preserveScroll: true,
-      onSuccess: () => {
-        setSelectedId(null);
-        router.flushAll();
-      },
-      onFinish: () => setIsDeleting(false),
-    });
-  };
+        setIsDeleting(true);
+        router.delete(`/lead-workflow/leads-shop/${selected.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setSelectedId(null);
+                router.flushAll();
+            },
+            onFinish: () => setIsDeleting(false),
+        });
+    };
 
-  const saveTelemarketerNote = () => {
-    const body = telemarketerNoteForm.data.body.trim();
-    if (!selected || !body || body === loadedTelemarketerNote.trim()) {
-      return;
-    }
+    const saveTelemarketerNote = () => {
+        const body = telemarketerNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedTelemarketerNote.trim()) {
+            return;
+        }
 
-    telemarketerNoteForm.post(
-      `/lead-workflow/leads-shop/${selected.id}/notes`,
-      {
-        preserveScroll: true,
-        onSuccess: () => {
-          telemarketerNoteForm.setData("body", body);
-          setLoadedTelemarketerNote(body);
-        },
-      },
-    );
-  };
+        telemarketerNoteForm.post(
+            `/lead-workflow/leads-shop/${selected.id}/notes`,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    telemarketerNoteForm.setData('body', body);
+                    setLoadedTelemarketerNote(body);
+                    setExpandedNoteType(null);
+                },
+            },
+        );
+    };
 
-  const saveConfirmationNote = () => {
-    const body = confirmationNoteForm.data.body.trim();
-    if (!selected || !body || body === loadedConfirmationNote.trim()) {
-      return;
-    }
+    const saveConfirmationNote = () => {
+        const body = confirmationNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedConfirmationNote.trim()) {
+            return;
+        }
 
-    confirmationNoteForm.post(
-      `/lead-workflow/leads-shop/${selected.id}/notes`,
-      {
-        preserveScroll: true,
-        onSuccess: () => {
-          confirmationNoteForm.setData("body", body);
-          setLoadedConfirmationNote(body);
-        },
-      },
-    );
-  };
+        confirmationNoteForm.post(
+            `/lead-workflow/leads-shop/${selected.id}/notes`,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    confirmationNoteForm.setData('body', body);
+                    setLoadedConfirmationNote(body);
+                    setExpandedNoteType(null);
+                },
+            },
+        );
+    };
 
-  const saveDispatchNote = () => {
-    const body = dispatchNoteForm.data.body.trim();
-    if (!selected || !body || body === loadedDispatchNote.trim()) {
-      return;
-    }
+    const saveDispatchNote = () => {
+        const body = dispatchNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedDispatchNote.trim()) {
+            return;
+        }
 
-    dispatchNoteForm.post(`/lead-workflow/leads-shop/${selected.id}/notes`, {
-      preserveScroll: true,
-      onSuccess: () => {
-        dispatchNoteForm.setData("body", body);
-        setLoadedDispatchNote(body);
-      },
-    });
-  };
+        dispatchNoteForm.post(
+            `/lead-workflow/leads-shop/${selected.id}/notes`,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    dispatchNoteForm.setData('body', body);
+                    setLoadedDispatchNote(body);
+                    setExpandedNoteType(null);
+                },
+            },
+        );
+    };
 
-  const saveAppointmentResultNote = () => {
-    const body = appointmentResultNoteForm.data.body.trim();
-    if (!selected || !body || body === loadedAppointmentResultNote.trim()) {
-      return;
-    }
+    const saveAppointmentResultNote = () => {
+        const body = appointmentResultNoteForm.data.body.trim();
+        if (!selected || !body || body === loadedAppointmentResultNote.trim()) {
+            return;
+        }
 
-    appointmentResultNoteForm.post(
-      `/lead-workflow/leads-shop/${selected.id}/notes`,
-      {
-        preserveScroll: true,
-        onSuccess: () => {
-          appointmentResultNoteForm.setData("body", body);
-          setLoadedAppointmentResultNote(body);
-        },
-      },
-    );
-  };
+        appointmentResultNoteForm.post(
+            `/lead-workflow/leads-shop/${selected.id}/notes`,
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    appointmentResultNoteForm.setData('body', body);
+                    setLoadedAppointmentResultNote(body);
+                    setExpandedNoteType(null);
+                },
+            },
+        );
+    };
 
-  const updateLeadStatus = (status: string) => {
-    if (!selected) {
-      return;
-    }
+    const updateLeadStatus = (status: string) => {
+        if (!selected) {
+            return;
+        }
 
-    router.patch(
-      `/lead-workflow/leads-shop/${selected.id}/status`,
-      { status },
-      {
-        preserveScroll: true,
-        onSuccess: () => router.flushAll(),
-        onError: (errors) =>
-          notify({
-            title: "Lead information incomplete",
-            message:
-              String(errors.status ?? "") ||
-              "Complete the homeowner qualification fields first.",
-            tone: "warning",
-          }),
-      },
-    );
-  };
+        router.patch(
+            `/lead-workflow/leads-shop/${selected.id}/status`,
+            {
+                status,
+                appointment_result_note:
+                    appointmentResultNoteForm.data.body.trim() !==
+                    loadedAppointmentResultNote.trim()
+                        ? appointmentResultNoteForm.data.body.trim()
+                        : null,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => router.flushAll(),
+                onError: (errors) => {
+                    const message =
+                        String(errors.status ?? errors.permission ?? '') ||
+                        'The lead could not be moved. Please try again.';
+                    const permissionDenied = /permission|authorized/i.test(
+                        message,
+                    );
 
-  const openSaleModal = () => {
-    if (!selected) {
-      return;
-    }
+                    notify({
+                        title: permissionDenied
+                            ? 'Permission required'
+                            : 'Unable to move lead',
+                        message,
+                        tone: 'warning',
+                    });
+                },
+            },
+        );
+    };
 
-    if (!selected.salesman_one && !selected.salesman_two) {
-      notify({
-        title: "Salesman required",
-        message: "Assign at least one salesman before accepting a sale.",
-        tone: "warning",
-      });
+    const openSaleModal = () => {
+        if (!selected) {
+            return;
+        }
 
-      return;
-    }
+        if (!selected.salesman_one && !selected.salesman_two) {
+            notify({
+                title: 'Salesman required',
+                message:
+                    'Assign at least one salesman before accepting a sale.',
+                tone: 'warning',
+            });
 
-    saleForm.reset();
-    saleForm.clearErrors();
-    setSaleModalOpen(true);
-  };
+            return;
+        }
 
-  const acceptSale = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!selected) {
-      return;
-    }
-
-    saleForm.post(`/lead-workflow/leads-shop/${selected.id}/sale`, {
-      preserveScroll: true,
-      onSuccess: () => {
-        setSaleModalOpen(false);
         saleForm.reset();
-        setSelectedId(null);
-        router.flushAll();
-      },
-    });
-  };
+        saleForm.clearErrors();
+        setSaleModalOpen(true);
+    };
 
-  const saveSalesman = (field: "salesman_1_id" | "salesman_2_id") => {
-    if (!selected) {
-      return;
-    }
+    const acceptSale = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
 
-    setSavingAssignment(
-      field === "salesman_1_id" ? "salesman_1" : "salesman_2",
-    );
+        if (!selected) {
+            return;
+        }
 
-    router.patch(
-      `/lead-workflow/leads-shop/${selected.id}/salesmen`,
-      {
-        salesman_1_id: salesmanOneDraft || null,
-        salesman_2_id: salesmanTwoDraft || null,
-      },
-      {
-        preserveScroll: true,
-        onSuccess: () => router.flushAll(),
-        onFinish: () => setSavingAssignment(null),
-      },
-    );
-  };
-
-  const saveAppointmentResult = () => {
-    if (!selected) {
-      return;
-    }
-
-    setSavingAssignment("appointment");
-
-    router.patch(
-      `/lead-workflow/leads-shop/${selected.id}/appointment-result`,
-      { appointment_result: appointmentResultDraft || null },
-      {
-        preserveScroll: true,
-        onSuccess: () => router.flushAll(),
-        onFinish: () => setSavingAssignment(null),
-      },
-    );
-  };
-
-  const assignSecondAgent = (agentId: string) => {
-    if (!selected) {
-      return;
-    }
-
-    router.patch(
-      `/lead-workflow/leads-shop/${selected.id}/second-agent`,
-      { agent_2_id: agentId || null },
-      { preserveScroll: true, onSuccess: () => router.flushAll() },
-    );
-  };
-
-  const telemarketerHistory =
-    selected?.notes.filter((note) => note.note_type === "telemarketer") ?? [];
-  const confirmationHistory =
-    selected?.notes.filter((note) => note.note_type === "confirmation") ?? [];
-  const dispatchHistory =
-    selected?.notes.filter((note) => note.note_type === "dispatch") ?? [];
-  const appointmentResultHistory =
-    selected?.notes.filter((note) => note.note_type === "appointment_result") ??
-    [];
-  const isDispatchNoteLocked = (noteType: EditableNoteType) =>
-    noteType === "telemarketer" ||
-    (queue?.status === "dispatched" &&
-      ["confirmation", "appointment_result"].includes(noteType));
-  const expandedNoteLocked = expandedNoteType
-    ? isDispatchNoteLocked(expandedNoteType)
-    : false;
-  const expandedNote = expandedNoteType
-    ? {
-        telemarketer: {
-          title: "Telemarketer notes",
-          value: telemarketerNoteForm.data.body,
-          setValue: (value: string) =>
-            telemarketerNoteForm.setData("body", value),
-          save: saveTelemarketerNote,
-          processing: telemarketerNoteForm.processing,
-          unchanged:
-            telemarketerNoteForm.data.body.trim() ===
-            loadedTelemarketerNote.trim(),
-          error: telemarketerNoteForm.errors.body,
-        },
-        confirmation: {
-          title: "Confirmation notes",
-          value: confirmationNoteForm.data.body,
-          setValue: (value: string) =>
-            confirmationNoteForm.setData("body", value),
-          save: saveConfirmationNote,
-          processing: confirmationNoteForm.processing,
-          unchanged:
-            confirmationNoteForm.data.body.trim() ===
-            loadedConfirmationNote.trim(),
-          error: confirmationNoteForm.errors.body,
-        },
-        dispatch: {
-          title: "Dispatch notes",
-          value: dispatchNoteForm.data.body,
-          setValue: (value: string) => dispatchNoteForm.setData("body", value),
-          save: saveDispatchNote,
-          processing: dispatchNoteForm.processing,
-          unchanged:
-            dispatchNoteForm.data.body.trim() === loadedDispatchNote.trim(),
-          error: dispatchNoteForm.errors.body,
-        },
-        appointment_result: {
-          title: "Appointment result notes",
-          value: appointmentResultNoteForm.data.body,
-          setValue: (value: string) =>
-            appointmentResultNoteForm.setData("body", value),
-          save: saveAppointmentResultNote,
-          processing: appointmentResultNoteForm.processing,
-          unchanged:
-            appointmentResultNoteForm.data.body.trim() ===
-            loadedAppointmentResultNote.trim(),
-          error: appointmentResultNoteForm.errors.body,
-        },
-      }[expandedNoteType]
-    : null;
-  const displayedHistory =
-    historyType === "all"
-      ? (selected?.notes ?? [])
-      : (selected?.notes.filter((note) => note.note_type === historyType) ??
-        []);
-  const displayedTimeline = useMemo(() => {
-    if (historyType !== "all" || !selected) {
-      return displayedHistory.map((note) => ({
-        kind: "note" as const,
-        id: note.id,
-        created_at: note.created_at,
-        note,
-      }));
-    }
-
-    return (selected.movements ?? [])
-      .map((movement) => ({
-        kind: "movement" as const,
-        id: movement.id,
-        created_at: movement.created_at,
-        movement,
-      }))
-      .sort(
-        (first, second) =>
-          new Date(second.created_at).getTime() -
-          new Date(first.created_at).getTime(),
-      );
-  }, [displayedHistory, historyType, selected]);
-
-  const defaultWorkflowActions = [
-    ["confirmed", "Confirm", CheckCircle2, "confirm"],
-    ["dispatched", "Dispatch", Truck, "dispatch"],
-    ["reschedule", "Reschedule", CalendarClock, "reschedule"],
-    ["555", "555", Phone, "555"],
-    ["kit", "KIT", MessageCircle, "kit"],
-    ["raw", "Raw", Archive, "raw"],
-    ["cb", "Call Back", PhoneCall, "callback"],
-    ["naov", "NAOV", Ban, "naov"],
-    ["toss", "TOSS", Trash2, "toss"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const confirmWorkflowActions = [
-    ["dispatched", "Dispatch", Truck, "dispatch"],
-    ["reschedule", "Reschedule", CalendarClock, "reschedule"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const dispatchWorkflowActions = [
-    ["kit", "Keep in Touch", MessageCircle, "callback"],
-    ["rehash", "Rehash", RotateCcw, "toss"],
-    ["555", "555", Phone, "555"],
-    ["sale", "Sale", CircleDollarSign, "confirm"],
-    ["reschedule", "Reschedule", CalendarClock, "reschedule"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const rescheduleWorkflowActions = [
-    ["confirmed", "Confirm", CheckCircle2, "confirm"],
-    ["dispatched", "Dispatch", Truck, "dispatch"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const rehashWorkflowActions = [
-    ["confirmed", "Confirm", CheckCircle2, "confirm"],
-    ["dispatched", "Dispatch", Truck, "dispatch"],
-    ["rehash_ng", "NG", Ban, "raw"],
-    ["rehash_toss", "TOSS", Trash2, "toss"],
-    ["rehash_cb", "Call Back", PhoneCall, "callback"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const fiveFiveFiveWorkflowActions = [
-    ["confirmed", "Confirm", CheckCircle2, "confirm"],
-    ["dispatched", "Dispatch", Truck, "dispatch"],
-    ["reschedule", "Reschedule", CalendarClock, "reschedule"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const hisWorkflowActions = [
-    ["confirmed", "Confirm", CheckCircle2, "confirm"],
-    ["dispatched", "Dispatch", Truck, "dispatch"],
-    ["reschedule", "Reschedule", CalendarClock, "reschedule"],
-    ["la", "LA", MapPin, "555"],
-    ["555", "555", Phone, "555"],
-    ["kit", "KIT", MessageCircle, "kit"],
-    ["raw", "Raw", Archive, "raw"],
-    ["cb", "Call Back", PhoneCall, "callback"],
-    ["naov", "NAOV", Ban, "naov"],
-    ["toss", "TOSS", Trash2, "toss"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const keepInTouchWorkflowActions = [
-    ["reschedule", "Reschedule", CalendarClock, "reschedule"],
-    ["kit_ng", "NG", Ban, "raw"],
-    ["kit_toss", "TOSS", Trash2, "toss"],
-    ["kit_cb", "Call Back", PhoneCall, "callback"],
-    ["history", "History", History, "history"],
-  ] as const;
-  const workflowActions =
-    queue?.status === "confirmed"
-      ? confirmWorkflowActions
-      : queue?.status === "dispatched"
-        ? dispatchWorkflowActions
-        : queue?.status === "reschedule"
-          ? rescheduleWorkflowActions
-          : queue?.status === "rehash"
-            ? rehashWorkflowActions
-            : ["555", "la"].includes(queue?.status ?? "")
-              ? fiveFiveFiveWorkflowActions
-              : queue?.status === "his"
-                ? hisWorkflowActions
-                : queue?.status === "kit"
-                  ? keepInTouchWorkflowActions
-                  : defaultWorkflowActions;
-  const headerIcon =
-    queue?.status === "confirmed" ? (
-      <CheckCircle2 />
-    ) : queue?.status === "dispatched" ? (
-      <Truck />
-    ) : queue?.status === "reschedule" ? (
-      <CalendarClock />
-    ) : queue?.status === "rehash" ? (
-      <RotateCcw />
-    ) : queue?.status === "555" ? (
-      <PhoneCall />
-    ) : queue?.status === "la" ? (
-      <MapPin />
-    ) : queue?.status === "his" ? (
-      <Building2 />
-    ) : queue?.status === "kit" ? (
-      <Clock3 />
-    ) : (
-      <ShoppingBag />
-    );
-
-  return (
-    <>
-      <Head title={queue?.title ?? "Leads Shop"} />
-      <main
-        className={`leads-shop-page leads-shop-page--${queue?.status ?? "shop"} ${queue?.status === "his" ? "leads-shop-page--his" : ""}`}
-      >
-        <header className="leads-shop-header">
-          <div className="leads-shop-header__identity">
-            <span className="leads-shop-header__icon">{headerIcon}</span>
-            <div>
-              <div className="leads-shop-header__title">
-                <h1>{queue?.title ?? "Leads Shop"}</h1>
-                <strong>{leads.length}</strong>
-              </div>
-              <p>
-                {queue?.description ??
-                  "Browse and manage freshly imported leads."}
-              </p>
-            </div>
-          </div>
-          <label className="leads-shop-search">
-            <Search />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by customer, city, company, product, or agent"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                aria-label="Clear search"
-              >
-                <X />
-              </button>
-            )}
-          </label>
-        </header>
-
-        <div className="leads-shop-workspace">
-          <aside className="lead-dates">
-            <div className="lead-dates__header">
-              <div>
-                <h2>{queue?.dateLabel ?? "Last 30 days"}</h2>
-                <p>
-                  Filter by{" "}
-                  {effectiveDateField === "appointment_at"
-                    ? "appointment date"
-                    : "created date"}
-                </p>
-              </div>
-              <CalendarClock />
-            </div>
-            {!queue && (
-              <label className="lead-dates__basis">
-                <span>Date based on</span>
-                <select
-                  value={dateField}
-                  onChange={(event) => {
-                    setDateField(event.target.value as DateField);
-                    setSelectedDate("all");
-                  }}
-                >
-                  <option value="created_at">Lead created</option>
-                  <option value="appointment_at">Appointment date</option>
-                </select>
-              </label>
-            )}
-            <div className="lead-dates__columns">
-              <span>Date</span>
-              <span>Day</span>
-              <span>Count</span>
-            </div>
-            <div className="lead-dates__list">
-              {availableDateRows.map((day) => (
-                <button
-                  type="button"
-                  key={day.key}
-                  className={
-                    selectedDate === day.key
-                      ? "lead-date-row lead-date-row--active"
-                      : "lead-date-row"
-                  }
-                  onClick={() => setSelectedDate(day.key)}
-                >
-                  <span>{day.date}</span>
-                  <span>{day.day}</span>
-                  <strong>{day.count}</strong>
-                </button>
-              ))}
-              {availableDateRows.length === 0 && (
-                <div className="lead-dates__empty">
-                  {effectiveDateField === "appointment_at"
-                    ? "No appointment dates in this queue."
-                    : "No leads in the last 30 days."}
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              className={
-                selectedDate === "all"
-                  ? "lead-dates__all lead-dates__all--active"
-                  : "lead-dates__all"
-              }
-              onClick={() => setSelectedDate("all")}
-            >
-              All dates
-            </button>
-          </aside>
-
-          <section className="lead-browser">
-            <div className="lead-browser__header">
-              <div>
-                <h2>{queue?.listTitle ?? "Fresh leads"}</h2>
-                <p>{filteredLeads.length} shown</p>
-              </div>
-              <span>Newest first</span>
-            </div>
-            <div className="lead-browser-filters">
-              <div className="lead-status-filters">
-                {statusFilters.map(([status, label]) => (
-                  <button
-                    type="button"
-                    key={status}
-                    className={
-                      selectedStatus === status
-                        ? "lead-status-filter lead-status-filter--active"
-                        : "lead-status-filter"
-                    }
-                    onClick={() => setSelectedStatus(status)}
-                  >
-                    {label}
-                    <span>{statusCounts[status] ?? 0}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`lead-filter-reset${isRefreshing ? "lead-filter-reset--loading" : ""}`}
-                  onClick={clearListFilters}
-                  disabled={isRefreshing}
-                  aria-label="Refresh leads and reset filters"
-                  title="Refresh leads and reset filters"
-                >
-                  <RotateCcw />
-                </button>
-              </div>
-              <div className="lead-dropdown-filters">
-                <label>
-                  <Building2 />
-                  <select
-                    value={companyFilter}
-                    onChange={(event) => setCompanyFilter(event.target.value)}
-                  >
-                    <option value="all">All companies</option>
-                    {filterOptions.companies.map(([id, name]) => (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <SlidersHorizontal />
-                  <select
-                    value={sourceFilter}
-                    onChange={(event) => setSourceFilter(event.target.value)}
-                  >
-                    <option value="all">All sources</option>
-                    {filterOptions.sources.map((source) => (
-                      <option key={source}>{source}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <MapPin />
-                  <select
-                    value={cityFilter}
-                    onChange={(event) => setCityFilter(event.target.value)}
-                  >
-                    <option value="all">All cities</option>
-                    {filterOptions.cities.map((city) => (
-                      <option key={city}>{city}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <Package />
-                  <select
-                    value={productFilter}
-                    onChange={(event) => setProductFilter(event.target.value)}
-                  >
-                    <option value="all">All products</option>
-                    {filterOptions.products.map(([id, name]) => (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <UserRound />
-                  <select
-                    value={agentFilter}
-                    onChange={(event) => setAgentFilter(event.target.value)}
-                  >
-                    <option value="all">All agents</option>
-                    {filterOptions.hasUnassignedAgents && (
-                      <option value="unassigned">Unassigned</option>
-                    )}
-                    {filterOptions.agents.map(([id, name]) => (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div className="lead-browser__columns">
-              <span>Customer</span>
-              <span>City</span>
-              <span>
-                {effectiveDateField === "appointment_at"
-                  ? "Appointment"
-                  : "Created"}
-              </span>
-              <span className="lead-browser__attempts-heading">Attempts</span>
-            </div>
-            <div className="lead-browser__list">
-              {filteredLeads.map((lead) => (
-                <button
-                  type="button"
-                  key={lead.id}
-                  className={[
-                    "lead-browser-row",
-                    selectedId === lead.id ? "lead-browser-row--active" : "",
-                    isInstantAppointment(lead)
-                      ? "lead-browser-row--instant"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => selectLead(lead)}
-                >
-                  <span>
-                    <span className="lead-browser-row__name">
-                      <strong>{lead.customer_name}</strong>
-                      {isInstantAppointment(lead) && (
-                        <span className="lead-browser-row__instant-badge">
-                          Instant
-                        </span>
-                      )}
-                    </span>
-                    <small>{lead.product?.product_name ?? "No product"}</small>
-                  </span>
-                  <span>{lead.city}</span>
-                  <span>
-                    {effectiveDateField === "appointment_at"
-                      ? lead.appointment_at
-                        ? formatAppointmentDate(lead.appointment_at)
-                        : "No appointment"
-                      : formatDate(lead.created_at)}
-                  </span>
-                  <span className="lead-browser-row__attempts">
-                    {(lead.ring_central_calls?.length ?? 0) +
-                      (newCallAttempts[lead.id] ?? 0)}
-                  </span>
-                </button>
-              ))}
-              {filteredLeads.length === 0 && (
-                <div className="lead-browser-empty">
-                  <ShoppingBag />
-                  <strong>No leads found</strong>
-                  <span>
-                    {search
-                      ? "Try another search."
-                      : "Create a lead from Lead Card."}
-                  </span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="lead-detail">
-            {selected ? (
-              <>
-                <div className="lead-detail__header">
-                  <div className="lead-detail__identity">
-                    <span>
-                      {selected.customer_name.charAt(0).toUpperCase()}
-                    </span>
-                    <div>
-                      <small>Lead #{selected.id}</small>
-                      <div className="lead-detail__name-row">
-                        <h2>{selected.customer_name}</h2>
-                        <span className="lead-header-source">
-                          {selected.source}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="lead-detail__controls">
-                    <div className="lead-address-actions">
-                      <button
-                        type="button"
-                        className="lead-address-action lead-address-action--recordings"
-                        onClick={() => setRecordingsOpen(true)}
-                      >
-                        <Headphones />
-                        <span>
-                          Call attempts{" "}
-                          {(selected.ring_central_calls?.length ?? 0) +
-                            (newCallAttempts[selected.id] ?? 0)}
-                        </span>
-                      </button>
-                      <a
-                        className="lead-address-action lead-address-action--zillow"
-                        href={leadAddressLinks(selected).zillow}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Search ${leadAddress(selected)} on Zillow`}
-                        title="Search this address on Zillow"
-                      >
-                        <ZillowIcon />
-                        <span>Zillow</span>
-                      </a>
-                      <a
-                        className="lead-address-action lead-address-action--maps"
-                        href={leadAddressLinks(selected).googleMaps}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Open ${leadAddress(selected)} in Google Maps`}
-                        title="Open this address in Google Maps"
-                      >
-                        <GoogleMapsIcon />
-                        <span>Maps</span>
-                      </a>
-                    </div>
-                    <div>
-                      <span className="lead-status">
-                        {selected.status || "fresh"}
-                      </span>
-                      <small className="lead-created">
-                        Created {formatDate(selected.created_at)}
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      className="lead-layout-reset"
-                      onClick={() =>
-                        setLeadCardLayout(DEFAULT_LEAD_CARD_LAYOUT)
-                      }
-                      title="Reset card sizes"
-                    >
-                      <SlidersHorizontal />
-                      Reset cards
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        isEditing ? "lead-detail-save" : "lead-detail-edit"
-                      }
-                      disabled={form.processing}
-                      onClick={() =>
-                        isEditing ? saveLead() : setIsEditing(true)
-                      }
-                    >
-                      {isEditing ? <Save /> : <Pencil />}
-                      {form.processing
-                        ? "Saving…"
-                        : isEditing
-                          ? "Save"
-                          : "Edit"}
-                    </button>
-                    {auth.user.role === "admin" && (
-                      <button
-                        type="button"
-                        className="lead-detail-delete"
-                        disabled={isDeleting}
-                        onClick={deleteSampleLead}
-                      >
-                        <Trash2 />
-                        {isDeleting ? "Deleting…" : "Delete sample"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {isEditing ? (
-                  <div className="lead-edit-grid">
-                    <label>
-                      <span>Customer name</span>
-                      <input
-                        value={form.data.customer_name}
-                        onChange={(event) =>
-                          form.setData("customer_name", event.target.value)
-                        }
-                      />
-                      {form.errors.customer_name && (
-                        <em>{form.errors.customer_name}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Marital status</span>
-                      <select
-                        value={form.data.marital_status}
-                        onChange={(event) =>
-                          form.setData("marital_status", event.target.value)
-                        }
-                      >
-                        <option value="">Select status</option>
-                        <option>Single</option>
-                        <option>Married</option>
-                        <option>Divorced</option>
-                        <option>Widowed</option>
-                        <option>Other</option>
-                      </select>
-                      {form.errors.marital_status && (
-                        <em>{form.errors.marital_status}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Primary phone</span>
-                      <div className="lead-edit-phone">
-                        <input
-                          value={form.data.primary_number}
-                          onChange={(event) =>
-                            form.setData("primary_number", event.target.value)
-                          }
-                        />
-                        {form.data.primary_number.trim() && (
-                          <RingCentralCallButton
-                            leadId={selected.id}
-                            phone={form.data.primary_number}
-                            phoneSlot="primary"
-                            title="Call primary phone with RingCentral"
-                          >
-                            <PhoneCall />
-                          </RingCentralCallButton>
-                        )}
-                      </div>
-                      {form.errors.primary_number && (
-                        <em>{form.errors.primary_number}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Secondary phone</span>
-                      <div className="lead-edit-phone">
-                        <input
-                          value={form.data.secondary_number}
-                          onChange={(event) =>
-                            form.setData("secondary_number", event.target.value)
-                          }
-                        />
-                        {form.data.secondary_number.trim() && (
-                          <RingCentralCallButton
-                            leadId={selected.id}
-                            phone={form.data.secondary_number}
-                            phoneSlot="secondary"
-                            title="Call secondary phone with RingCentral"
-                          >
-                            <PhoneCall />
-                          </RingCentralCallButton>
-                        )}
-                      </div>
-                    </label>
-                    <label>
-                      <span>Mobile number</span>
-                      <div className="lead-edit-phone">
-                        <input
-                          value={form.data.mobile_number}
-                          onChange={(event) =>
-                            form.setData("mobile_number", event.target.value)
-                          }
-                        />
-                        {form.data.mobile_number.trim() && (
-                          <RingCentralCallButton
-                            leadId={selected.id}
-                            phone={form.data.mobile_number}
-                            phoneSlot="mobile"
-                            title="Call mobile number with RingCentral"
-                          >
-                            <PhoneCall />
-                          </RingCentralCallButton>
-                        )}
-                      </div>
-                    </label>
-                    <label>
-                      <span>Email</span>
-                      <input
-                        type="email"
-                        value={form.data.email}
-                        onChange={(event) =>
-                          form.setData("email", event.target.value)
-                        }
-                      />
-                      {form.errors.email && <em>{form.errors.email}</em>}
-                    </label>
-                    <label className="lead-edit-field--wide">
-                      <span>Address</span>
-                      <input
-                        value={form.data.address}
-                        onChange={(event) =>
-                          form.setData("address", event.target.value)
-                        }
-                      />
-                      {form.errors.address && <em>{form.errors.address}</em>}
-                    </label>
-                    <label>
-                      <span>City</span>
-                      <input
-                        value={form.data.city}
-                        onChange={(event) =>
-                          form.setData("city", event.target.value)
-                        }
-                      />
-                      {form.errors.city && <em>{form.errors.city}</em>}
-                    </label>
-                    <label>
-                      <span>County</span>
-                      <input
-                        value={form.data.county}
-                        onChange={(event) =>
-                          form.setData("county", event.target.value)
-                        }
-                      />
-                      {form.errors.county && <em>{form.errors.county}</em>}
-                    </label>
-                    <label>
-                      <span>State</span>
-                      <input
-                        value={form.data.state}
-                        onChange={(event) =>
-                          form.setData("state", event.target.value)
-                        }
-                      />
-                      {form.errors.state && <em>{form.errors.state}</em>}
-                    </label>
-                    <label>
-                      <span>ZIP code</span>
-                      <input
-                        value={form.data.zip_code}
-                        onChange={(event) =>
-                          form.setData("zip_code", event.target.value)
-                        }
-                      />
-                      {form.errors.zip_code && <em>{form.errors.zip_code}</em>}
-                    </label>
-                    <label>
-                      <span>Years in house</span>
-                      <input
-                        type="number"
-                        value={form.data.years_in_house}
-                        onChange={(event) =>
-                          form.setData("years_in_house", event.target.value)
-                        }
-                      />
-                      {form.errors.years_in_house && (
-                        <em>{form.errors.years_in_house}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>House age</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={form.data.house_age}
-                        onChange={(event) =>
-                          form.setData("house_age", event.target.value)
-                        }
-                      />
-                      {form.errors.house_age && (
-                        <em>{form.errors.house_age}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Needs financing?</span>
-                      <select
-                        value={form.data.needs_financing}
-                        onChange={(event) =>
-                          form.setData("needs_financing", event.target.value)
-                        }
-                      >
-                        <option value="">Select an answer</option>
-                        <option value="1">Yes</option>
-                        <option value="0">No</option>
-                      </select>
-                      {form.errors.needs_financing && (
-                        <em>{form.errors.needs_financing}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>House value</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.data.house_value}
-                        onChange={(event) =>
-                          form.setData("house_value", event.target.value)
-                        }
-                      />
-                      {form.errors.house_value && (
-                        <em>{form.errors.house_value}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Product</span>
-                      <select
-                        value={form.data.product_id}
-                        onChange={(event) =>
-                          form.setData("product_id", event.target.value)
-                        }
-                      >
-                        <option value="">Select product</option>
-                        {products.map((product) => (
-                          <option key={product.prod_id} value={product.prod_id}>
-                            {product.product_name}
-                          </option>
-                        ))}
-                      </select>
-                      {form.errors.product_id && (
-                        <em>{form.errors.product_id}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Appointment</span>
-                      <input
-                        type="datetime-local"
-                        value={form.data.appointment_at}
-                        onChange={(event) =>
-                          form.setData("appointment_at", event.target.value)
-                        }
-                      />
-                      {form.errors.appointment_at && (
-                        <em>{form.errors.appointment_at}</em>
-                      )}
-                    </label>
-                    {["dispatched", "rehash", "555", "his", "kit"].includes(
-                      queue?.status ?? "",
-                    ) && (
-                      <label>
-                        <span>Appointment result</span>
-                        <select
-                          value={form.data.appointment_result}
-                          onChange={(event) =>
-                            form.setData(
-                              "appointment_result",
-                              event.target.value,
-                            )
-                          }
-                        >
-                          <option value="">Select result</option>
-                          <option value="PNS">PNS</option>
-                          <option value="PNS No Rehash">PNS No Rehash</option>
-                          <option value="2 ND Meeting">2 ND Meeting</option>
-                          <option value="Salesman Sent">Salesman Sent</option>
-                          <option value="Sold and Cancel">
-                            Sold and Cancel
-                          </option>
-                        </select>
-                        {form.errors.appointment_result && (
-                          <em>{form.errors.appointment_result}</em>
-                        )}
-                      </label>
-                    )}
-                    <label>
-                      <span>Company</span>
-                      <select
-                        value={form.data.company_id}
-                        onChange={(event) =>
-                          form.setData("company_id", event.target.value)
-                        }
-                      >
-                        <option value="">Select company</option>
-                        {companies.map((company) => (
-                          <option key={company.com_id} value={company.com_id}>
-                            {company.company}
-                          </option>
-                        ))}
-                      </select>
-                      {form.errors.company_id && (
-                        <em>{form.errors.company_id}</em>
-                      )}
-                    </label>
-                    <label>
-                      <span>Original agent / reassign</span>
-                      <select
-                        value={form.data.agent_id}
-                        onChange={(event) =>
-                          form.setData("agent_id", event.target.value)
-                        }
-                      >
-                        <option value="">Select agent</option>
-                        {agents.map((agent) => (
-                          <option key={agent.agent_id} value={agent.agent_id}>
-                            {agent.agent_name}
-                          </option>
-                        ))}
-                      </select>
-                      {form.errors.agent_id && <em>{form.errors.agent_id}</em>}
-                    </label>
-                    <label>
-                      <span>Lead source</span>
-                      <input value="CallTools" readOnly />
-                    </label>
-                    {["dispatched", "rehash", "555", "his", "kit"].includes(
-                      queue?.status ?? "",
-                    ) && (
-                      <>
-                        <label>
-                          <span>Salesman 1</span>
-                          <select
-                            value={form.data.salesman_1_id}
-                            onChange={(event) =>
-                              form.setData("salesman_1_id", event.target.value)
-                            }
-                          >
-                            <option value="">Select salesman</option>
-                            {salesmen.map((salesman) => (
-                              <option
-                                key={salesman.salesman_id}
-                                value={salesman.salesman_id}
-                              >
-                                {salesman.salesman_name}
-                              </option>
-                            ))}
-                          </select>
-                          {form.errors.salesman_1_id && (
-                            <em>{form.errors.salesman_1_id}</em>
-                          )}
-                        </label>
-                        <label>
-                          <span>Salesman 2</span>
-                          <select
-                            value={form.data.salesman_2_id}
-                            onChange={(event) =>
-                              form.setData("salesman_2_id", event.target.value)
-                            }
-                          >
-                            <option value="">Select salesman</option>
-                            {salesmen.map((salesman) => (
-                              <option
-                                key={salesman.salesman_id}
-                                value={salesman.salesman_id}
-                              >
-                                {salesman.salesman_name}
-                              </option>
-                            ))}
-                          </select>
-                          {form.errors.salesman_2_id && (
-                            <em>{form.errors.salesman_2_id}</em>
-                          )}
-                        </label>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    className={`lead-detail__grid ${queue?.status === "dispatched" ? "lead-detail__grid--dispatch" : ["rehash", "555", "la", "his", "kit"].includes(queue?.status ?? "") ? "lead-detail__grid--three-notes" : ""}`}
-                    ref={detailGridRef}
-                    style={leadCardLayoutStyle}
-                  >
-                    <article className="lead-detail-card lead-detail-card--customer">
-                      <h3>
-                        <UserRound />
-                        Customer information
-                      </h3>
-                      <div className="lead-detail-fields">
-                        <div>
-                          <span>Marital status</span>
-                          <strong>{selected.marital_status}</strong>
-                        </div>
-                        <div>
-                          <span>Years in house</span>
-                          <strong>{selected.years_in_house}</strong>
-                        </div>
-                        <div>
-                          <span>House age</span>
-                          <strong>
-                            {selected.house_age == null
-                              ? "—"
-                              : `${selected.house_age} years`}
-                          </strong>
-                        </div>
-                        <div>
-                          <span>Needs financing?</span>
-                          <strong>
-                            {selected.needs_financing == null
-                              ? "—"
-                              : selected.needs_financing
-                                ? "Yes"
-                                : "No"}
-                          </strong>
-                        </div>
-                        <div>
-                          <span>House value</span>
-                          <strong>
-                            {selected.house_value == null
-                              ? "—"
-                              : Number(selected.house_value).toLocaleString(
-                                  "en-US",
-                                  {
-                                    style: "currency",
-                                    currency: "USD",
-                                    maximumFractionDigits: 0,
-                                  },
-                                )}
-                          </strong>
-                        </div>
-                        <div className="lead-detail-field--wide">
-                          <span>Address</span>
-                          <strong>
-                            <MapPin />
-                            {selected.address}, {selected.city},{" "}
-                            {selected.county}, {selected.state}{" "}
-                            {selected.zip_code}
-                          </strong>
-                        </div>
-                        <div>
-                          <span>Primary phone</span>
-                          <div className="lead-phone-value">
-                            <strong>
-                              <Phone />
-                              {selected.primary_number}
-                            </strong>
-                            {selected.primary_number.trim() && (
-                              <RingCentralCallButton
-                                leadId={selected.id}
-                                phone={selected.primary_number}
-                                phoneSlot="primary"
-                                title="Call primary phone with RingCentral"
-                              >
-                                <PhoneCall />
-                              </RingCentralCallButton>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <span>Secondary phone</span>
-                          <div className="lead-phone-value">
-                            <strong>{selected.secondary_number || "—"}</strong>
-                            {selected.secondary_number?.trim() && (
-                              <RingCentralCallButton
-                                leadId={selected.id}
-                                phone={selected.secondary_number}
-                                phoneSlot="secondary"
-                                title="Call secondary phone with RingCentral"
-                              >
-                                <PhoneCall />
-                              </RingCentralCallButton>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <span>Mobile number</span>
-                          <div className="lead-phone-value">
-                            <strong>{selected.mobile_number || "—"}</strong>
-                            {selected.mobile_number?.trim() && (
-                              <RingCentralCallButton
-                                leadId={selected.id}
-                                phone={selected.mobile_number}
-                                phoneSlot="mobile"
-                                title="Call mobile number with RingCentral"
-                              >
-                                <PhoneCall />
-                              </RingCentralCallButton>
-                            )}
-                          </div>
-                        </div>
-                        <div className="lead-detail-field--wide">
-                          <span>Email</span>
-                          <strong>
-                            <Mail />
-                            {selected.email || "—"}
-                          </strong>
-                        </div>
-                        {queue?.status === "dispatched" && (
-                          <div className="lead-dispatch-assignments">
-                            <label>
-                              <span>Assign another agent</span>
-                              <select
-                                className="lead-inline-assignment"
-                                value=""
-                                onChange={(event) =>
-                                  assignSecondAgent(event.target.value)
-                                }
-                              >
-                                <option value="">Select agent</option>
-                                {agents.map((agent) => (
-                                  <option
-                                    key={agent.agent_id}
-                                    value={agent.agent_id}
-                                    disabled={
-                                      selected.agent?.agent_id ===
-                                      agent.agent_id
-                                    }
-                                  >
-                                    {agent.agent_name}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label>
-                              <span>Appointment result</span>
-                              <div className="lead-inline-save-field">
-                                <select
-                                  className="lead-inline-assignment"
-                                  value={appointmentResultDraft}
-                                  onChange={(event) =>
-                                    setAppointmentResultDraft(event.target.value)
-                                  }
-                                >
-                                  <option value="">Select result</option>
-                                  <option value="PNS">PNS</option>
-                                  <option value="PNS No Rehash">
-                                    PNS No Rehash
-                                  </option>
-                                  <option value="2 ND Meeting">
-                                    2 ND Meeting
-                                  </option>
-                                  <option value="Salesman Sent">
-                                    Salesman Sent
-                                  </option>
-                                  <option value="Sold and Cancel">
-                                    Sold and Cancel
-                                  </option>
-                                </select>
-                                <button
-                                  type="button"
-                                  className="lead-inline-save"
-                                  onClick={saveAppointmentResult}
-                                  disabled={
-                                    savingAssignment !== null ||
-                                    appointmentResultDraft ===
-                                      (selected.appointment_result ?? "")
-                                  }
-                                  aria-label="Save appointment result"
-                                >
-                                  <Save />
-                                </button>
-                              </div>
-                            </label>
-                            <label>
-                              <span>Salesman 1</span>
-                              <div className="lead-inline-save-field">
-                                <select
-                                  className="lead-inline-assignment"
-                                  value={salesmanOneDraft}
-                                  onChange={(event) =>
-                                    setSalesmanOneDraft(event.target.value)
-                                  }
-                                >
-                                  <option value="">Unassigned</option>
-                                  {salesmen.map((salesman) => (
-                                    <option
-                                      key={salesman.salesman_id}
-                                      value={salesman.salesman_id}
-                                      disabled={
-                                        salesmanTwoDraft ===
-                                        String(salesman.salesman_id)
-                                      }
-                                    >
-                                      {salesman.salesman_name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  className="lead-inline-save"
-                                  onClick={() =>
-                                    saveSalesman("salesman_1_id")
-                                  }
-                                  disabled={
-                                    savingAssignment !== null ||
-                                    salesmanOneDraft ===
-                                      String(
-                                        selected.salesman_one?.salesman_id ??
-                                          "",
-                                      )
-                                  }
-                                  aria-label="Save salesman 1"
-                                >
-                                  <Save />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="lead-inline-save lead-inline-sms"
-                                  onClick={openSmsTemplate}
-                                  aria-label="Create SMS copy for this lead"
-                                >
-                                  <MessageCircle />
-                                </button>
-                              </div>
-                            </label>
-                            <label>
-                              <span>Salesman 2</span>
-                              <div className="lead-inline-save-field">
-                                <select
-                                  className="lead-inline-assignment"
-                                  value={salesmanTwoDraft}
-                                  onChange={(event) =>
-                                    setSalesmanTwoDraft(event.target.value)
-                                  }
-                                >
-                                  <option value="">Unassigned</option>
-                                  {salesmen.map((salesman) => (
-                                    <option
-                                      key={salesman.salesman_id}
-                                      value={salesman.salesman_id}
-                                      disabled={
-                                        salesmanOneDraft ===
-                                        String(salesman.salesman_id)
-                                      }
-                                    >
-                                      {salesman.salesman_name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  className="lead-inline-save"
-                                  onClick={() =>
-                                    saveSalesman("salesman_2_id")
-                                  }
-                                  disabled={
-                                    savingAssignment !== null ||
-                                    salesmanTwoDraft ===
-                                      String(
-                                        selected.salesman_two?.salesman_id ??
-                                          "",
-                                      )
-                                  }
-                                  aria-label="Save salesman 2"
-                                >
-                                  <Save />
-                                </button>
-                              </div>
-                            </label>
-                          </div>
-                        )}
-                      </div>
-                    </article>
-
-                    <article className="lead-detail-card">
-                      <h3>
-                        <CalendarClock />
-                        Project &amp; appointment
-                      </h3>
-                      <div className="lead-summary-list">
-                        <div>
-                          <Package />
-                          <span>
-                            <small>Product</small>
-                            <strong>
-                              {selected.product?.product_name ?? "—"}
-                            </strong>
-                          </span>
-                        </div>
-                        <div>
-                          <CalendarClock />
-                          <span>
-                            <small>Appointment</small>
-                            <strong>
-                              {selected.appointment_at
-                                ? formatAppointmentDate(selected.appointment_at)
-                                : "Not scheduled"}
-                            </strong>
-                          </span>
-                        </div>
-                        <div>
-                          <Building2 />
-                          <span>
-                            <small>Company</small>
-                            <strong>{selected.company?.prefix ?? "—"}</strong>
-                          </span>
-                        </div>
-                        <div>
-                          <UserRound />
-                          <span>
-                            <small>Original agent</small>
-                            <strong>{selected.agent?.agent_name ?? "—"}</strong>
-                          </span>
-                        </div>
-                        <div className="lead-project-only-assignment">
-                          <UserRound />
-                          <span>
-                            <small>Assign another agent</small>
-                            <select
-                              className="lead-inline-assignment"
-                              value=""
-                              onChange={(event) =>
-                                assignSecondAgent(event.target.value)
-                              }
-                            >
-                              <option value="">Select agent</option>
-                              {agents.map((agent) => (
-                                <option
-                                  key={agent.agent_id}
-                                  value={agent.agent_id}
-                                  disabled={
-                                    selected.agent?.agent_id === agent.agent_id
-                                  }
-                                >
-                                  {agent.agent_name}
-                                </option>
-                              ))}
-                            </select>
-                          </span>
-                        </div>
-                        {(selected.agent_assignments ?? [])
-                          .filter((assignment) => !assignment.is_original)
-                          .map((assignment, index) => (
-                            <div key={assignment.id}>
-                              <UserRound />
-                              <span>
-                                <small>Agent {index + 2}</small>
-                                <strong>
-                                  {assignment.agent?.agent_name ?? "Unknown"}
-                                </strong>
-                                <small>
-                                  {assignment.assigner?.username ?? "System"} ·{" "}
-                                  {formatDate(assignment.created_at)}
-                                </small>
-                              </span>
-                            </div>
-                          ))}
-                        {["dispatched", "rehash", "555", "his", "kit"].includes(
-                          queue?.status ?? "",
-                        ) && (
-                          <>
-                            {["dispatched", "kit"].includes(
-                              queue?.status ?? "",
-                            ) && (
-                              <div className="lead-project-only-assignment">
-                                <CalendarClock />
-                                <span>
-                                  <small>Appointment result</small>
-                                  <div className="lead-inline-save-field">
-                                    <select
-                                      className="lead-inline-assignment"
-                                      value={appointmentResultDraft}
-                                      onChange={(event) =>
-                                        setAppointmentResultDraft(
-                                          event.target.value,
-                                        )
-                                      }
-                                    >
-                                      <option value="">Select result</option>
-                                      <option value="PNS">PNS</option>
-                                      <option value="PNS No Rehash">
-                                        PNS No Rehash
-                                      </option>
-                                      <option value="2 ND Meeting">
-                                        2 ND Meeting
-                                      </option>
-                                      <option value="Salesman Sent">
-                                        Salesman Sent
-                                      </option>
-                                      <option value="Sold and Cancel">
-                                        Sold and Cancel
-                                      </option>
-                                    </select>
-                                    <button
-                                      type="button"
-                                      className="lead-inline-save"
-                                      onClick={saveAppointmentResult}
-                                      disabled={
-                                        savingAssignment !== null ||
-                                        appointmentResultDraft ===
-                                          (selected.appointment_result ?? "")
-                                      }
-                                      aria-label="Save appointment result"
-                                      title="Save appointment result"
-                                    >
-                                      <Save />
-                                    </button>
-                                  </div>
-                                </span>
-                              </div>
-                            )}
-                            <div className="lead-project-only-assignment">
-                              <UserRound />
-                              <span>
-                                <small>Salesman 1</small>
-                                <div className="lead-inline-save-field">
-                                  <select
-                                    className="lead-inline-assignment"
-                                    value={salesmanOneDraft}
-                                    onChange={(event) =>
-                                      setSalesmanOneDraft(event.target.value)
-                                    }
-                                  >
-                                    <option value="">Unassigned</option>
-                                    {salesmen.map((salesman) => (
-                                      <option
-                                        key={salesman.salesman_id}
-                                        value={salesman.salesman_id}
-                                        disabled={
-                                          salesmanTwoDraft ===
-                                          String(salesman.salesman_id)
-                                        }
-                                      >
-                                        {salesman.salesman_name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    className="lead-inline-save"
-                                    onClick={() =>
-                                      saveSalesman("salesman_1_id")
-                                    }
-                                    disabled={
-                                      savingAssignment !== null ||
-                                      salesmanOneDraft ===
-                                        String(
-                                          selected.salesman_one?.salesman_id ??
-                                            "",
-                                        )
-                                    }
-                                    aria-label="Save salesman 1"
-                                    title="Save salesman 1"
-                                  >
-                                    <Save />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="lead-inline-save lead-inline-sms"
-                                    onClick={openSmsTemplate}
-                                    aria-label="Create SMS copy for this lead"
-                                    title="Select lead details to copy"
-                                  >
-                                    <MessageCircle />
-                                  </button>
-                                </div>
-                              </span>
-                            </div>
-                            <div className="lead-project-only-assignment">
-                              <UserRound />
-                              <span>
-                                <small>Salesman 2</small>
-                                <div className="lead-inline-save-field">
-                                  <select
-                                    className="lead-inline-assignment"
-                                    value={salesmanTwoDraft}
-                                    onChange={(event) =>
-                                      setSalesmanTwoDraft(event.target.value)
-                                    }
-                                  >
-                                    <option value="">Unassigned</option>
-                                    {salesmen.map((salesman) => (
-                                      <option
-                                        key={salesman.salesman_id}
-                                        value={salesman.salesman_id}
-                                        disabled={
-                                          salesmanOneDraft ===
-                                          String(salesman.salesman_id)
-                                        }
-                                      >
-                                        {salesman.salesman_name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    className="lead-inline-save"
-                                    onClick={() =>
-                                      saveSalesman("salesman_2_id")
-                                    }
-                                    disabled={
-                                      savingAssignment !== null ||
-                                      salesmanTwoDraft ===
-                                        String(
-                                          selected.salesman_two?.salesman_id ??
-                                            "",
-                                        )
-                                    }
-                                    aria-label="Save salesman 2"
-                                    title="Save salesman 2"
-                                  >
-                                    <Save />
-                                  </button>
-                                </div>
-                              </span>
-                            </div>
-                          </>
-                        )}
-                        <div className="lead-project-only-source">
-                          <Clock3 />
-                          <span>
-                            <small>Lead source</small>
-                            <strong>{selected.source}</strong>
-                          </span>
-                        </div>
-                      </div>
-                    </article>
-
-                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--telemarketer is-note-locked">
-                      <div className="lead-note-heading">
-                        <h3>Telemarketer notes</h3>
-                        <span className="lead-note-locked-badge">
-                          <LockKeyhole /> Locked
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedNoteType("telemarketer")}
-                          title="Open large note editor"
-                        >
-                          <Maximize2 /> Expand
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setHistoryType("telemarketer")}
-                        >
-                          <History />
-                          History <span>{telemarketerHistory.length}</span>
-                        </button>
-                      </div>
-                      <textarea
-                        readOnly={isDispatchNoteLocked("telemarketer")}
-                        value={telemarketerNoteForm.data.body}
-                        onChange={(event) =>
-                          telemarketerNoteForm.setData(
-                            "body",
-                            event.target.value,
-                          )
-                        }
-                        placeholder="Type a new telemarketer note…"
-                      />
-                      <div className="lead-note-actions">
-                        {telemarketerNoteForm.errors.body && (
-                          <em>{telemarketerNoteForm.errors.body}</em>
-                        )}
-                        <button
-                          type="button"
-                          disabled={
-                            isDispatchNoteLocked("telemarketer") ||
-                            telemarketerNoteForm.processing ||
-                            !telemarketerNoteForm.data.body.trim() ||
-                            telemarketerNoteForm.data.body.trim() ===
-                              loadedTelemarketerNote.trim()
-                          }
-                          onClick={saveTelemarketerNote}
-                        >
-                          <Save />
-                          {telemarketerNoteForm.processing
-                            ? "Saving…"
-                            : "Save note"}
-                        </button>
-                      </div>
-                    </article>
-                    <article
-                      className={`lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--confirmation ${
-                        isDispatchNoteLocked("confirmation")
-                          ? "is-note-locked"
-                          : ""
-                      }`}
-                    >
-                      <div className="lead-note-heading">
-                        <h3>Confirmation notes</h3>
-                        {isDispatchNoteLocked("confirmation") && (
-                          <span className="lead-note-locked-badge">
-                            <LockKeyhole /> Locked
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setExpandedNoteType("confirmation")}
-                          title="Open large note editor"
-                        >
-                          <Maximize2 /> Expand
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setHistoryType("confirmation")}
-                        >
-                          <History />
-                          History <span>{confirmationHistory.length}</span>
-                        </button>
-                      </div>
-                      <textarea
-                        readOnly={isDispatchNoteLocked("confirmation")}
-                        value={confirmationNoteForm.data.body}
-                        onChange={(event) =>
-                          confirmationNoteForm.setData(
-                            "body",
-                            event.target.value,
-                          )
-                        }
-                        placeholder="Type a new confirmation note…"
-                      />
-                      <div className="lead-note-actions">
-                        {confirmationNoteForm.errors.body && (
-                          <em>{confirmationNoteForm.errors.body}</em>
-                        )}
-                        <button
-                          type="button"
-                          disabled={
-                            isDispatchNoteLocked("confirmation") ||
-                            confirmationNoteForm.processing ||
-                            !confirmationNoteForm.data.body.trim() ||
-                            confirmationNoteForm.data.body.trim() ===
-                              loadedConfirmationNote.trim()
-                          }
-                          onClick={saveConfirmationNote}
-                        >
-                          <Save />
-                          {confirmationNoteForm.processing
-                            ? "Saving…"
-                            : "Save note"}
-                        </button>
-                      </div>
-                    </article>
-                    {[
-                      "dispatched",
-                      "rehash",
-                      "555",
-                      "la",
-                      "his",
-                      "kit",
-                    ].includes(queue?.status ?? "") && (
-                      <>
-                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--dispatch">
-                          <div className="lead-note-heading">
-                            <h3>Dispatch notes</h3>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedNoteType("dispatch")}
-                              title="Open large note editor"
-                            >
-                              <Maximize2 /> Expand
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setHistoryType("dispatch")}
-                            >
-                              <History /> History{" "}
-                              <span>{dispatchHistory.length}</span>
-                            </button>
-                          </div>
-                          <textarea
-                            value={dispatchNoteForm.data.body}
-                            onChange={(event) =>
-                              dispatchNoteForm.setData(
-                                "body",
-                                event.target.value,
-                              )
-                            }
-                            placeholder="Type a new dispatch note…"
-                          />
-                          <div className="lead-note-actions">
-                            <button
-                              type="button"
-                              disabled={
-                                dispatchNoteForm.processing ||
-                                !dispatchNoteForm.data.body.trim() ||
-                                dispatchNoteForm.data.body.trim() ===
-                                  loadedDispatchNote.trim()
-                              }
-                              onClick={saveDispatchNote}
-                            >
-                              <Save /> Save note
-                            </button>
-                          </div>
-                        </article>
-                        {queue?.status === "dispatched" && (
-                          <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result is-note-locked">
-                            <div className="lead-note-heading">
-                              <h3>Appointment result notes</h3>
-                              <span className="lead-note-locked-badge">
-                                <LockKeyhole /> Locked
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setExpandedNoteType("appointment_result")
-                                }
-                                title="Open large note editor"
-                              >
-                                <Maximize2 /> Expand
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setHistoryType("appointment_result")
-                                }
-                              >
-                                <History /> History{" "}
-                                <span>{appointmentResultHistory.length}</span>
-                              </button>
-                            </div>
-                            <textarea
-                              readOnly={isDispatchNoteLocked(
-                                "appointment_result",
-                              )}
-                              value={appointmentResultNoteForm.data.body}
-                              onChange={(event) =>
-                                appointmentResultNoteForm.setData(
-                                  "body",
-                                  event.target.value,
-                                )
-                              }
-                              placeholder="Type a new appointment result note…"
-                            />
-                            <div className="lead-note-actions">
-                              <button
-                                type="button"
-                                disabled={
-                                  isDispatchNoteLocked("appointment_result") ||
-                                  appointmentResultNoteForm.processing ||
-                                  !appointmentResultNoteForm.data.body.trim() ||
-                                  appointmentResultNoteForm.data.body.trim() ===
-                                    loadedAppointmentResultNote.trim()
-                                }
-                                onClick={saveAppointmentResultNote}
-                              >
-                                <Save /> Save note
-                              </button>
-                            </div>
-                          </article>
-                        )}
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      className="lead-card-resize-handle lead-card-resize-handle--column"
-                      aria-label="Resize the information card columns"
-                      title="Drag to resize left and right cards"
-                      onPointerDown={(event) =>
-                        resizeLeadCards("horizontal", event)
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="lead-card-resize-handle lead-card-resize-handle--row"
-                      aria-label="Resize the information and notes rows"
-                      title="Drag to resize information and notes cards"
-                      onPointerDown={(event) =>
-                        resizeLeadCards("vertical", event)
-                      }
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <BlankLeadDetail queueStatus={queue?.status} />
-            )}
-            <div className="lead-workflow-actions">
-              {workflowActions.map(([status, label, Icon, tone]) => (
-                <button
-                  type="button"
-                  key={status}
-                  className={`lead-workflow-action lead-workflow-action--${tone} ${selected?.status === status ? "is-active" : ""}`}
-                  disabled={
-                    !selected ||
-                    isEditing ||
-                    (status !== "history" && selected?.status === status)
-                  }
-                  onClick={() =>
-                    status === "history"
-                      ? setHistoryType("all")
-                      : status === "sale"
-                        ? openSaleModal()
-                        : updateLeadStatus(status)
-                  }
-                >
-                  <Icon /> {label}
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        {expandedNoteType && expandedNote && selected && (
-          <div
-            className="lead-note-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-expanded-note-title"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
-                setExpandedNoteType(null);
-              }
-            }}
-          >
-            <section
-              className={`lead-note-modal__card lead-expanded-note ${
-                expandedNoteLocked ? "is-note-locked" : ""
-              }`}
-            >
-              <header>
-                <div>
-                  <span>
-                    <Maximize2 />
-                  </span>
-                  <div>
-                    <h2 id="lead-expanded-note-title">{expandedNote.title}</h2>
-                    {expandedNoteLocked && (
-                      <span className="lead-note-locked-badge">
-                        <LockKeyhole /> Locked
-                      </span>
-                    )}
-                    <p>
-                      {selected.customer_name} · Lead #{selected.id}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setExpandedNoteType(null)}
-                  aria-label="Close large note editor"
-                >
-                  <X />
-                </button>
-              </header>
-              <div className="lead-expanded-note__editor">
-                <textarea
-                  autoFocus
-                  readOnly={expandedNoteLocked}
-                  value={expandedNote.value}
-                  onChange={(event) =>
-                    expandedNote.setValue(event.target.value)
-                  }
-                  placeholder={`Write ${expandedNote.title.toLowerCase()}…`}
-                />
-                {expandedNote.error && <em>{expandedNote.error}</em>}
-              </div>
-              <footer className="lead-expanded-note__actions">
-                <button type="button" onClick={() => setExpandedNoteType(null)}>
-                  Close
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    expandedNoteLocked ||
-                    expandedNote.processing ||
-                    !expandedNote.value.trim() ||
-                    expandedNote.unchanged
-                  }
-                  onClick={() => expandedNote.save()}
-                >
-                  <Save />
-                  {expandedNote.processing ? "Saving…" : "Save note"}
-                </button>
-              </footer>
-            </section>
-          </div>
-        )}
-
-        {saleModalOpen && selected && (
-          <div
-            className="lead-note-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-sale-title"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
+        saleForm.post(`/lead-workflow/leads-shop/${selected.id}/sale`, {
+            preserveScroll: true,
+            onSuccess: () => {
                 setSaleModalOpen(false);
-              }
-            }}
-          >
-            <section className="lead-note-modal__card lead-sale-modal__card">
-              <header>
-                <div>
-                  <span>
-                    <CircleDollarSign />
-                  </span>
-                  <div>
-                    <h2 id="lead-sale-title">Accept sale</h2>
-                    <p>Create a project for {selected.customer_name}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSaleModalOpen(false)}
-                  aria-label="Close sale modal"
-                >
-                  <X />
-                </button>
-              </header>
+                saleForm.reset();
+                setSelectedId(null);
+                router.flushAll();
+            },
+        });
+    };
 
-              <form className="lead-sale-modal__form" onSubmit={acceptSale}>
-                <div className="lead-sale-modal__summary">
-                  <span>Assigned salesman</span>
-                  <strong>
-                    {[
-                      selected.salesman_one?.salesman_name,
-                      selected.salesman_two?.salesman_name,
-                    ]
-                      .filter(Boolean)
-                      .join(" & ")}
-                  </strong>
-                </div>
+    const saveSalesman = (field: 'salesman_1_id' | 'salesman_2_id') => {
+        if (!selected) {
+            return;
+        }
 
-                <label>
-                  <span>Sale amount</span>
-                  <div className="lead-sale-modal__amount">
-                    <strong>$</strong>
-                    <input
-                      type="number"
-                      min="0.01"
-                      max="9999999999.99"
-                      step="0.01"
-                      inputMode="decimal"
-                      value={saleForm.data.amount}
-                      onChange={(event) =>
-                        saleForm.setData("amount", event.target.value)
-                      }
-                      placeholder="0.00"
-                      autoFocus
-                    />
-                  </div>
-                  {saleForm.errors.amount && (
-                    <small>{saleForm.errors.amount}</small>
-                  )}
-                  {saleForm.errors.salesman && (
-                    <small>{saleForm.errors.salesman}</small>
-                  )}
-                </label>
+        setSavingAssignment(
+            field === 'salesman_1_id' ? 'salesman_1' : 'salesman_2',
+        );
 
-                <div className="lead-sale-modal__actions">
-                  <button type="button" onClick={() => setSaleModalOpen(false)}>
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saleForm.processing || !saleForm.data.amount}
-                  >
-                    <CircleDollarSign />
-                    {saleForm.processing ? "Creating project…" : "Accept sale"}
-                  </button>
-                </div>
-              </form>
-            </section>
-          </div>
-        )}
+        router.patch(
+            `/lead-workflow/leads-shop/${selected.id}/salesmen`,
+            {
+                salesman_1_id: salesmanOneDraft || null,
+                salesman_2_id: salesmanTwoDraft || null,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => router.flushAll(),
+                onFinish: () => setSavingAssignment(null),
+            },
+        );
+    };
 
-        {recordingsOpen && selected && (
-          <div
-            className="lead-note-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-recordings-title"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
-                setRecordingsOpen(false);
-              }
-            }}
-          >
-            <section className="lead-note-modal__card lead-recordings-modal">
-              <header>
-                <div>
-                  <span>
-                    <Headphones />
-                  </span>
-                  <div>
-                    <h2 id="lead-recordings-title">Calls & recordings</h2>
-                    <p>
-                      {selected.customer_name} · Lead #{selected.id}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setRecordingsOpen(false)}
-                  aria-label="Close recordings"
-                >
-                  <X />
-                </button>
-              </header>
-              <div className="lead-recordings-summary">
-                <strong>
-                  {(selected.ring_central_calls?.length ?? 0) +
-                    (newCallAttempts[selected.id] ?? 0)}{" "}
-                  call attempts
-                </strong>
-                <span>
-                  {selected.ring_central_calls?.filter(
-                    (call) => call.recording_path,
-                  ).length ?? 0}{" "}
-                  recordings available
-                </span>
-              </div>
-              <div className="lead-recordings-list">
-                {(selected.ring_central_calls ?? []).map((call) => (
-                  <article key={call.id}>
-                    <div className="lead-recordings-list__details">
-                      <strong>{call.caller?.username ?? "Unknown user"}</strong>
-                      <span>{call.phone_number}</span>
-                      <time>
-                        {formatDate(call.started_at ?? call.initiated_at)}
-                      </time>
-                    </div>
-                    <div className="lead-recordings-list__status">
-                      <b>{call.result ?? "Waiting for RingCentral"}</b>
-                      <span>
-                        {Math.floor(call.duration_seconds / 60)}:
-                        {String(call.duration_seconds % 60).padStart(2, "0")}
-                      </span>
-                    </div>
-                    {call.recording_path ? (
-                      <audio
-                        controls
-                        preload="none"
-                        src={`/lead-workflow/leads-shop/${selected.id}/ringcentral-calls/${call.id}/recording`}
-                      />
-                    ) : (
-                      <small>
-                        {call.result
-                          ? "No recording is available for this call."
-                          : "The call result is being synchronized."}
-                      </small>
-                    )}
-                  </article>
-                ))}
-                {(selected.ring_central_calls ?? []).length === 0 && (
-                  <div className="lead-note-history__empty">
-                    <Headphones />
-                    <strong>No calls recorded yet</strong>
-                    <span>Calls launched from this lead will appear here.</span>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
+    const saveAppointmentDate = () => {
+        if (!selected) {
+            return;
+        }
 
-        {historyType && selected && (
-          <div
-            className="lead-note-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-note-history-title"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
-                setHistoryType(null);
-              }
-            }}
-          >
-            <section
-              className={`lead-note-modal__card lead-note-modal__card--history ${historyType === "all" ? "lead-note-modal__card--activity-history" : "lead-note-modal__card--notes-history"}`}
+        setSavingAssignment('appointment_date');
+
+        router.patch(
+            `/lead-workflow/leads-shop/${selected.id}/appointment`,
+            { appointment_at: appointmentDateDraft || null },
+            {
+                preserveScroll: true,
+                onSuccess: () => router.flushAll(),
+                onError: (errors) =>
+                    notify({
+                        tone: 'error',
+                        message: String(
+                            errors.appointment_at ??
+                                'The appointment could not be updated.',
+                        ),
+                    }),
+                onFinish: () => setSavingAssignment(null),
+            },
+        );
+    };
+    const saveAppointmentResult = () => {
+        if (!selected) {
+            return;
+        }
+
+        setSavingAssignment('appointment');
+
+        router.patch(
+            `/lead-workflow/leads-shop/${selected.id}/appointment-result`,
+            { appointment_result: appointmentResultDraft || null },
+            {
+                preserveScroll: true,
+                onSuccess: () => router.flushAll(),
+                onFinish: () => setSavingAssignment(null),
+            },
+        );
+    };
+
+    const telemarketerHistory =
+        selected?.notes.filter((note) => note.note_type === 'telemarketer') ??
+        [];
+    const confirmationHistory =
+        selected?.notes.filter((note) => note.note_type === 'confirmation') ??
+        [];
+    const dispatchHistory =
+        selected?.notes.filter((note) => note.note_type === 'dispatch') ?? [];
+    const appointmentResultHistory =
+        selected?.notes.filter(
+            (note) => note.note_type === 'appointment_result',
+        ) ?? [];
+    const isDispatchNoteLocked = (noteType: EditableNoteType) =>
+        noteType === 'telemarketer' ||
+        (queue?.status === 'dispatched' && noteType === 'confirmation');
+    const expandedNoteLocked = expandedNoteType
+        ? isDispatchNoteLocked(expandedNoteType)
+        : false;
+    const expandedNote = expandedNoteType
+        ? {
+              telemarketer: {
+                  title: 'Telemarketer notes',
+                  value: telemarketerNoteForm.data.body,
+                  setValue: (value: string) =>
+                      telemarketerNoteForm.setData('body', value),
+                  save: saveTelemarketerNote,
+                  processing: telemarketerNoteForm.processing,
+                  unchanged:
+                      telemarketerNoteForm.data.body.trim() ===
+                      loadedTelemarketerNote.trim(),
+                  error: telemarketerNoteForm.errors.body,
+              },
+              confirmation: {
+                  title: 'Confirmation notes',
+                  value: confirmationNoteForm.data.body,
+                  setValue: (value: string) =>
+                      confirmationNoteForm.setData('body', value),
+                  save: saveConfirmationNote,
+                  processing: confirmationNoteForm.processing,
+                  unchanged:
+                      confirmationNoteForm.data.body.trim() ===
+                      loadedConfirmationNote.trim(),
+                  error: confirmationNoteForm.errors.body,
+              },
+              dispatch: {
+                  title: 'Dispatch notes',
+                  value: dispatchNoteForm.data.body,
+                  setValue: (value: string) =>
+                      dispatchNoteForm.setData('body', value),
+                  save: saveDispatchNote,
+                  processing: dispatchNoteForm.processing,
+                  unchanged:
+                      dispatchNoteForm.data.body.trim() ===
+                      loadedDispatchNote.trim(),
+                  error: dispatchNoteForm.errors.body,
+              },
+              appointment_result: {
+                  title: 'Appointment result notes',
+                  value: appointmentResultNoteForm.data.body,
+                  setValue: (value: string) =>
+                      appointmentResultNoteForm.setData('body', value),
+                  save: saveAppointmentResultNote,
+                  processing: appointmentResultNoteForm.processing,
+                  unchanged:
+                      appointmentResultNoteForm.data.body.trim() ===
+                      loadedAppointmentResultNote.trim(),
+                  error: appointmentResultNoteForm.errors.body,
+              },
+          }[expandedNoteType]
+        : null;
+    const expandedLatestNote = expandedNoteType
+        ? latestLeadNote(selected, expandedNoteType)
+        : null;
+    const displayedHistory =
+        historyType === 'all'
+            ? (selected?.notes ?? [])
+            : (selected?.notes.filter(
+                  (note) => note.note_type === historyType,
+              ) ?? []);
+    const displayedTimeline = useMemo(() => {
+        if (historyType !== 'all' || !selected) {
+            return displayedHistory.map((note) => ({
+                kind: 'note' as const,
+                id: note.id,
+                created_at: note.created_at,
+                note,
+            }));
+        }
+
+        return [
+            ...(selected.movements ?? []).map((movement) => ({
+                kind: 'movement' as const,
+                id: movement.id,
+                created_at: movement.created_at,
+                movement,
+            })),
+            ...displayedHistory.map((note) => ({
+                kind: 'note' as const,
+                id: note.id,
+                created_at: note.created_at,
+                note,
+            })),
+        ].sort(
+            (first, second) =>
+                new Date(second.created_at).getTime() -
+                new Date(first.created_at).getTime(),
+        );
+    }, [displayedHistory, historyType, selected]);
+
+    const defaultWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['555', '555', Phone, '555'],
+        ['kit', 'KIT', MessageCircle, 'kit'],
+        ['raw', 'Raw', Archive, 'raw'],
+        ['cb', 'Call Back', PhoneCall, 'callback'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const confirmWorkflowActions = [
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['555', '555', Phone, '555'],
+        ['toss', 'TOSS', Trash2, 'toss'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const dispatchWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['kit', 'Keep in Touch', MessageCircle, 'callback'],
+        ['rehash', 'Rehash', RotateCcw, 'toss'],
+        ['555', '555', Phone, '555'],
+        ['sale', 'Sale', CircleDollarSign, 'confirm'],
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['toss', 'TOSS', Trash2, 'toss'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const rescheduleWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const rehashWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['rehash_ng', 'NG', Ban, 'raw'],
+        ['rehash_toss', 'TOSS', Trash2, 'toss'],
+        ['rehash_cb', 'Call Back', PhoneCall, 'callback'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const fiveFiveFiveWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const hisWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['la', 'LA', MapPin, '555'],
+        ['555', '555', Phone, '555'],
+        ['kit', 'KIT', MessageCircle, 'kit'],
+        ['raw', 'Raw', Archive, 'raw'],
+        ['cb', 'Call Back', PhoneCall, 'callback'],
+        ['naov', 'NAOV', Ban, 'naov'],
+        ['toss', 'TOSS', Trash2, 'toss'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const keepInTouchWorkflowActions = [
+        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
+        ['dispatched', 'Dispatch', Truck, 'dispatch'],
+    ] as const;
+    const workflowActions =
+        queue?.status === 'confirmed'
+            ? confirmWorkflowActions
+            : queue?.status === 'dispatched'
+              ? dispatchWorkflowActions
+              : queue?.status === 'reschedule'
+                ? rescheduleWorkflowActions
+                : queue?.status === 'rehash'
+                  ? rehashWorkflowActions
+                  : ['555', 'la'].includes(queue?.status ?? '')
+                    ? fiveFiveFiveWorkflowActions
+                    : queue?.status === 'his'
+                      ? hisWorkflowActions
+                      : queue?.status === 'kit'
+                        ? keepInTouchWorkflowActions
+                        : defaultWorkflowActions;
+    const headerIcon =
+        queue?.status === 'confirmed' ? (
+            <CheckCircle2 />
+        ) : queue?.status === 'dispatched' ? (
+            <Truck />
+        ) : queue?.status === 'reschedule' ? (
+            <CalendarClock />
+        ) : queue?.status === 'rehash' ? (
+            <RotateCcw />
+        ) : queue?.status === '555' ? (
+            <PhoneCall />
+        ) : queue?.status === 'la' ? (
+            <MapPin />
+        ) : queue?.status === 'his' ? (
+            <Building2 />
+        ) : queue?.status === 'kit' ? (
+            <Clock3 />
+        ) : (
+            <ShoppingBag />
+        );
+
+    return (
+        <>
+            <Head title={queue?.title ?? 'Leads Shop'} />
+            <main
+                className={`leads-shop-page leads-shop-page--${queue?.status ?? 'shop'} ${queue?.status === 'his' ? 'leads-shop-page--his' : ''}`}
             >
-              <header>
-                <div>
-                  <span>
-                    <History />
-                  </span>
-                  <div>
-                    <h2 id="lead-note-history-title">
-                      {historyType === "all"
-                        ? "Lead activity history"
-                        : historyType === "confirmation"
-                          ? "Confirmation note history"
-                          : historyType === "dispatch"
-                            ? "Dispatch note history"
-                            : historyType === "appointment_result"
-                              ? "Appointment result note history"
-                              : "Telemarketer note history"}
-                    </h2>
-                    <p>
-                      {selected.customer_name} · Lead #{selected.id}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setHistoryType(null)}
-                  aria-label="Close note history"
+                <header
+                    className={`leads-shop-header ${!queue ? 'leads-shop-header--with-day-counts' : ''}`}
                 >
-                  <X />
-                </button>
-              </header>
-              <div className="lead-note-history">
-                {displayedTimeline.map((entry) =>
-                  entry.kind === "movement" ? (
-                    <article
-                      key={`movement-${entry.id}`}
-                      className="lead-note-history__movement"
-                    >
-                      <div>
-                        <strong>
-                          {entry.movement.mover?.username ?? "System"}
-                        </strong>
-                        <time>{formatDate(entry.movement.created_at)}</time>
-                      </div>
-                      <span className="lead-movement-label">Lead moved</span>
-                      <p>
-                        <b>{workflowLocation(entry.movement.from_status)}</b>
-                        <span aria-hidden="true"> → </span>
-                        <b>{workflowLocation(entry.movement.to_status)}</b>
-                      </p>
-                    </article>
-                  ) : (
-                    <article key={`note-${entry.id}`}>
-                      <div>
-                        <strong>
-                          {entry.note.creator?.username ?? "Unknown user"}
-                        </strong>
-                        <time>{formatDate(entry.note.created_at)}</time>
-                      </div>
-                      <span
-                        className={`lead-history-event-label${entry.note.note_type === "salesman_sent" ? "lead-history-event-label--salesman" : ""}`}
-                      >
-                        {historyNoteLabel(entry.note.note_type)}
-                      </span>
-                      <p>{entry.note.body}</p>
-                    </article>
-                  ),
-                )}
-                {displayedTimeline.length === 0 && (
-                  <div className="lead-note-history__empty">
-                    <History />
-                    <strong>No history yet</strong>
-                    <span>
-                      {historyType === "all"
-                        ? "Lead movements will appear here."
-                        : "Saved notes will appear here."}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {smsTemplateOpen && selected && (
-          <div
-            className="lead-note-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="lead-sms-template-title"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
-                setSmsTemplateOpen(false);
-              }
-            }}
-          >
-            <section className="lead-note-modal__card lead-sms-template">
-              <header>
-                <div>
-                  <span>
-                    <MessageCircle />
-                  </span>
-                  <div>
-                    <h2 id="lead-sms-template-title">Copy lead message</h2>
-                    <p>
-                      Choose the information to include for{" "}
-                      {selected.customer_name}.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSmsTemplateOpen(false)}
-                  aria-label="Close SMS template"
-                >
-                  <X />
-                </button>
-              </header>
-              <div className="lead-sms-template__body">
-                <div className="lead-sms-template__choices">
-                  <div className="lead-sms-template__select-actions">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSmsTemplateFields(
-                          smsTemplateSections.map((section) => section.key),
-                        )
-                      }
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSmsTemplateFields([])}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  {smsTemplateSections.map((section) => (
-                    <label key={section.key}>
-                      <input
-                        type="checkbox"
-                        checked={smsTemplateFields.includes(section.key)}
-                        onChange={() =>
-                          setSmsTemplateFields((current) =>
-                            current.includes(section.key)
-                              ? current.filter((key) => key !== section.key)
-                              : [...current, section.key],
-                          )
-                        }
-                      />
-                      <span>
-                        <strong>{section.label}</strong>
-                        <small>{section.value}</small>
-                      </span>
+                    <div className="leads-shop-header__identity">
+                        <span className="leads-shop-header__icon">
+                            {headerIcon}
+                        </span>
+                        <div>
+                            <div className="leads-shop-header__title">
+                                <h1>{queue?.title ?? 'Leads Shop'}</h1>
+                                <strong>
+                                    {queue ? queueTotal : createdDayTotal}
+                                </strong>
+                            </div>
+                            <p>
+                                {queue?.description ??
+                                    'Browse and manage freshly imported leads.'}
+                            </p>
+                        </div>
+                    </div>
+                    {!queue && (
+                        <div className="leads-shop-header__day-counts">
+                            <span>
+                                <small>Total for day</small>
+                                <strong>{createdDayTotal}</strong>
+                            </span>
+                            <span>
+                                <small>Confirm</small>
+                                <strong>{confirmedDayTotal}</strong>
+                            </span>
+                            <span>
+                                <small>Dispatch</small>
+                                <strong>{dispatchedDayTotal}</strong>
+                            </span>
+                            <span>
+                                <small>Other</small>
+                                <strong>{otherDayTotal}</strong>
+                            </span>
+                        </div>
+                    )}
+                    <label className="leads-shop-search">
+                        <Search />
+                        <input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Search by customer, city, company, product, or agent"
+                        />
+                        {search && (
+                            <button
+                                type="button"
+                                onClick={() => setSearch('')}
+                                aria-label="Clear search"
+                            >
+                                <X />
+                            </button>
+                        )}
                     </label>
-                  ))}
+                </header>
+
+                <div className="leads-shop-workspace">
+                    <aside className="lead-dates">
+                        <div className="lead-dates__header">
+                            <div>
+                                <h2>{queue?.dateLabel ?? 'Last 30 days'}</h2>
+                                <p>
+                                    Filter by{' '}
+                                    {effectiveDateField === 'appointment_at'
+                                        ? 'appointment date'
+                                        : 'created date'}
+                                </p>
+                            </div>
+                            <CalendarClock />
+                        </div>
+                        {!queue && (
+                            <label className="lead-dates__basis">
+                                <span>Date based on</span>
+                                <select
+                                    value={dateField}
+                                    onChange={(event) => {
+                                        const nextField = event.target
+                                            .value as DateField;
+                                        setDateField(nextField);
+                                        router.get(
+                                            window.location.pathname,
+                                            {
+                                                date_field: nextField,
+                                            },
+                                            {
+                                                preserveState: true,
+                                                preserveScroll: true,
+                                                replace: true,
+                                            },
+                                        );
+                                    }}
+                                >
+                                    <option value="created_at">
+                                        Lead created
+                                    </option>
+                                    <option value="appointment_at">
+                                        Appointment date
+                                    </option>
+                                </select>
+                            </label>
+                        )}
+                        <div
+                            className={`lead-dates__columns${dateGranularity === 'month' ? ' lead-dates__columns--months' : ''}`}
+                        >
+                            <span>
+                                {dateGranularity === 'month' ? 'Month' : 'Date'}
+                            </span>
+                            {dateGranularity === 'day' && <span>Day</span>}
+                            <span>Count</span>
+                        </div>
+                        <div className="lead-dates__list">
+                            {availableDateRows.map((day) => (
+                                <button
+                                    type="button"
+                                    key={day.key}
+                                    className={
+                                        selectedDate === day.key
+                                            ? `lead-date-row lead-date-row--active${dateGranularity === 'month' ? ' lead-date-row--months' : ''}`
+                                            : `lead-date-row${dateGranularity === 'month' ? ' lead-date-row--months' : ''}`
+                                    }
+                                    onClick={() => openDate(day.key)}
+                                >
+                                    <span>{day.date}</span>
+                                    {dateGranularity === 'day' && (
+                                        <span>{day.day}</span>
+                                    )}
+                                    <strong>{day.count}</strong>
+                                </button>
+                            ))}
+                            {availableDateRows.length === 0 && (
+                                <div className="lead-dates__empty">
+                                    {effectiveDateField === 'appointment_at'
+                                        ? `No appointment ${dateGranularity === 'month' ? 'months' : 'dates'} in this queue.`
+                                        : 'No leads in the last 30 days.'}
+                                </div>
+                            )}
+                        </div>
+                    </aside>
+
+                    <section className="lead-browser">
+                        <div className="lead-browser__header">
+                            <div>
+                                <h2>
+                                    {queue?.listTitle ?? 'Fresh leads'}
+                                    {!queue && (
+                                        <span className="lead-browser__created-total">
+                                            {createdDayTotal} created
+                                        </span>
+                                    )}
+                                </h2>
+                                <p>
+                                    {filteredLeads.length}{' '}
+                                    {cityFilter !== 'all'
+                                        ? `shown in ${formatCity(cityFilter)}`
+                                        : `shown for the selected ${dateGranularity === 'month' ? 'month' : 'date'}`}
+                                </p>
+                            </div>
+                            <span>Newest first</span>
+                        </div>
+                        <div className="lead-browser-filters">
+                            <div className="lead-status-filters">
+                                {isKeepInTouchQueue ? (
+                                    <>
+                                        {canViewAllQueueManagers && (
+                                            <button
+                                                type="button"
+                                                className={
+                                                    selectedQueueManager === 'all'
+                                                        ? 'lead-status-filter lead-status-filter--active'
+                                                        : 'lead-status-filter'
+                                                }
+                                                onClick={() =>
+                                                    router.get(
+                                                        window.location.pathname,
+                                                        {
+                                                            date: selectedDate,
+                                                            date_field: effectiveDateField,
+                                                        },
+                                                        {
+                                                            preserveState: true,
+                                                            preserveScroll: true,
+                                                            replace: true,
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                All managers
+                                                <span>{queueTotal}</span>
+                                            </button>
+                                        )}
+                                        {queueManagers.map((manager) => (
+                                            <button
+                                                type="button"
+                                                key={manager.id}
+                                                className={
+                                                    selectedQueueManager === manager.id
+                                                        ? 'lead-status-filter lead-status-filter--active'
+                                                        : 'lead-status-filter'
+                                                }
+                                                onClick={() =>
+                                                    router.get(
+                                                        window.location.pathname,
+                                                        {
+                                                            date: selectedDate,
+                                                            date_field: effectiveDateField,
+                                                            manager: manager.id,
+                                                        },
+                                                        {
+                                                            preserveState: true,
+                                                            preserveScroll: true,
+                                                            replace: true,
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                {manager.name}
+                                                <span>{manager.count}</span>
+                                            </button>
+                                        ))}
+                                    </>
+                                ) : (
+                                    statusFilters.map(([status, label]) => (
+                                        <button
+                                            type="button"
+                                            key={status}
+                                            className={
+                                                selectedStatus === status
+                                                    ? 'lead-status-filter lead-status-filter--active'
+                                                    : 'lead-status-filter'
+                                            }
+                                            onClick={() =>
+                                                setSelectedStatus(status)
+                                            }
+                                        >
+                                            {label}
+                                            <span>{statusCounts[status] ?? 0}</span>
+                                        </button>
+                                    ))
+                                )}
+                                <button
+                                    type="button"
+                                    className={`lead-filter-reset${isRefreshing ? 'lead-filter-reset--loading' : ''}`}
+                                    onClick={clearListFilters}
+                                    disabled={isRefreshing}
+                                    aria-label="Refresh leads and reset filters"
+                                    title="Refresh leads and reset filters"
+                                >
+                                    <RotateCcw />
+                                </button>
+                            </div>
+                            <div className="lead-dropdown-filters">
+                                <label>
+                                    <Building2 />
+                                    <select
+                                        value={companyFilter}
+                                        onChange={(event) =>
+                                            setCompanyFilter(event.target.value)
+                                        }
+                                    >
+                                        <option value="all">
+                                            All companies
+                                        </option>
+                                        {filterOptions.companies.map(
+                                            ([id, name]) => (
+                                                <option key={id} value={id}>
+                                                    {name}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </label>
+                                <label>
+                                    <SlidersHorizontal />
+                                    <select
+                                        value={sourceFilter}
+                                        onChange={(event) =>
+                                            setSourceFilter(event.target.value)
+                                        }
+                                    >
+                                        <option value="all">All sources</option>
+                                        {filterOptions.sources.map((source) => (
+                                            <option key={source}>
+                                                {source}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label>
+                                    <MapPin />
+                                    <select
+                                        value={cityFilter}
+                                        onChange={(event) =>
+                                            filterByCity(event.target.value)
+                                        }
+                                    >
+                                        <option value="all">All cities</option>
+                                        {filterOptions.cities.map((city) => (
+                                            <option key={city} value={city}>
+                                                {formatCity(city)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label>
+                                    <Package />
+                                    <select
+                                        value={productFilter}
+                                        onChange={(event) =>
+                                            setProductFilter(event.target.value)
+                                        }
+                                    >
+                                        <option value="all">
+                                            All products
+                                        </option>
+                                        {filterOptions.products.map(
+                                            ([id, name]) => (
+                                                <option key={id} value={id}>
+                                                    {name}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </label>
+                                <label>
+                                    <UserRound />
+                                    <select
+                                        value={agentFilter}
+                                        onChange={(event) =>
+                                            setAgentFilter(event.target.value)
+                                        }
+                                    >
+                                        <option value="all">All agents</option>
+                                        {filterOptions.hasUnassignedAgents && (
+                                            <option value="unassigned">
+                                                Unassigned
+                                            </option>
+                                        )}
+                                        {filterOptions.agents.map(
+                                            ([id, name]) => (
+                                                <option key={id} value={id}>
+                                                    {name}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div
+                            className={`lead-browser__columns ${queue?.status === 'dispatched' ? 'lead-browser__columns--with-do' : ''}`}
+                        >
+                            <span>Customer</span>
+                            <span>City</span>
+                            <span>Appointment</span>
+                            {queue?.status === 'dispatched' && (
+                                <span className="lead-browser__do-heading">
+                                    DO
+                                </span>
+                            )}
+                            <span className="lead-browser__attempts-heading">
+                                Attempts
+                            </span>
+                        </div>
+                        <div className="lead-browser__list">
+                            {filteredLeads.map((lead) => (
+                                <button
+                                    type="button"
+                                    key={lead.id}
+                                    className={[
+                                        'lead-browser-row',
+                                        queue?.status === 'dispatched'
+                                            ? 'lead-browser-row--with-do'
+                                            : '',
+                                        selectedId === lead.id
+                                            ? 'lead-browser-row--active'
+                                            : '',
+                                        isInstantAppointment(lead)
+                                            ? 'lead-browser-row--instant'
+                                            : '',
+                                        queue?.status === 'confirmed' &&
+                                        isUrgentConfirmLead(lead)
+                                            ? 'lead-browser-row--confirm-urgent'
+                                            : '',
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ')}
+                                    onClick={() => selectLead(lead)}
+                                >
+                                    <span>
+                                        <span className="lead-browser-row__name">
+                                            <strong>
+                                                {lead.customer_name}
+                                            </strong>
+                                            {isInstantAppointment(lead) && (
+                                                <span className="lead-browser-row__instant-badge">
+                                                    Instant
+                                                </span>
+                                            )}
+                                            {queue?.status === 'confirmed' &&
+                                                isUrgentConfirmLead(lead) && (
+                                                    <span className="lead-browser-row__urgent-badge">
+                                                        Due soon
+                                                    </span>
+                                                )}
+                                        </span>
+                                        <small>
+                                            {lead.product?.product_name ??
+                                                'No product'}
+                                        </small>
+                                    </span>
+                                    <span>{formatCity(lead.city)}</span>
+                                    <span>
+                                        {lead.appointment_at
+                                            ? formatAppointmentDate(
+                                                  lead.appointment_at,
+                                              )
+                                            : 'No appointment'}
+                                    </span>
+                                    {queue?.status === 'dispatched' && (
+                                        <span
+                                            className={`lead-browser-row__do ${lead.salesman_one || lead.salesman_two ? 'is-op' : 'is-di'}`}
+                                            title={
+                                                lead.salesman_one ||
+                                                lead.salesman_two
+                                                    ? 'Salesman assigned'
+                                                    : 'Salesman not sent'
+                                            }
+                                        >
+                                            {lead.salesman_one ||
+                                            lead.salesman_two
+                                                ? 'OP'
+                                                : 'DI'}
+                                        </span>
+                                    )}
+                                    <span className="lead-browser-row__attempts">
+                                        {(lead.ring_central_calls?.length ??
+                                            0) +
+                                            (newCallAttempts[lead.id] ?? 0)}
+                                    </span>
+                                </button>
+                            ))}
+                            {filteredLeads.length === 0 && (
+                                <div className="lead-browser-empty">
+                                    <ShoppingBag />
+                                    <strong>No leads found</strong>
+                                    <span>
+                                        {search
+                                            ? 'Try another search.'
+                                            : 'Create a lead from Lead Card.'}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    <section className="lead-detail">
+                        {selected ? (
+                            <>
+                                <div className="lead-detail__header">
+                                    <div className="lead-detail__identity">
+                                        <span>
+                                            {selected.customer_name
+                                                .charAt(0)
+                                                .toUpperCase()}
+                                        </span>
+                                        <div>
+                                            <small>Lead #{selected.id}</small>
+                                            <div className="lead-detail__name-row">
+                                                <h2>
+                                                    {selected.customer_name}
+                                                </h2>
+                                                <span className="lead-header-source">
+                                                    {selected.source}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="lead-detail__controls">
+                                        <div className="lead-address-actions">
+                                            <button
+                                                type="button"
+                                                className="lead-address-action lead-address-action--recordings"
+                                                onClick={() =>
+                                                    setRecordingsOpen(true)
+                                                }
+                                            >
+                                                <Headphones />
+                                                <span>
+                                                    Call attempts{' '}
+                                                    {(selected
+                                                        .ring_central_calls
+                                                        ?.length ?? 0) +
+                                                        (newCallAttempts[
+                                                            selected.id
+                                                        ] ?? 0)}
+                                                </span>
+                                            </button>
+                                            <a
+                                                className="lead-address-action lead-address-action--zillow"
+                                                href={
+                                                    leadAddressLinks(selected)
+                                                        .zillow
+                                                }
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label={`Search ${leadAddress(selected)} on Zillow`}
+                                                title="Search this address on Zillow"
+                                            >
+                                                <ZillowIcon />
+                                                <span>Zillow</span>
+                                            </a>
+                                            <a
+                                                className="lead-address-action lead-address-action--maps"
+                                                href={
+                                                    leadAddressLinks(selected)
+                                                        .googleMaps
+                                                }
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label={`Open ${leadAddress(selected)} in Google Maps`}
+                                                title="Open this address in Google Maps"
+                                            >
+                                                <GoogleMapsIcon />
+                                                <span>Maps</span>
+                                            </a>
+                                        </div>
+                                        <div>
+                                            <span className="lead-status">
+                                                {selected.status || 'fresh'}
+                                            </span>
+                                            <small className="lead-created">
+                                                Created{' '}
+                                                {formatDate(
+                                                    selected.created_at,
+                                                )}
+                                            </small>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="lead-layout-reset"
+                                            onClick={() =>
+                                                setLeadCardLayout(
+                                                    DEFAULT_LEAD_CARD_LAYOUT,
+                                                )
+                                            }
+                                            title="Reset card sizes"
+                                        >
+                                            <SlidersHorizontal />
+                                            Reset cards
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={
+                                                isEditing
+                                                    ? 'lead-detail-save'
+                                                    : 'lead-detail-edit'
+                                            }
+                                            disabled={form.processing}
+                                            onClick={() =>
+                                                isEditing
+                                                    ? saveLead()
+                                                    : setIsEditing(true)
+                                            }
+                                        >
+                                            {isEditing ? <Save /> : <Pencil />}
+                                            {form.processing
+                                                ? 'Saving…'
+                                                : isEditing
+                                                  ? 'Save'
+                                                  : 'Edit'}
+                                        </button>
+                                        {auth.user.role === 'admin' && (
+                                            <button
+                                                type="button"
+                                                className="lead-detail-delete"
+                                                disabled={isDeleting}
+                                                onClick={deleteSampleLead}
+                                            >
+                                                <Trash2 />
+                                                {isDeleting
+                                                    ? 'Deleting…'
+                                                    : 'Delete sample'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {isEditing ? (
+                                    <div className="lead-edit-grid">
+                                        <label>
+                                            <span>Customer name</span>
+                                            <input
+                                                value={form.data.customer_name}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'customer_name',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.customer_name && (
+                                                <em>
+                                                    {form.errors.customer_name}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Marital status</span>
+                                            <select
+                                                value={form.data.marital_status}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'marital_status',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Select status
+                                                </option>
+                                                <option>Single</option>
+                                                <option>Married</option>
+                                                <option>Divorced</option>
+                                                <option>Widowed</option>
+                                                <option>Other</option>
+                                            </select>
+                                            {form.errors.marital_status && (
+                                                <em>
+                                                    {form.errors.marital_status}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Primary phone</span>
+                                            <div className="lead-edit-phone">
+                                                <input
+                                                    value={
+                                                        form.data.primary_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'primary_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.data.primary_number.trim() && (
+                                                    <RingCentralCallButton
+                                                        leadId={selected.id}
+                                                        phone={
+                                                            form.data
+                                                                .primary_number
+                                                        }
+                                                        phoneSlot="primary"
+                                                        title="Call primary phone with RingCentral"
+                                                    >
+                                                        <PhoneCall />
+                                                    </RingCentralCallButton>
+                                                )}
+                                            </div>
+                                            {form.errors.primary_number && (
+                                                <em>
+                                                    {form.errors.primary_number}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Secondary phone</span>
+                                            <div className="lead-edit-phone">
+                                                <input
+                                                    value={
+                                                        form.data
+                                                            .secondary_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'secondary_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.data.secondary_number.trim() && (
+                                                    <RingCentralCallButton
+                                                        leadId={selected.id}
+                                                        phone={
+                                                            form.data
+                                                                .secondary_number
+                                                        }
+                                                        phoneSlot="secondary"
+                                                        title="Call secondary phone with RingCentral"
+                                                    >
+                                                        <PhoneCall />
+                                                    </RingCentralCallButton>
+                                                )}
+                                            </div>
+                                        </label>
+                                        <label>
+                                            <span>Mobile number</span>
+                                            <div className="lead-edit-phone">
+                                                <input
+                                                    value={
+                                                        form.data.mobile_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'mobile_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.data.mobile_number.trim() && (
+                                                    <RingCentralCallButton
+                                                        leadId={selected.id}
+                                                        phone={
+                                                            form.data
+                                                                .mobile_number
+                                                        }
+                                                        phoneSlot="mobile"
+                                                        title="Call mobile number with RingCentral"
+                                                    >
+                                                        <PhoneCall />
+                                                    </RingCentralCallButton>
+                                                )}
+                                            </div>
+                                        </label>
+                                        <label>
+                                            <span>Email</span>
+                                            <input
+                                                type="email"
+                                                value={form.data.email}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'email',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.email && (
+                                                <em>{form.errors.email}</em>
+                                            )}
+                                        </label>
+                                        <label className="lead-edit-field--wide">
+                                            <span>Address</span>
+                                            <input
+                                                value={form.data.address}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'address',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.address && (
+                                                <em>{form.errors.address}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>City</span>
+                                            <input
+                                                value={form.data.city}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'city',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.city && (
+                                                <em>{form.errors.city}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>State</span>
+                                            <input
+                                                value={form.data.state}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'state',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.state && (
+                                                <em>{form.errors.state}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>ZIP code</span>
+                                            <input
+                                                value={form.data.zip_code}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'zip_code',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.zip_code && (
+                                                <em>{form.errors.zip_code}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Years in house</span>
+                                            <input
+                                                type="number"
+                                                value={form.data.years_in_house}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'years_in_house',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.years_in_house && (
+                                                <em>
+                                                    {form.errors.years_in_house}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>House built</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                placeholder="e.g. 1995"
+                                                value={form.data.house_age}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'house_age',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.house_age && (
+                                                <em>{form.errors.house_age}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Needs financing?</span>
+                                            <select
+                                                value={
+                                                    form.data.needs_financing
+                                                }
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'needs_financing',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Select an answer
+                                                </option>
+                                                <option value="1">Yes</option>
+                                                <option value="0">No</option>
+                                            </select>
+                                            {form.errors.needs_financing && (
+                                                <em>
+                                                    {
+                                                        form.errors
+                                                            .needs_financing
+                                                    }
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>House value</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={form.data.house_value}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'house_value',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.house_value && (
+                                                <em>
+                                                    {form.errors.house_value}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Product</span>
+                                            <select
+                                                value={form.data.product_id}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'product_id',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Select product
+                                                </option>
+                                                {products.map((product) => (
+                                                    <option
+                                                        key={product.prod_id}
+                                                        value={product.prod_id}
+                                                    >
+                                                        {product.product_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {form.errors.product_id && (
+                                                <em>
+                                                    {form.errors.product_id}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Appointment</span>
+                                            <input
+                                                type="datetime-local"
+                                                value={form.data.appointment_at}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'appointment_at',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                            {form.errors.appointment_at && (
+                                                <em>
+                                                    {form.errors.appointment_at}
+                                                </em>
+                                            )}
+                                        </label>
+                                        {queue && (
+                                            <label>
+                                                <span>Appointment result</span>
+                                                <select
+                                                    value={
+                                                        form.data
+                                                            .appointment_result
+                                                    }
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'appointment_result',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                >
+                                                    <option value="">
+                                                        Select result
+                                                    </option>
+                                                    <option value="PNS">
+                                                        PNS
+                                                    </option>
+                                                    <option value="PNS No Rehash">
+                                                        PNS No Rehash
+                                                    </option>
+                                                    <option value="2 ND Meeting">
+                                                        2 ND Meeting
+                                                    </option>
+                                                    <option value="Salesman Sent">
+                                                        Salesman Sent
+                                                    </option>
+                                                    <option value="Sold and Cancel">
+                                                        Sold and Cancel
+                                                    </option>
+                                                </select>
+                                                {form.errors
+                                                    .appointment_result && (
+                                                    <em>
+                                                        {
+                                                            form.errors
+                                                                .appointment_result
+                                                        }
+                                                    </em>
+                                                )}
+                                            </label>
+                                        )}
+                                        <label>
+                                            <span>Company</span>
+                                            <select
+                                                value={form.data.company_id}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'company_id',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Select company
+                                                </option>
+                                                {companies.map((company) => (
+                                                    <option
+                                                        key={company.com_id}
+                                                        value={company.com_id}
+                                                    >
+                                                        {company.company}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {form.errors.company_id && (
+                                                <em>
+                                                    {form.errors.company_id}
+                                                </em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>
+                                                Original agent / reassign
+                                            </span>
+                                            <select
+                                                value={form.data.agent_id}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'agent_id',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Select agent
+                                                </option>
+                                                {agents.map((agent) => (
+                                                    <option
+                                                        key={agent.agent_id}
+                                                        value={agent.agent_id}
+                                                    >
+                                                        {agent.agent_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {form.errors.agent_id && (
+                                                <em>{form.errors.agent_id}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Lead source</span>
+                                            <input value="CallTools" readOnly />
+                                        </label>
+                                        {queue && (
+                                            <>
+                                                <label>
+                                                    <span>Salesman 1</span>
+                                                    <select
+                                                        value={
+                                                            form.data
+                                                                .salesman_1_id
+                                                        }
+                                                        onChange={(event) =>
+                                                            form.setData(
+                                                                'salesman_1_id',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="">
+                                                            Select salesman
+                                                        </option>
+                                                        {salesmen.map(
+                                                            (salesman) => (
+                                                                <option
+                                                                    key={
+                                                                        salesman.salesman_id
+                                                                    }
+                                                                    value={
+                                                                        salesman.salesman_id
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        salesman.salesman_name
+                                                                    }
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    <span>Salesman 2</span>
+                                                    <select
+                                                        value={
+                                                            form.data
+                                                                .salesman_2_id
+                                                        }
+                                                        onChange={(event) =>
+                                                            form.setData(
+                                                                'salesman_2_id',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="">
+                                                            Select salesman
+                                                        </option>
+                                                        {salesmen.map(
+                                                            (salesman) => (
+                                                                <option
+                                                                    key={
+                                                                        salesman.salesman_id
+                                                                    }
+                                                                    value={
+                                                                        salesman.salesman_id
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        salesman.salesman_name
+                                                                    }
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                </label>
+                                            </>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div
+                                        className={`lead-detail__grid ${queue?.status === 'dispatched' ? 'lead-detail__grid--dispatch' : queue?.status && !['fresh', 'raw', 'cb', 'naov'].includes(queue.status) ? 'lead-detail__grid--three-notes' : ''}`}
+                                        ref={detailGridRef}
+                                        style={leadCardLayoutStyle}
+                                    >
+                                        <article className="lead-detail-card lead-detail-card--customer">
+                                            <h3>
+                                                <UserRound />
+                                                Customer information
+                                            </h3>
+                                            <div className="lead-detail-fields">
+                                                <div>
+                                                    <span>Primary phone</span>
+                                                    <div className="lead-phone-value">
+                                                        <strong>
+                                                            <Phone />
+                                                            {formatPhoneNumber(
+                                                                selected.primary_number,
+                                                            )}
+                                                        </strong>
+                                                        {selected.primary_number.trim() && (
+                                                            <RingCentralCallButton
+                                                                leadId={
+                                                                    selected.id
+                                                                }
+                                                                phone={
+                                                                    selected.primary_number
+                                                                }
+                                                                phoneSlot="primary"
+                                                                title="Call primary phone with RingCentral"
+                                                            >
+                                                                <PhoneCall />
+                                                            </RingCentralCallButton>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span>Years in house</span>
+                                                    <strong>
+                                                        {
+                                                            selected.years_in_house
+                                                        }
+                                                    </strong>
+                                                </div>
+                                                <div>
+                                                    <span>Marital status</span>
+                                                    <strong>
+                                                        {
+                                                            selected.marital_status
+                                                        }
+                                                    </strong>
+                                                </div>
+                                                <div>
+                                                    <span>House built</span>
+                                                    <strong>
+                                                        {selected.house_age ==
+                                                        null
+                                                            ? '—'
+                                                            : selected.house_age}
+                                                    </strong>
+                                                </div>
+                                                <div>
+                                                    <span>
+                                                        Needs financing?
+                                                    </span>
+                                                    <strong>
+                                                        {selected.needs_financing ==
+                                                        null
+                                                            ? '—'
+                                                            : selected.needs_financing
+                                                              ? 'Yes'
+                                                              : 'No'}
+                                                    </strong>
+                                                </div>
+                                                <div>
+                                                    <span>House value</span>
+                                                    <strong>
+                                                        {selected.house_value ==
+                                                        null
+                                                            ? '—'
+                                                            : Number(
+                                                                  selected.house_value,
+                                                              ).toLocaleString(
+                                                                  'en-US',
+                                                                  {
+                                                                      style: 'currency',
+                                                                      currency:
+                                                                          'USD',
+                                                                      maximumFractionDigits: 0,
+                                                                  },
+                                                              )}
+                                                    </strong>
+                                                </div>
+                                                <div className="lead-detail-field--wide">
+                                                    <span>Address</span>
+                                                    <div className="lead-address-value">
+                                                        <strong>
+                                                            <MapPin />
+                                                            {
+                                                                selected.address
+                                                            }, {selected.city},{' '}
+                                                            {selected.state}{' '}
+                                                            {selected.zip_code}
+                                                        </strong>
+                                                        {!queue &&
+                                                            distanceFromUnionCityMiles(
+                                                                selected,
+                                                            ) !== null &&
+                                                            distanceFromUnionCityMiles(
+                                                                selected,
+                                                            )! > 60 && (
+                                                                <span className="lead-distance-warning">
+                                                                    {Math.round(
+                                                                        distanceFromUnionCityMiles(
+                                                                            selected,
+                                                                        )!,
+                                                                    )}{' '}
+                                                                    mi from
+                                                                    Union City
+                                                                </span>
+                                                            )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span>Secondary phone</span>
+                                                    <div className="lead-phone-value">
+                                                        <strong>
+                                                            {formatPhoneNumber(
+                                                                selected.secondary_number,
+                                                            )}
+                                                        </strong>
+                                                        {selected.secondary_number?.trim() && (
+                                                            <RingCentralCallButton
+                                                                leadId={
+                                                                    selected.id
+                                                                }
+                                                                phone={
+                                                                    selected.secondary_number
+                                                                }
+                                                                phoneSlot="secondary"
+                                                                title="Call secondary phone with RingCentral"
+                                                            >
+                                                                <PhoneCall />
+                                                            </RingCentralCallButton>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span>Mobile number</span>
+                                                    <div className="lead-phone-value">
+                                                        <strong>
+                                                            {formatPhoneNumber(
+                                                                selected.mobile_number,
+                                                            )}
+                                                        </strong>
+                                                        {selected.mobile_number?.trim() && (
+                                                            <RingCentralCallButton
+                                                                leadId={
+                                                                    selected.id
+                                                                }
+                                                                phone={
+                                                                    selected.mobile_number
+                                                                }
+                                                                phoneSlot="mobile"
+                                                                title="Call mobile number with RingCentral"
+                                                            >
+                                                                <PhoneCall />
+                                                            </RingCentralCallButton>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="lead-detail-field--wide">
+                                                    <span>Email</span>
+                                                    <strong>
+                                                        <Mail />
+                                                        {selected.email || '—'}
+                                                    </strong>
+                                                </div>
+                                                {queue && (
+                                                    <div className="lead-dispatch-assignments">
+                                                        <label>
+                                                            <span>
+                                                                Appointment
+                                                                result
+                                                            </span>
+                                                            <div className="lead-inline-save-field">
+                                                                <select
+                                                                    className="lead-inline-assignment"
+                                                                    value={
+                                                                        appointmentResultDraft
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
+                                                                        setAppointmentResultDraft(
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <option value="">
+                                                                        Select
+                                                                        result
+                                                                    </option>
+                                                                    <option value="PNS">
+                                                                        PNS
+                                                                    </option>
+                                                                    <option value="PNS No Rehash">
+                                                                        PNS No
+                                                                        Rehash
+                                                                    </option>
+                                                                    <option value="2 ND Meeting">
+                                                                        2 ND
+                                                                        Meeting
+                                                                    </option>
+                                                                    <option value="Salesman Sent">
+                                                                        Salesman
+                                                                        Sent
+                                                                    </option>
+                                                                    <option value="Sold and Cancel">
+                                                                        Sold and
+                                                                        Cancel
+                                                                    </option>
+                                                                </select>
+                                                                <button
+                                                                    type="button"
+                                                                    className="lead-inline-save"
+                                                                    onClick={
+                                                                        saveAppointmentResult
+                                                                    }
+                                                                    disabled={
+                                                                        savingAssignment !==
+                                                                            null ||
+                                                                        appointmentResultDraft ===
+                                                                            (selected.appointment_result ??
+                                                                                '')
+                                                                    }
+                                                                    aria-label="Save appointment result"
+                                                                >
+                                                                    <Save />
+                                                                </button>
+                                                            </div>
+                                                        </label>
+                                                        <label>
+                                                            <span>
+                                                                Salesman 1
+                                                            </span>
+                                                            <div className="lead-inline-save-field">
+                                                                <select
+                                                                    className="lead-inline-assignment"
+                                                                    value={
+                                                                        salesmanOneDraft
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
+                                                                        setSalesmanOneDraft(
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <option value="">
+                                                                        Unassigned
+                                                                    </option>
+                                                                    {salesmen.map(
+                                                                        (
+                                                                            salesman,
+                                                                        ) => (
+                                                                            <option
+                                                                                key={
+                                                                                    salesman.salesman_id
+                                                                                }
+                                                                                value={
+                                                                                    salesman.salesman_id
+                                                                                }
+                                                                                disabled={
+                                                                                    salesmanTwoDraft ===
+                                                                                    String(
+                                                                                        salesman.salesman_id,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    salesman.salesman_name
+                                                                                }
+                                                                            </option>
+                                                                        ),
+                                                                    )}
+                                                                </select>
+                                                                <button
+                                                                    type="button"
+                                                                    className="lead-inline-save"
+                                                                    onClick={() =>
+                                                                        saveSalesman(
+                                                                            'salesman_1_id',
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        savingAssignment !==
+                                                                            null ||
+                                                                        salesmanOneDraft ===
+                                                                            String(
+                                                                                selected
+                                                                                    .salesman_one
+                                                                                    ?.salesman_id ??
+                                                                                    '',
+                                                                            )
+                                                                    }
+                                                                    aria-label="Save salesman 1"
+                                                                >
+                                                                    <Save />
+                                                                </button>
+                                                            </div>
+                                                        </label>
+                                                        <label>
+                                                            <span>
+                                                                Salesman 2
+                                                            </span>
+                                                            <div className="lead-inline-save-field">
+                                                                <select
+                                                                    className="lead-inline-assignment"
+                                                                    value={
+                                                                        salesmanTwoDraft
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
+                                                                        setSalesmanTwoDraft(
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <option value="">
+                                                                        Unassigned
+                                                                    </option>
+                                                                    {salesmen.map(
+                                                                        (
+                                                                            salesman,
+                                                                        ) => (
+                                                                            <option
+                                                                                key={
+                                                                                    salesman.salesman_id
+                                                                                }
+                                                                                value={
+                                                                                    salesman.salesman_id
+                                                                                }
+                                                                                disabled={
+                                                                                    salesmanOneDraft ===
+                                                                                    String(
+                                                                                        salesman.salesman_id,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    salesman.salesman_name
+                                                                                }
+                                                                            </option>
+                                                                        ),
+                                                                    )}
+                                                                </select>
+                                                                <button
+                                                                    type="button"
+                                                                    className="lead-inline-save"
+                                                                    onClick={() =>
+                                                                        saveSalesman(
+                                                                            'salesman_2_id',
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        savingAssignment !==
+                                                                            null ||
+                                                                        salesmanTwoDraft ===
+                                                                            String(
+                                                                                selected
+                                                                                    .salesman_two
+                                                                                    ?.salesman_id ??
+                                                                                    '',
+                                                                            )
+                                                                    }
+                                                                    aria-label="Save salesman 2"
+                                                                >
+                                                                    <Save />
+                                                                </button>
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </article>
+
+                                        <article className="lead-detail-card">
+                                            <h3>
+                                                <CalendarClock />
+                                                Project &amp; appointment
+                                            </h3>
+                                            <div className="lead-summary-list">
+                                                <div>
+                                                    <Package />
+                                                    <span>
+                                                        <small>Product</small>
+                                                        <strong>
+                                                            {selected.product
+                                                                ?.product_name ??
+                                                                '—'}
+                                                        </strong>
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <CalendarClock />
+                                                    <span>
+                                                        <small>
+                                                            Appointment
+                                                        </small>
+                                                        <div className="lead-inline-save-field lead-inline-appointment">
+                                                            <div className="lead-inline-appointment__inputs">
+                                                                <input
+                                                                    type="date"
+                                                                    className="lead-inline-assignment"
+                                                                    value={
+                                                                        appointmentDraftDate
+                                                                    }
+                                                                    disabled={
+                                                                        !canEditCurrentTab
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) => {
+                                                                        const date =
+                                                                            event
+                                                                                .target
+                                                                                .value;
+                                                                        setAppointmentDateDraft(
+                                                                            date
+                                                                                ? `${date}T${appointmentDraftTime || '09:00'}`
+                                                                                : '',
+                                                                        );
+                                                                    }}
+                                                                    aria-label="Appointment date"
+                                                                />
+                                                                <input
+                                                                    type="time"
+                                                                    className="lead-inline-assignment"
+                                                                    value={
+                                                                        appointmentDraftTime
+                                                                    }
+                                                                    disabled={
+                                                                        !canEditCurrentTab ||
+                                                                        !appointmentDraftDate
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) =>
+                                                                        setAppointmentDateDraft(
+                                                                            `${appointmentDraftDate}T${event.target.value}`,
+                                                                        )
+                                                                    }
+                                                                    aria-label="Appointment time"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                className="lead-inline-save"
+                                                                onClick={
+                                                                    saveAppointmentDate
+                                                                }
+                                                                disabled={
+                                                                    !canEditCurrentTab ||
+                                                                    savingAssignment !==
+                                                                        null ||
+                                                                    appointmentDateDraft ===
+                                                                        appointmentInputValue(
+                                                                            selected.appointment_at ??
+                                                                                '',
+                                                                        )
+                                                                }
+                                                                aria-label="Save appointment date and time"
+                                                                title="Save appointment"
+                                                            >
+                                                                <Save />
+                                                            </button>
+                                                        </div>
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <Building2 />
+                                                    <span>
+                                                        <small>Company</small>
+                                                        <strong>
+                                                            {selected.company
+                                                                ?.prefix ?? '—'}
+                                                        </strong>
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <UserRound />
+                                                    <span>
+                                                        <small>
+                                                            Original agent
+                                                        </small>
+                                                        <strong>
+                                                            {selected.agent
+                                                                ?.agent_name ??
+                                                                '—'}
+                                                        </strong>
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <UserRound />
+                                                    <span>
+                                                        <small>Agent 2</small>
+                                                        <strong>
+                                                            {selected
+                                                                .second_manager
+                                                                ?.manager_name ??
+                                                                selected
+                                                                    .second_agent
+                                                                    ?.agent_name ??
+                                                                '—'}
+                                                        </strong>
+                                                    </span>
+                                                </div>
+                                                {(
+                                                    selected.agent_assignments ??
+                                                    []
+                                                )
+                                                    .filter(
+                                                        (assignment) =>
+                                                            !assignment.is_original,
+                                                    )
+                                                    .map(
+                                                        (assignment, index) => (
+                                                            <div
+                                                                key={
+                                                                    assignment.id
+                                                                }
+                                                            >
+                                                                <UserRound />
+                                                                <span>
+                                                                    <small>
+                                                                        Agent{' '}
+                                                                        {index +
+                                                                            2}
+                                                                    </small>
+                                                                    <strong>
+                                                                        {assignment
+                                                                            .agent
+                                                                            ?.agent_name ??
+                                                                            'Unknown'}
+                                                                    </strong>
+                                                                    <small>
+                                                                        {assignment
+                                                                            .assigner
+                                                                            ?.username ??
+                                                                            'System'}{' '}
+                                                                        ·{' '}
+                                                                        {formatDate(
+                                                                            assignment.created_at,
+                                                                        )}
+                                                                    </small>
+                                                                </span>
+                                                            </div>
+                                                        ),
+                                                    )}
+                                                {false &&
+                                                    queue?.status &&
+                                                    ![
+                                                        'fresh',
+                                                        'raw',
+                                                        'cb',
+                                                        'naov',
+                                                    ].includes(
+                                                        queue.status,
+                                                    ) && (
+                                                        <>
+                                                            {[
+                                                                'dispatched',
+                                                                'kit',
+                                                            ].includes(
+                                                                queue?.status ??
+                                                                    '',
+                                                            ) && (
+                                                                <div className="lead-project-only-assignment">
+                                                                    <CalendarClock />
+                                                                    <span>
+                                                                        <small>
+                                                                            Appointment
+                                                                            result
+                                                                        </small>
+                                                                        <div className="lead-inline-save-field">
+                                                                            <select
+                                                                                className="lead-inline-assignment"
+                                                                                value={
+                                                                                    appointmentResultDraft
+                                                                                }
+                                                                                onChange={(
+                                                                                    event,
+                                                                                ) =>
+                                                                                    setAppointmentResultDraft(
+                                                                                        event
+                                                                                            .target
+                                                                                            .value,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                <option value="">
+                                                                                    Select
+                                                                                    result
+                                                                                </option>
+                                                                                <option value="PNS">
+                                                                                    PNS
+                                                                                </option>
+                                                                                <option value="PNS No Rehash">
+                                                                                    PNS
+                                                                                    No
+                                                                                    Rehash
+                                                                                </option>
+                                                                                <option value="2 ND Meeting">
+                                                                                    2
+                                                                                    ND
+                                                                                    Meeting
+                                                                                </option>
+                                                                                <option value="Salesman Sent">
+                                                                                    Salesman
+                                                                                    Sent
+                                                                                </option>
+                                                                                <option value="Sold and Cancel">
+                                                                                    Sold
+                                                                                    and
+                                                                                    Cancel
+                                                                                </option>
+                                                                            </select>
+                                                                            <button
+                                                                                type="button"
+                                                                                className="lead-inline-save"
+                                                                                onClick={
+                                                                                    saveAppointmentResult
+                                                                                }
+                                                                                disabled={
+                                                                                    savingAssignment !==
+                                                                                        null ||
+                                                                                    appointmentResultDraft ===
+                                                                                        (selected.appointment_result ??
+                                                                                            '')
+                                                                                }
+                                                                                aria-label="Save appointment result"
+                                                                                title="Save appointment result"
+                                                                            >
+                                                                                <Save />
+                                                                            </button>
+                                                                        </div>
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            <div className="lead-project-only-assignment">
+                                                                <UserRound />
+                                                                <span>
+                                                                    <small>
+                                                                        Salesman
+                                                                        1
+                                                                    </small>
+                                                                    <div className="lead-inline-save-field">
+                                                                        <select
+                                                                            className="lead-inline-assignment"
+                                                                            value={
+                                                                                salesmanOneDraft
+                                                                            }
+                                                                            onChange={(
+                                                                                event,
+                                                                            ) =>
+                                                                                setSalesmanOneDraft(
+                                                                                    event
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <option value="">
+                                                                                Unassigned
+                                                                            </option>
+                                                                            {salesmen.map(
+                                                                                (
+                                                                                    salesman,
+                                                                                ) => (
+                                                                                    <option
+                                                                                        key={
+                                                                                            salesman.salesman_id
+                                                                                        }
+                                                                                        value={
+                                                                                            salesman.salesman_id
+                                                                                        }
+                                                                                        disabled={
+                                                                                            salesmanTwoDraft ===
+                                                                                            String(
+                                                                                                salesman.salesman_id,
+                                                                                            )
+                                                                                        }
+                                                                                    >
+                                                                                        {
+                                                                                            salesman.salesman_name
+                                                                                        }
+                                                                                    </option>
+                                                                                ),
+                                                                            )}
+                                                                        </select>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="lead-inline-save"
+                                                                            onClick={() =>
+                                                                                saveSalesman(
+                                                                                    'salesman_1_id',
+                                                                                )
+                                                                            }
+                                                                            disabled={
+                                                                                savingAssignment !==
+                                                                                    null ||
+                                                                                salesmanOneDraft ===
+                                                                                    String(
+                                                                                        selected
+                                                                                            .salesman_one
+                                                                                            ?.salesman_id ??
+                                                                                            '',
+                                                                                    )
+                                                                            }
+                                                                            aria-label="Save salesman 1"
+                                                                            title="Save salesman 1"
+                                                                        >
+                                                                            <Save />
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="lead-inline-save lead-inline-sms"
+                                                                            onClick={
+                                                                                openSmsTemplate
+                                                                            }
+                                                                            aria-label="Create SMS copy for this lead"
+                                                                            title="Select lead details to copy"
+                                                                        >
+                                                                            <MessageCircle />
+                                                                        </button>
+                                                                    </div>
+                                                                </span>
+                                                            </div>
+                                                            <div className="lead-project-only-assignment">
+                                                                <UserRound />
+                                                                <span>
+                                                                    <small>
+                                                                        Salesman
+                                                                        2
+                                                                    </small>
+                                                                    <div className="lead-inline-save-field">
+                                                                        <select
+                                                                            className="lead-inline-assignment"
+                                                                            value={
+                                                                                salesmanTwoDraft
+                                                                            }
+                                                                            onChange={(
+                                                                                event,
+                                                                            ) =>
+                                                                                setSalesmanTwoDraft(
+                                                                                    event
+                                                                                        .target
+                                                                                        .value,
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <option value="">
+                                                                                Unassigned
+                                                                            </option>
+                                                                            {salesmen.map(
+                                                                                (
+                                                                                    salesman,
+                                                                                ) => (
+                                                                                    <option
+                                                                                        key={
+                                                                                            salesman.salesman_id
+                                                                                        }
+                                                                                        value={
+                                                                                            salesman.salesman_id
+                                                                                        }
+                                                                                        disabled={
+                                                                                            salesmanOneDraft ===
+                                                                                            String(
+                                                                                                salesman.salesman_id,
+                                                                                            )
+                                                                                        }
+                                                                                    >
+                                                                                        {
+                                                                                            salesman.salesman_name
+                                                                                        }
+                                                                                    </option>
+                                                                                ),
+                                                                            )}
+                                                                        </select>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="lead-inline-save"
+                                                                            onClick={() =>
+                                                                                saveSalesman(
+                                                                                    'salesman_2_id',
+                                                                                )
+                                                                            }
+                                                                            disabled={
+                                                                                savingAssignment !==
+                                                                                    null ||
+                                                                                salesmanTwoDraft ===
+                                                                                    String(
+                                                                                        selected
+                                                                                            .salesman_two
+                                                                                            ?.salesman_id ??
+                                                                                            '',
+                                                                                    )
+                                                                            }
+                                                                            aria-label="Save salesman 2"
+                                                                            title="Save salesman 2"
+                                                                        >
+                                                                            <Save />
+                                                                        </button>
+                                                                    </div>
+                                                                </span>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                <div className="lead-project-only-source">
+                                                    <Clock3 />
+                                                    <span>
+                                                        <small>
+                                                            Lead source
+                                                        </small>
+                                                        <strong>
+                                                            {selected.source}
+                                                        </strong>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </article>
+
+                                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--telemarketer is-note-locked">
+                                            <div className="lead-note-heading">
+                                                <h3>Telemarketer notes</h3>
+                                                <span className="lead-note-locked-badge">
+                                                    <LockKeyhole /> Locked
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedNoteType(
+                                                            'telemarketer',
+                                                        )
+                                                    }
+                                                    title="Open large note editor"
+                                                >
+                                                    <Maximize2 /> Expand
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setHistoryType(
+                                                            'telemarketer',
+                                                        )
+                                                    }
+                                                >
+                                                    <History />
+                                                    History{' '}
+                                                    <span>
+                                                        {
+                                                            telemarketerHistory.length
+                                                        }
+                                                    </span>
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                readOnly={isDispatchNoteLocked(
+                                                    'telemarketer',
+                                                )}
+                                                value={
+                                                    telemarketerNoteForm.data
+                                                        .body
+                                                }
+                                                onChange={(event) =>
+                                                    telemarketerNoteForm.setData(
+                                                        'body',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                placeholder="Type a new telemarketer note…"
+                                            />
+                                            <div className="lead-note-actions">
+                                                {telemarketerNoteForm.errors
+                                                    .body && (
+                                                    <em>
+                                                        {
+                                                            telemarketerNoteForm
+                                                                .errors.body
+                                                        }
+                                                    </em>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    disabled={
+                                                        isDispatchNoteLocked(
+                                                            'telemarketer',
+                                                        ) ||
+                                                        telemarketerNoteForm.processing ||
+                                                        !telemarketerNoteForm.data.body.trim() ||
+                                                        telemarketerNoteForm.data.body.trim() ===
+                                                            loadedTelemarketerNote.trim()
+                                                    }
+                                                    onClick={
+                                                        saveTelemarketerNote
+                                                    }
+                                                >
+                                                    <Save />
+                                                    {telemarketerNoteForm.processing
+                                                        ? 'Saving…'
+                                                        : 'Save note'}
+                                                </button>
+                                            </div>
+                                        </article>
+                                        <article
+                                            className={`lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--confirmation ${
+                                                isDispatchNoteLocked(
+                                                    'confirmation',
+                                                )
+                                                    ? 'is-note-locked'
+                                                    : ''
+                                            }`}
+                                        >
+                                            <div className="lead-note-heading">
+                                                <h3>Confirmation notes</h3>
+                                                {isDispatchNoteLocked(
+                                                    'confirmation',
+                                                ) && (
+                                                    <span className="lead-note-locked-badge">
+                                                        <LockKeyhole /> Locked
+                                                    </span>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedNoteType(
+                                                            'confirmation',
+                                                        )
+                                                    }
+                                                    title="Open large note editor"
+                                                >
+                                                    <Maximize2 /> Expand
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setHistoryType(
+                                                            'confirmation',
+                                                        )
+                                                    }
+                                                >
+                                                    <History />
+                                                    History{' '}
+                                                    <span>
+                                                        {
+                                                            confirmationHistory.length
+                                                        }
+                                                    </span>
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                readOnly={isDispatchNoteLocked(
+                                                    'confirmation',
+                                                )}
+                                                value={
+                                                    confirmationNoteForm.data
+                                                        .body
+                                                }
+                                                onChange={(event) =>
+                                                    confirmationNoteForm.setData(
+                                                        'body',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                placeholder="Type a new confirmation note…"
+                                            />
+                                            <div className="lead-note-actions">
+                                                {confirmationNoteForm.errors
+                                                    .body && (
+                                                    <em>
+                                                        {
+                                                            confirmationNoteForm
+                                                                .errors.body
+                                                        }
+                                                    </em>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    disabled={
+                                                        isDispatchNoteLocked(
+                                                            'confirmation',
+                                                        ) ||
+                                                        confirmationNoteForm.processing ||
+                                                        !confirmationNoteForm.data.body.trim() ||
+                                                        confirmationNoteForm.data.body.trim() ===
+                                                            loadedConfirmationNote.trim()
+                                                    }
+                                                    onClick={
+                                                        saveConfirmationNote
+                                                    }
+                                                >
+                                                    <Save />
+                                                    {confirmationNoteForm.processing
+                                                        ? 'Saving…'
+                                                        : 'Save note'}
+                                                </button>
+                                            </div>
+                                        </article>
+                                        {queue?.status &&
+                                            ![
+                                                'fresh',
+                                                'raw',
+                                                'cb',
+                                                'naov',
+                                            ].includes(queue.status) && (
+                                                <>
+                                                    <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--dispatch">
+                                                        <div className="lead-note-heading">
+                                                            <h3>
+                                                                Dispatch notes
+                                                            </h3>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setExpandedNoteType(
+                                                                        'dispatch',
+                                                                    )
+                                                                }
+                                                                title="Open large note editor"
+                                                            >
+                                                                <Maximize2 />{' '}
+                                                                Expand
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setHistoryType(
+                                                                        'dispatch',
+                                                                    )
+                                                                }
+                                                            >
+                                                                <History />{' '}
+                                                                History{' '}
+                                                                <span>
+                                                                    {
+                                                                        dispatchHistory.length
+                                                                    }
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                        <textarea
+                                                            value={
+                                                                dispatchNoteForm
+                                                                    .data.body
+                                                            }
+                                                            onChange={(event) =>
+                                                                dispatchNoteForm.setData(
+                                                                    'body',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Type a new dispatch note…"
+                                                        />
+                                                        <div className="lead-note-actions">
+                                                            <button
+                                                                type="button"
+                                                                disabled={
+                                                                    dispatchNoteForm.processing ||
+                                                                    !dispatchNoteForm.data.body.trim() ||
+                                                                    dispatchNoteForm.data.body.trim() ===
+                                                                        loadedDispatchNote.trim()
+                                                                }
+                                                                onClick={
+                                                                    saveDispatchNote
+                                                                }
+                                                            >
+                                                                <Save /> Save
+                                                                note
+                                                            </button>
+                                                        </div>
+                                                    </article>
+                                                    {Boolean(queue) && (
+                                                        <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result">
+                                                            <div className="lead-note-heading">
+                                                                <h3>
+                                                                    Appointment
+                                                                    result notes
+                                                                </h3>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setExpandedNoteType(
+                                                                            'appointment_result',
+                                                                        )
+                                                                    }
+                                                                    title="Open large note editor"
+                                                                >
+                                                                    <Maximize2 />{' '}
+                                                                    Expand
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        setHistoryType(
+                                                                            'appointment_result',
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <History />{' '}
+                                                                    History{' '}
+                                                                    <span>
+                                                                        {
+                                                                            appointmentResultHistory.length
+                                                                        }
+                                                                    </span>
+                                                                </button>
+                                                            </div>
+                                                            <textarea
+                                                                readOnly={isDispatchNoteLocked(
+                                                                    'appointment_result',
+                                                                )}
+                                                                value={
+                                                                    appointmentResultNoteForm
+                                                                        .data
+                                                                        .body
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    appointmentResultNoteForm.setData(
+                                                                        'body',
+                                                                        event
+                                                                            .target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                placeholder="Type a new appointment result note…"
+                                                            />
+                                                            <div className="lead-note-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={
+                                                                        isDispatchNoteLocked(
+                                                                            'appointment_result',
+                                                                        ) ||
+                                                                        appointmentResultNoteForm.processing ||
+                                                                        !appointmentResultNoteForm.data.body.trim() ||
+                                                                        appointmentResultNoteForm.data.body.trim() ===
+                                                                            loadedAppointmentResultNote.trim()
+                                                                    }
+                                                                    onClick={
+                                                                        saveAppointmentResultNote
+                                                                    }
+                                                                >
+                                                                    <Save />{' '}
+                                                                    Save note
+                                                                </button>
+                                                            </div>
+                                                        </article>
+                                                    )}
+                                                </>
+                                            )}
+                                        <button
+                                            type="button"
+                                            className="lead-card-resize-handle lead-card-resize-handle--column"
+                                            aria-label="Resize the information card columns"
+                                            title="Drag to resize left and right cards"
+                                            onPointerDown={(event) =>
+                                                resizeLeadCards(
+                                                    'horizontal',
+                                                    event,
+                                                )
+                                            }
+                                        />
+                                        <button
+                                            type="button"
+                                            className="lead-card-resize-handle lead-card-resize-handle--row"
+                                            aria-label="Resize the information and notes rows"
+                                            title="Drag to resize information and notes cards"
+                                            onPointerDown={(event) =>
+                                                resizeLeadCards(
+                                                    'vertical',
+                                                    event,
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <BlankLeadDetail queueStatus={queue?.status} />
+                        )}
+                        <div className="lead-workflow-actions">
+                            {workflowActions.map(
+                                ([status, label, Icon, tone]) => (
+                                    <button
+                                        type="button"
+                                        key={status}
+                                        className={`lead-workflow-action lead-workflow-action--${tone} ${selected?.status === status ? 'is-active' : ''}`}
+                                        disabled={
+                                            !selected ||
+                                            isEditing ||
+                                            (status !== 'history' &&
+                                                selected?.status === status)
+                                        }
+                                        onClick={() =>
+                                            status === 'history'
+                                                ? setHistoryType('all')
+                                                : status === 'sale'
+                                                  ? openSaleModal()
+                                                  : updateLeadStatus(status)
+                                        }
+                                    >
+                                        <Icon /> {label}
+                                    </button>
+                                ),
+                            )}
+                        </div>
+                    </section>
                 </div>
-                <label className="lead-sms-template__preview">
-                  <span>Message preview</span>
-                  <textarea
-                    readOnly
-                    value={smsTemplateText}
-                    aria-label="SMS message preview"
-                  />
-                </label>
-              </div>
-              <footer className="lead-sms-template__actions">
-                <button type="button" onClick={() => setSmsTemplateOpen(false)}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={copySmsTemplate}
-                  disabled={!smsTemplateText}
-                >
-                  <MessageCircle />
-                  Copy message
-                </button>
-              </footer>
-            </section>
-          </div>
-        )}
-      </main>
-    </>
-  );
+
+                {expandedNoteType && expandedNote && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-expanded-note-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setExpandedNoteType(null);
+                            }
+                        }}
+                    >
+                        <section
+                            className={`lead-note-modal__card lead-expanded-note ${
+                                expandedNoteLocked ? 'is-note-locked' : ''
+                            }`}
+                        >
+                            <header>
+                                <div>
+                                    <span>
+                                        <Maximize2 />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-expanded-note-title">
+                                            {expandedNote.title}
+                                        </h2>
+                                        {expandedNoteLocked && (
+                                            <span className="lead-note-locked-badge">
+                                                <LockKeyhole /> Locked
+                                            </span>
+                                        )}
+                                        <p>
+                                            {selected.customer_name} · Lead #
+                                            {selected.id}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setExpandedNoteType(null)}
+                                    aria-label="Close large note editor"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-expanded-note__latest">
+                                {expandedLatestNote ? (
+                                    <>
+                                        <UserRound aria-hidden="true" />
+                                        <span>
+                                            Latest note by{' '}
+                                            <strong>
+                                                {expandedLatestNote.creator
+                                                    ?.username ??
+                                                    'Unknown user'}
+                                            </strong>
+                                        </span>
+                                        <time
+                                            dateTime={
+                                                expandedLatestNote.created_at
+                                            }
+                                        >
+                                            <Clock3 aria-hidden="true" />
+                                            {formatDate(
+                                                expandedLatestNote.created_at,
+                                            )}
+                                        </time>
+                                    </>
+                                ) : (
+                                    <>
+                                        <MessageCircle aria-hidden="true" />
+                                        <span>No saved notes yet.</span>
+                                    </>
+                                )}
+                            </div>
+                            <div className="lead-expanded-note__editor">
+                                <textarea
+                                    autoFocus
+                                    readOnly={expandedNoteLocked}
+                                    value={expandedNote.value}
+                                    onChange={(event) =>
+                                        expandedNote.setValue(
+                                            event.target.value,
+                                        )
+                                    }
+                                    placeholder={`Write ${expandedNote.title.toLowerCase()}…`}
+                                />
+                                {expandedNote.error && (
+                                    <em>{expandedNote.error}</em>
+                                )}
+                            </div>
+                            <footer className="lead-expanded-note__actions">
+                                <button
+                                    type="button"
+                                    onClick={() => setExpandedNoteType(null)}
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={
+                                        expandedNoteLocked ||
+                                        expandedNote.processing ||
+                                        !expandedNote.value.trim() ||
+                                        expandedNote.unchanged
+                                    }
+                                    onClick={() => expandedNote.save()}
+                                >
+                                    <Save />
+                                    {expandedNote.processing
+                                        ? 'Saving…'
+                                        : 'Save note'}
+                                </button>
+                            </footer>
+                        </section>
+                    </div>
+                )}
+
+                {saleModalOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-sale-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setSaleModalOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-sale-modal__card">
+                            <header>
+                                <div>
+                                    <span>
+                                        <CircleDollarSign />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-sale-title">
+                                            Accept sale
+                                        </h2>
+                                        <p>
+                                            Create a project for{' '}
+                                            {selected.customer_name}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSaleModalOpen(false)}
+                                    aria-label="Close sale modal"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+
+                            <form
+                                className="lead-sale-modal__form"
+                                onSubmit={acceptSale}
+                            >
+                                <div className="lead-sale-modal__summary">
+                                    <span>Assigned salesman</span>
+                                    <strong>
+                                        {[
+                                            selected.salesman_one
+                                                ?.salesman_name,
+                                            selected.salesman_two
+                                                ?.salesman_name,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' & ')}
+                                    </strong>
+                                </div>
+
+                                <label>
+                                    <span>Sale amount</span>
+                                    <div className="lead-sale-modal__amount">
+                                        <strong>$</strong>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            max="9999999999.99"
+                                            step="0.01"
+                                            inputMode="decimal"
+                                            value={saleForm.data.amount}
+                                            onChange={(event) =>
+                                                saleForm.setData(
+                                                    'amount',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="0.00"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    {saleForm.errors.amount && (
+                                        <small>{saleForm.errors.amount}</small>
+                                    )}
+                                    {saleForm.errors.salesman && (
+                                        <small>
+                                            {saleForm.errors.salesman}
+                                        </small>
+                                    )}
+                                </label>
+
+                                <div className="lead-sale-modal__actions">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSaleModalOpen(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={
+                                            saleForm.processing ||
+                                            !saleForm.data.amount
+                                        }
+                                    >
+                                        <CircleDollarSign />
+                                        {saleForm.processing
+                                            ? 'Creating project…'
+                                            : 'Accept sale'}
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+                    </div>
+                )}
+
+                {recordingsOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-recordings-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setRecordingsOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-recordings-modal">
+                            <header>
+                                <div>
+                                    <span>
+                                        <Headphones />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-recordings-title">
+                                            Calls & recordings
+                                        </h2>
+                                        <p>
+                                            {selected.customer_name} · Lead #
+                                            {selected.id}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setRecordingsOpen(false)}
+                                    aria-label="Close recordings"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-recordings-summary">
+                                <strong>
+                                    {(selected.ring_central_calls?.length ??
+                                        0) +
+                                        (newCallAttempts[selected.id] ??
+                                            0)}{' '}
+                                    call attempts
+                                </strong>
+                                <span>
+                                    {selected.ring_central_calls?.filter(
+                                        (call) => call.recording_path,
+                                    ).length ?? 0}{' '}
+                                    recordings available
+                                </span>
+                            </div>
+                            <div className="lead-recordings-list">
+                                {(selected.ring_central_calls ?? []).map(
+                                    (call) => (
+                                        <article key={call.id}>
+                                            <div className="lead-recordings-list__details">
+                                                <strong>
+                                                    {call.caller?.username ??
+                                                        'Unknown user'}
+                                                </strong>
+                                                <span>
+                                                    {formatPhoneNumber(
+                                                        call.phone_number,
+                                                    )}
+                                                </span>
+                                                <time>
+                                                    {formatDate(
+                                                        call.started_at ??
+                                                            call.initiated_at,
+                                                    )}
+                                                </time>
+                                            </div>
+                                            <div className="lead-recordings-list__status">
+                                                <b>
+                                                    {call.result ??
+                                                        'Waiting for RingCentral'}
+                                                </b>
+                                                <span>
+                                                    {Math.floor(
+                                                        call.duration_seconds /
+                                                            60,
+                                                    )}
+                                                    :
+                                                    {String(
+                                                        call.duration_seconds %
+                                                            60,
+                                                    ).padStart(2, '0')}
+                                                </span>
+                                            </div>
+                                            {call.recording_path ? (
+                                                <audio
+                                                    controls
+                                                    preload="none"
+                                                    src={`/lead-workflow/leads-shop/${selected.id}/ringcentral-calls/${call.id}/recording`}
+                                                />
+                                            ) : (
+                                                <small>
+                                                    {call.result
+                                                        ? 'No recording is available for this call.'
+                                                        : 'The call result is being synchronized.'}
+                                                </small>
+                                            )}
+                                        </article>
+                                    ),
+                                )}
+                                {(selected.ring_central_calls ?? []).length ===
+                                    0 && (
+                                    <div className="lead-note-history__empty">
+                                        <Headphones />
+                                        <strong>No calls recorded yet</strong>
+                                        <span>
+                                            Calls launched from this lead will
+                                            appear here.
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+                )}
+
+                {historyType && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-note-history-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setHistoryType(null);
+                            }
+                        }}
+                    >
+                        <section
+                            className={`lead-note-modal__card lead-note-modal__card--history ${historyType === 'all' ? 'lead-note-modal__card--activity-history' : 'lead-note-modal__card--notes-history'}`}
+                        >
+                            <header>
+                                <div>
+                                    <span>
+                                        <History />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-note-history-title">
+                                            {historyType === 'all'
+                                                ? 'Lead activity history'
+                                                : historyType === 'confirmation'
+                                                  ? 'Confirmation note history'
+                                                  : historyType === 'dispatch'
+                                                    ? 'Dispatch note history'
+                                                    : historyType ===
+                                                        'appointment_result'
+                                                      ? 'Appointment result note history'
+                                                      : 'Telemarketer note history'}
+                                        </h2>
+                                        <p>
+                                            {selected.customer_name} · Lead #
+                                            {selected.id}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setHistoryType(null)}
+                                    aria-label="Close note history"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-note-history">
+                                {displayedTimeline.map((entry) =>
+                                    entry.kind === 'movement' ? (
+                                        <article
+                                            key={`movement-${entry.id}`}
+                                            className="lead-note-history__movement"
+                                        >
+                                            <div>
+                                                <strong>
+                                                    {entry.movement.mover
+                                                        ?.username ?? 'System'}
+                                                </strong>
+                                                <time>
+                                                    {formatDate(
+                                                        entry.movement
+                                                            .created_at,
+                                                    )}
+                                                </time>
+                                            </div>
+                                            <span className="lead-movement-label">
+                                                Lead moved
+                                            </span>
+                                            <p>
+                                                <b>
+                                                    {workflowLocation(
+                                                        entry.movement
+                                                            .from_status,
+                                                    )}
+                                                </b>
+                                                <span aria-hidden="true">
+                                                    {' '}
+                                                    →{' '}
+                                                </span>
+                                                <b>
+                                                    {workflowLocation(
+                                                        entry.movement
+                                                            .to_status,
+                                                    )}
+                                                </b>
+                                            </p>
+                                        </article>
+                                    ) : (
+                                        <article key={`note-${entry.id}`}>
+                                            <div>
+                                                <strong>
+                                                    {entry.note.creator
+                                                        ?.username ??
+                                                        'Unknown user'}
+                                                </strong>
+                                                <time>
+                                                    {formatDate(
+                                                        entry.note.created_at,
+                                                    )}
+                                                </time>
+                                            </div>
+                                            <span
+                                                className={`lead-history-event-label${entry.note.note_type === 'salesman_sent' ? 'lead-history-event-label--salesman' : ''}`}
+                                            >
+                                                {historyNoteLabel(
+                                                    entry.note.note_type,
+                                                )}
+                                            </span>
+                                            <p>{entry.note.body}</p>
+                                        </article>
+                                    ),
+                                )}
+                                {displayedTimeline.length === 0 && (
+                                    <div className="lead-note-history__empty">
+                                        <History />
+                                        <strong>No history yet</strong>
+                                        <span>
+                                            {historyType === 'all'
+                                                ? 'Lead movements will appear here.'
+                                                : 'Saved notes will appear here.'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+                )}
+
+                {smsTemplateOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-sms-template-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setSmsTemplateOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-sms-template">
+                            <header>
+                                <div>
+                                    <span>
+                                        <MessageCircle />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-sms-template-title">
+                                            Copy lead message
+                                        </h2>
+                                        <p>
+                                            Choose the information to include
+                                            for {selected.customer_name}.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSmsTemplateOpen(false)}
+                                    aria-label="Close SMS template"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+                            <div className="lead-sms-template__body">
+                                <div className="lead-sms-template__choices">
+                                    <div className="lead-sms-template__select-actions">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setSmsTemplateFields(
+                                                    smsTemplateSections.map(
+                                                        (section) =>
+                                                            section.key,
+                                                    ),
+                                                )
+                                            }
+                                        >
+                                            Select all
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setSmsTemplateFields([])
+                                            }
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                    {smsTemplateSections.map((section) => (
+                                        <label key={section.key}>
+                                            <input
+                                                type="checkbox"
+                                                checked={smsTemplateFields.includes(
+                                                    section.key,
+                                                )}
+                                                onChange={() =>
+                                                    setSmsTemplateFields(
+                                                        (current) =>
+                                                            current.includes(
+                                                                section.key,
+                                                            )
+                                                                ? current.filter(
+                                                                      (key) =>
+                                                                          key !==
+                                                                          section.key,
+                                                                  )
+                                                                : [
+                                                                      ...current,
+                                                                      section.key,
+                                                                  ],
+                                                    )
+                                                }
+                                            />
+                                            <span>
+                                                <strong>{section.label}</strong>
+                                                <small>{section.value}</small>
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <label className="lead-sms-template__preview">
+                                    <span>Message preview</span>
+                                    <textarea
+                                        readOnly
+                                        value={smsTemplateText}
+                                        aria-label="SMS message preview"
+                                    />
+                                </label>
+                            </div>
+                            <footer className="lead-sms-template__actions">
+                                <button
+                                    type="button"
+                                    onClick={() => setSmsTemplateOpen(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={copySmsTemplate}
+                                    disabled={!smsTemplateText}
+                                >
+                                    <MessageCircle />
+                                    Copy message
+                                </button>
+                            </footer>
+                        </section>
+                    </div>
+                )}
+            </main>
+        </>
+    );
 }

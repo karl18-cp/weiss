@@ -18,6 +18,7 @@ import {
 import { useMemo, useState } from 'react';
 import '@/../css/lead-workflow-queue.css';
 import { formatAppointmentDate } from '@/lib/appointment-date';
+import { formatPhoneNumber } from '@/lib/phone-number';
 
 export type QueueLead = {
     id: number;
@@ -174,7 +175,7 @@ export default function LeadWorkflowQueue({
                                         <span>
                                             <small>Primary phone</small>
                                             <strong>
-                                                {selected.primary_number}
+                                                {formatPhoneNumber(selected.primary_number)}
                                             </strong>
                                         </span>
                                     </div>

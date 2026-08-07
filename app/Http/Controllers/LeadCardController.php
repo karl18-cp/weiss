@@ -29,6 +29,7 @@ class LeadCardController extends Controller
         DB::transaction(function () use ($request): void {
             $lead = Lead::query()->create([
                 ...$request->validated(),
+                'county' => $request->validated('county') ?: 'Unknown',
                 'source' => 'CallTools',
                 'crm_qualification_completed_at' => now(),
                 'created_by' => $request->user()->getAuthIdentifier(),

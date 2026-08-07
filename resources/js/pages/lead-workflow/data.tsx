@@ -1,13 +1,15 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Search, Upload, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, FileSpreadsheet, Pencil, Save, Search, Upload, Users, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import '@/../css/lead-data.css';
+import { formatPhoneNumber } from '@/lib/phone-number';
 import DataSectionTabs from '@/components/data-section-tabs';
 import { formatAppointmentDate } from '@/lib/appointment-date';
 
 type LeadRow = {
     id: number;
     origin_at: string | null;
+    agent_id: number | null;
     agent: string;
     customer: string;
     verified: boolean;
@@ -18,6 +20,7 @@ type LeadRow = {
     appointment_at: string | null;
     lead_result: string;
     rep: string;
+    company: string;
     appointment_result: string;
     mobile: string;
     phone: string;
@@ -46,8 +49,11 @@ type DataPageProps = {
     filters: {
         search: string;
         agent: number | null;
+        sort: SortKey;
+        direction: SortDirection;
     };
     totalLeads: number;
+    canEdit: boolean;
     importResult: {
         imported: number;
         notes_updated: number;
@@ -58,7 +64,11 @@ type DataPageProps = {
     } | null;
 };
 
+type SortDirection = 'asc' | 'desc';
+type SortKey = 'origin' | 'agent' | 'customer' | 'verified' | 'address' | 'city' | 'state' | 'zip' | 'appointment' | 'lead_result' | 'rep' | 'company' | 'appointment_result' | 'mobile' | 'phone' | 'note';
+
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -75,12 +85,16 @@ export default function Data({
     agents,
     filters,
     totalLeads,
+    canEdit,
     importResult,
 }: DataPageProps) {
     const [search, setSearch] = useState(filters.search);
     const [expandedNotes, setExpandedNotes] = useState<Set<number>>(new Set());
     const searchInput = useRef<HTMLInputElement>(null);
     const [importOpen, setImportOpen] = useState(false);
+    const [editingAgentLeadId, setEditingAgentLeadId] = useState<number | null>(null);
+    const [selectedAgentId, setSelectedAgentId] = useState('');
+    const [agentSaving, setAgentSaving] = useState(false);
     const importForm = useForm<{
         file: File | null;
     }>({ file: null });
@@ -97,7 +111,27 @@ export default function Data({
         });
     };
 
-    const visit = (parameters: { search?: string; agent?: number | null }) => {
+    const startAgentEdit = (lead: LeadRow) => {
+        setEditingAgentLeadId(lead.id);
+        setSelectedAgentId(lead.agent_id?.toString() ?? '');
+    };
+
+    const saveOriginalAgent = (leadId: number) => {
+        if (!selectedAgentId || agentSaving) return;
+
+        setAgentSaving(true);
+        router.patch(
+            `/lead-workflow/data/${leadId}/original-agent`,
+            { agent_id: Number(selectedAgentId) },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: () => setEditingAgentLeadId(null),
+                onFinish: () => setAgentSaving(false),
+            },
+        );
+    };
+    const visit = (parameters: { search?: string; agent?: number | null; sort?: SortKey; direction?: SortDirection }) => {
         router.get(
             '/lead-workflow/data',
             {
@@ -106,6 +140,8 @@ export default function Data({
                     parameters.agent === undefined
                         ? filters.agent || undefined
                         : parameters.agent || undefined,
+                sort: parameters.sort ?? filters.sort,
+                direction: parameters.direction ?? filters.direction,
             },
             {
                 preserveState: true,
@@ -137,6 +173,26 @@ export default function Data({
 
             return next;
         });
+    };
+
+    const sortableHeader = (key: SortKey, label: string, className?: string) => {
+        const active = filters.sort === key;
+
+        return (
+            <th className={className} aria-sort={active ? (filters.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                <button
+                    type="button"
+                    className={active ? 'lead-data-sort is-active' : 'lead-data-sort'}
+                    onClick={() => visit({
+                        sort: key,
+                        direction: active && filters.direction === 'asc' ? 'desc' : 'asc',
+                    })}
+                >
+                    <span>{label}</span>
+                    {active ? (filters.direction === 'asc' ? <ArrowUp /> : <ArrowDown />) : <ArrowUpDown />}
+                </button>
+            </th>
+        );
     };
 
     return (
@@ -312,23 +368,22 @@ export default function Data({
                             <table className="lead-data-table">
                                 <thead>
                                     <tr>
-                                        <th>Origin</th>
-                                        <th>Agent</th>
-                                        <th>Customer</th>
-                                        <th>Lead</th>
-                                        <th>Address</th>
-                                        <th>City</th>
-                                        <th>State</th>
-                                        <th>Zip</th>
-                                        <th>App. Date</th>
-                                        <th>Lead Results</th>
-                                        <th>Rep</th>
-                                        <th>App. Result</th>
-                                        <th>Mobile</th>
-                                        <th>Phone</th>
-                                        <th className="lead-data-note-heading">
-                                            Note
-                                        </th>
+                                        {sortableHeader('origin', 'Origin')}
+                                        {sortableHeader('agent', 'Agent')}
+                                        {sortableHeader('customer', 'Customer')}
+                                        {sortableHeader('company', 'Company')}
+                                        {sortableHeader('verified', 'Lead')}
+                                        {sortableHeader('address', 'Address')}
+                                        {sortableHeader('city', 'City')}
+                                        {sortableHeader('state', 'State')}
+                                        {sortableHeader('zip', 'Zip')}
+                                        {sortableHeader('appointment', 'App. Date')}
+                                        {sortableHeader('lead_result', 'Lead Results')}
+                                        {sortableHeader('rep', 'Rep')}
+                                        {sortableHeader('appointment_result', 'App. Result')}
+                                        {sortableHeader('mobile', 'Mobile')}
+                                        {sortableHeader('phone', 'Phone')}
+                                        {sortableHeader('note', 'Note', 'lead-data-note-heading')}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -342,12 +397,31 @@ export default function Data({
                                                 <td>
                                                     {formatDate(lead.origin_at)}
                                                 </td>
-                                                <td>{lead.agent}</td>
+                                                <td className="lead-data-agent-cell">
+                                                    {canEdit && editingAgentLeadId === lead.id ? (
+                                                        <div className="lead-data-agent-editor">
+                                                            <select value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} aria-label={`Original agent for ${lead.customer}`}>
+                                                                <option value="" disabled>Select agent</option>
+                                                                {agents.map((agent) => (
+                                                                    <option key={agent.agent_id} value={agent.agent_id}>{agent.agent_name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <button type="button" className="is-save" onClick={() => saveOriginalAgent(lead.id)} disabled={!selectedAgentId || agentSaving} aria-label="Save original agent"><Save /></button>
+                                                            <button type="button" onClick={() => setEditingAgentLeadId(null)} disabled={agentSaving} aria-label="Cancel editing original agent"><X /></button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="lead-data-agent-display">
+                                                            <span>{lead.agent}</span>
+                                                            {canEdit && <button type="button" onClick={() => startAgentEdit(lead)}><Pencil /> Edit</button>}
+                                                        </div>
+                                                    )}
+                                                </td>
                                                 <td>
                                                     <strong>
                                                         {lead.customer}
                                                     </strong>
                                                 </td>
+                                                <td>{lead.company}</td>
                                                 <td>
                                                     <span
                                                         className={`lead-data-verification ${lead.verified ? 'is-verified' : ''}`}
@@ -376,7 +450,7 @@ export default function Data({
                                                     {lead.appointment_result}
                                                 </td>
                                                 <td>{lead.mobile}</td>
-                                                <td>{lead.phone}</td>
+                                                <td>{formatPhoneNumber(lead.phone)}</td>
                                                 <td className="lead-data-note-cell">
                                                     <div
                                                         className={
@@ -412,7 +486,7 @@ export default function Data({
                                     {leads.data.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={15}
+                                                colSpan={16}
                                                 className="lead-data-empty"
                                             >
                                                 <Users />

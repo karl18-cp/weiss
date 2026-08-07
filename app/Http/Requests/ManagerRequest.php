@@ -10,7 +10,7 @@ class ManagerRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'admin';
+        return $this->user() && ManagerAccess::canEdit($this->user(), 'contacts_users');
     }
 
     public function rules(): array

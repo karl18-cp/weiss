@@ -263,6 +263,14 @@ class CallToolsReportingSync
             if (! $id || $name === '') {
                 continue;
             }
+            $existingOwner = Agent::query()
+                ->where('calltools_user_id', $id)
+                ->first();
+            if ($existingOwner) {
+                $matched++;
+
+                continue;
+            }
             $matches = Agent::query()->get()->filter(fn (Agent $agent): bool => $this->namesMatch($agent->agent_name, $name));
             if ($matches->count() === 1) {
                 $matches->first()->update(['calltools_user_id' => $id]);

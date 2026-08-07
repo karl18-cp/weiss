@@ -112,6 +112,45 @@ test('project status alone does not mark a lead verified in data', function () {
         );
 });
 
+test('a project-only lead is excluded from tele leads and its agent count', function () {
+    $admin = dataAdmin();
+    $lead = dataLead(['status' => 'project']);
+    $project = Project::query()->create([
+        'lead_id' => $lead->id,
+        'amount' => 1000,
+        'created_by' => $admin->acc_id,
+    ]);
+
+    $this->actingAs($admin)
+        ->patch(route('management.projects.tele-lead-visibility.update', $project), [
+            'project_only' => true,
+        ])
+        ->assertRedirect();
+
+    expect($project->refresh()->tele_lead_excluded)->toBeTrue();
+
+    $this->get(route('lead-workflow.data'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('leads.data', 0)
+            ->where('totalLeads', 0)
+            ->where('agents.0.leads_count', 0),
+        );
+
+    $this->patch(route('management.projects.tele-lead-visibility.bulk-update'), [
+        'project_ids' => [$project->id],
+        'project_only' => false,
+    ])->assertRedirect();
+
+    expect($project->refresh()->tele_lead_excluded)->toBeFalse();
+
+    $this->get(route('lead-workflow.data'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('leads.data', 1)
+            ->where('totalLeads', 1)
+            ->where('agents.0.leads_count', 1),
+        );
+});
+
 test('confirm dispatch and salesman sent leads are verified in data', function (string $status, ?string $appointmentResult) {
     $admin = dataAdmin();
     dataLead([

@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Schema;
     'years_in_house', 'house_age', 'needs_financing', 'house_value',
     'crm_qualification_completed_at', 'product_id', 'appointment_at', 'appointment_duration_minutes',
     'appointment_result', 'telemarketer_notes',
-    'company_id', 'source', 'agent_id', 'agent_2_id', 'rep', 'salesman_1_id', 'salesman_2_id',
+    'company_id', 'source', 'agent_id', 'agent_2_id', 'manager_2_id', 'rep', 'salesman_1_id', 'salesman_2_id',
     'created_by', 'status', 'confirmation_notes',
     'calltools_contact_id', 'calltools_campaign_name',
 ])]
@@ -65,6 +65,11 @@ class Lead extends Model
         return $this->belongsTo(Agent::class, 'agent_2_id', 'agent_id');
     }
 
+    public function secondManager(): BelongsTo
+    {
+        return $this->belongsTo(Manager::class, 'manager_2_id', 'manager_id');
+    }
+
     public function salesmanOne(): BelongsTo
     {
         return $this->belongsTo(Salesman::class, 'salesman_1_id', 'salesman_id');
@@ -100,6 +105,13 @@ class Lead extends Model
         return $this->hasOne(LeadNote::class)
             ->where('note_type', 'telemarketer')
             ->latestOfMany();
+    }
+
+    public function appointmentResultNotes(): HasMany
+    {
+        return $this->hasMany(LeadNote::class)
+            ->where('note_type', 'appointment_result')
+            ->latest();
     }
 
     public function project(): HasOne

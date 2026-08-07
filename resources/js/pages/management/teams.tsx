@@ -149,13 +149,13 @@ export default function Teams({
         <>
             <Head title="Teams" />
             <main className="teams-page">
-                <header className="teams-header">
-                    <span>Contacts &amp; Users</span>
-                    <h1>Teams</h1>
-                    <p>Group agents under the manager responsible for them.</p>
-                </header>
-
-                <section className="teams-count">
+                <header className="teams-header directory-heading-with-total">
+                    <div className="directory-heading-copy">
+                        <span>Contacts &amp; Users</span>
+                        <h1>Teams</h1>
+                        <p>Group agents under the manager responsible for them.</p>
+                    </div>
+                <section className="teams-count directory-heading-total">
                     <div>
                         <Users />
                     </div>
@@ -164,11 +164,15 @@ export default function Teams({
                         <small>Total teams</small>
                     </span>
                 </section>
+                </header>
 
                 <div className="teams-workspace">
                     <DirectoryNavigation active="Teams">
                         <div className="teams-directory-heading">
-                            <h2>Team directory</h2>
+                            <div className="directory-heading-title-row">
+                                <h2>Team directory</h2>
+                                <span className="directory-inline-count">{filteredTeams.length}</span>
+                            </div>
                             <p>Select a team to edit</p>
                         </div>
                         <label className="teams-search">
@@ -303,7 +307,10 @@ export default function Teams({
                             <section className="team-members">
                                 <header>
                                     <div>
-                                        <h3>Agent members</h3>
+                                        <div className="team-members-title">
+                                            <h3>Agent members</h3>
+                                            <span>{agents.length}</span>
+                                        </div>
                                         <p>
                                             {form.data.agent_ids.length}{' '}
                                             selected

@@ -1,36 +1,17 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import {
-    Building2,
-    CalendarClock,
-    ChevronRight,
-    MapPin,
-    Navigation,
-    Package,
-    Phone,
-    Search,
-    Save,
-} from 'lucide-react';
+import { Head, Link } from '@inertiajs/react';
+import { ChevronRight, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { formatAppointmentDate } from '@/lib/appointment-date';
 
 type SalesmanLead = {
     id: number;
     customer_name: string;
-    primary_number: string;
-    mobile_number: string | null;
     address: string;
     city: string;
-    state: string;
-    zip_code: string;
     appointment_at: string | null;
     company: { company: string } | null;
     product: { product_name: string } | null;
 };
-
-const address = (lead: SalesmanLead) =>
-    [lead.address, lead.city, lead.state, lead.zip_code]
-        .filter(Boolean)
-        .join(', ');
 
 export default function SalesmanLeads({
     leads,
@@ -39,15 +20,7 @@ export default function SalesmanLeads({
     leads: SalesmanLead[];
     salesman: { id: number; name: string };
 }) {
-    const requestedId = Number(
-        new URLSearchParams(window.location.search).get('lead'),
-    );
     const [search, setSearch] = useState('');
-    const [selectedId, setSelectedId] = useState<number | null>(
-        leads.some((lead) => lead.id === requestedId)
-            ? requestedId
-            : leads[0]?.id ?? null,
-    );
     const filtered = useMemo(() => {
         const query = search.trim().toLowerCase();
         if (!query) return leads;
@@ -65,20 +38,6 @@ export default function SalesmanLeads({
                 .includes(query),
         );
     }, [leads, search]);
-    const selected = leads.find((lead) => lead.id === selectedId) ?? null;
-    const noteForm = useForm({ body: '' });
-
-    const saveAppointmentResultNote = () => {
-        if (!selected) return;
-
-        noteForm.post(
-            `/salesman/leads/${selected.id}/appointment-result-notes`,
-            {
-                preserveScroll: true,
-                onSuccess: () => noteForm.reset(),
-            },
-        );
-    };
 
     return (
         <>
@@ -88,8 +47,8 @@ export default function SalesmanLeads({
                     <span>Salesman workspace</span>
                     <h1>My Leads</h1>
                     <p>
-                        {salesman.name}, these are the leads currently assigned
-                        to you.
+                        {salesman.name}, select one of your assigned leads to
+                        open its information.
                     </p>
                 </header>
 
@@ -102,147 +61,30 @@ export default function SalesmanLeads({
                     />
                 </label>
 
-                <div className="salesman-leads__layout">
-                    <div className="salesman-leads__list">
-                        {filtered.map((lead) => (
-                            <button
-                                type="button"
-                                key={lead.id}
-                                className={
-                                    selectedId === lead.id ? 'is-active' : ''
-                                }
-                                onClick={() => setSelectedId(lead.id)}
-                            >
-                                <span>
-                                    <strong>{lead.customer_name}</strong>
-                                    <small>
-                                        {lead.appointment_at
-                                            ? formatAppointmentDate(
-                                                  lead.appointment_at,
-                                              )
-                                            : 'No appointment'}
-                                    </small>
-                                    <small>{lead.city || 'No city'}</small>
-                                </span>
-                                <ChevronRight />
-                            </button>
-                        ))}
-                        {filtered.length === 0 && (
-                            <p className="salesman-leads__empty">
-                                No assigned leads match this search.
-                            </p>
-                        )}
-                    </div>
-
-                    {selected && (
-                        <article className="salesman-lead-detail">
-                            <div className="salesman-lead-detail__title">
-                                <h2>{selected.customer_name}</h2>
-                            </div>
-
-                            <div className="salesman-lead-detail__facts">
-                                <div>
-                                    <CalendarClock />
-                                    <span>
-                                        <small>Appointment</small>
-                                        <strong>
-                                            {selected.appointment_at
-                                                ? formatAppointmentDate(
-                                                      selected.appointment_at,
-                                                  )
-                                                : 'Not scheduled'}
-                                        </strong>
-                                    </span>
-                                </div>
-                                <div>
-                                    <Phone />
-                                    <span>
-                                        <small>Phone</small>
-                                        <strong>
-                                            {selected.primary_number ||
-                                                selected.mobile_number ||
-                                                'Not available'}
-                                        </strong>
-                                    </span>
-                                </div>
-                                <div>
-                                    <MapPin />
-                                    <span>
-                                        <small>Address</small>
-                                        <strong>{address(selected)}</strong>
-                                    </span>
-                                </div>
-                                <div>
-                                    <Building2 />
-                                    <span>
-                                        <small>Company</small>
-                                        <strong>
-                                            {selected.company?.company ?? '—'}
-                                        </strong>
-                                    </span>
-                                </div>
-                                <div>
-                                    <Package />
-                                    <span>
-                                        <small>Product</small>
-                                        <strong>
-                                            {selected.product?.product_name ??
-                                                '—'}
-                                        </strong>
-                                    </span>
-                                </div>
-                            </div>
-
-                            <section className="salesman-appointment-result">
-                                <h3>Appointment result notes</h3>
-                                <p>
-                                    Add the outcome of your visit or any
-                                    follow-up information.
-                                </p>
-                                <textarea
-                                    value={noteForm.data.body}
-                                    onChange={(event) =>
-                                        noteForm.setData(
-                                            'body',
-                                            event.target.value,
-                                        )
-                                    }
-                                    placeholder="Type the appointment result…"
-                                    rows={4}
-                                />
-                                {noteForm.errors.body && (
-                                    <small>{noteForm.errors.body}</small>
-                                )}
-                                <button
-                                    type="button"
-                                    disabled={
-                                        noteForm.processing ||
-                                        noteForm.data.body.trim() === ''
-                                    }
-                                    onClick={saveAppointmentResultNote}
-                                >
-                                    <Save />
-                                    {noteForm.processing
-                                        ? 'Saving…'
-                                        : 'Save result note'}
-                                </button>
-                            </section>
-
-                            <div className="salesman-lead-detail__actions">
-                                <a
-                                    href={`https://maps.apple.com/?daddr=${encodeURIComponent(address(selected))}&dirflg=d`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
-                                    <Navigation />
-                                    Apple Maps
-                                </a>
-                                <Link href="/salesman/booking-board">
-                                    <CalendarClock />
-                                    My bookings
-                                </Link>
-                            </div>
-                        </article>
+                <div className="salesman-leads__list salesman-leads__list--standalone">
+                    {filtered.map((lead) => (
+                        <Link
+                            key={lead.id}
+                            href={`/salesman/lead-information?lead=${lead.id}`}
+                        >
+                            <span>
+                                <strong>{lead.customer_name}</strong>
+                                <small>
+                                    {lead.appointment_at
+                                        ? formatAppointmentDate(
+                                              lead.appointment_at,
+                                          )
+                                        : 'No appointment'}
+                                </small>
+                                <small>{lead.city || 'No city'}</small>
+                            </span>
+                            <ChevronRight />
+                        </Link>
+                    ))}
+                    {filtered.length === 0 && (
+                        <p className="salesman-leads__empty">
+                            No assigned leads match this search.
+                        </p>
                     )}
                 </div>
             </section>

@@ -29,7 +29,6 @@ const emptyLead = {
     address: '',
     zip_code: '',
     city: '',
-    county: '',
     state: 'CA',
     email: '',
     years_in_house: '',
@@ -48,7 +47,6 @@ type GeoapifyAddress = {
     address_line1?: string;
     address_line2?: string;
     city?: string;
-    county?: string;
     district?: string;
     formatted: string;
     housenumber?: string;
@@ -223,7 +221,6 @@ export default function LeadCard({
                 suggestion.suburb ??
                 suggestion.district ??
                 '',
-            county: suggestion.county ?? '',
             state: 'CA',
             zip_code: suggestion.postcode ?? '',
         });
@@ -560,12 +557,11 @@ export default function LeadCard({
                                 )}
                                 <small className="lead-address-helper">
                                     Select a suggestion to auto-fill the city,
-                                    county, state, and ZIP code.
+                                    state, and ZIP code.
                                 </small>
                             </div>
                             {input('zip_code', 'ZIP code', '00000')}
                             {input('city', 'City', 'City')}
-                            {input('county', 'County', 'County')}
                             {input('state', 'State', 'CA')}
                             <label className="lead-field">
                                 <span>
@@ -594,7 +590,7 @@ export default function LeadCard({
                             )}
                             {input(
                                 'house_age',
-                                'How old is the house?',
+                                'House built',
                                 'Age in years',
                                 <House />,
                                 'number',

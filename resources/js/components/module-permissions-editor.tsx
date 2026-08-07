@@ -50,9 +50,24 @@ export default function ModulePermissionsEditor({
                                 })
                             }
                         >
-                            <option value="none">No access</option>
-                            <option value="view">View</option>
-                            <option value="edit">Edit</option>
+                            {module === 'dial_raw_only' ? (
+                                <>
+                                    <option value="none">Unrestricted</option>
+                                    <option value="edit">Raw leads only</option>
+                                </>
+                            ) : module === 'toss_action' ||
+                              module === 'view_all_kit_managers' ? (
+                                <>
+                                    <option value="none">Not allowed</option>
+                                    <option value="edit">Allowed</option>
+                                </>
+                            ) : (
+                                <>
+                                    <option value="none">No access</option>
+                                    <option value="view">View</option>
+                                    <option value="edit">Edit</option>
+                                </>
+                            )}
                         </select>
                     </label>
                 ))}

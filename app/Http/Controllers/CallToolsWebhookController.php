@@ -12,18 +12,21 @@ use App\Models\Product;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 class CallToolsWebhookController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request): Response
     {
         $secret = (string) config('services.calltools.webhook_secret');
 
         if ($secret === '') {
-            return response()->json(['message' => 'CallTools webhook is not configured.'], 503);
+            return $this->respond($request, false, 'Weiss CRM is not ready to receive this lead.', 503, [
+                'message' => 'CallTools webhook is not configured.',
+            ]);
         }
 
         $credentials = array_filter([
@@ -42,7 +45,7 @@ class CallToolsWebhookController extends Controller
         }
 
         if ($authenticatedVia === null) {
-            return response()->json([
+            return $this->respond($request, false, 'We could not verify the CallTools connection.', 401, [
                 'message' => 'CallTools webhook authentication failed.',
                 'error' => $credentials === []
                     ? 'webhook_credentials_missing'
@@ -63,14 +66,25 @@ class CallToolsWebhookController extends Controller
                 'hint' => $credentials === []
                     ? 'CallTools did not send any supported webhook credential.'
                     : 'None of the received credentials matches CALLTOOLS_WEBHOOK_SECRET in the server environment. If the environment value changed, run php artisan optimize:clear.',
-            ], 401);
+            ]);
         }
 
-        $phoneNumber = $this->firstFilled($request, [
+        $phoneNumber = $this->findPhoneNumber($request, [
             'phone_number',
             'mobile_primary',
             'active_number',
             'primary_phone_number',
+            'primary_phone',
+            'phoneNumber',
+            'mobile_number',
+            'mobile_phone',
+            'cell_phone',
+            'contact_phone',
+            'contact_number',
+            'customer_phone',
+            'telephone',
+            'tel',
+            'ani',
             'phone',
         ]);
         $contactId = $this->firstFilled($request, ['contact_id', 'id']);
@@ -129,10 +143,15 @@ class CallToolsWebhookController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
+            $errors = $validator->errors()->toArray();
+            $friendlyMessage = $validator->errors()->has('phone_number')
+                ? 'We could not find the lead phone number. Please verify the phone field in CallTools and try again.'
+                : 'This lead could not be sent. Please review the highlighted information and try again.';
+
+            return $this->respond($request, false, $friendlyMessage, 422, [
                 'message' => 'The CallTools payload is invalid.',
-                'errors' => $validator->errors(),
-            ], 422);
+                'errors' => $errors,
+            ]);
         }
 
         $data = $validator->validated();
@@ -154,8 +173,6 @@ class CallToolsWebhookController extends Controller
         $existingLead = Lead::query()
             ->where('calltools_contact_id', $data['contact_id'])
             ->first();
-        $receivedAt = now();
-
         $lead = Lead::query()->updateOrCreate(
             ['calltools_contact_id' => $data['contact_id']],
             [
@@ -182,13 +199,6 @@ class CallToolsWebhookController extends Controller
                 'status' => 'fresh',
             ],
         );
-
-        if ($existingLead) {
-            // A repeated CallTools submission is a newly received lead, not a
-            // duplicate. Keep its CRM history and relationships on the same
-            // record while returning it to the top of Leads Shop.
-            $lead->forceFill(['created_at' => $receivedAt])->saveQuietly();
-        }
 
         if ($existingLead && (int) $relationships['agent_id'] !== (int) $lead->agent_id) {
             $hasAssignmentHistory = class_exists(LeadAgentAssignment::class)
@@ -227,6 +237,9 @@ class CallToolsWebhookController extends Controller
         }
 
         if ($telemarketerNotes !== '') {
+            $telemarketerNoteAuthorId = (int) (Agent::query()
+                ->whereKey($lead->agent_id)
+                ->value('account_id') ?: $relationships['created_by']);
             $latestNote = $lead->notes()
                 ->where('note_type', 'telemarketer')
                 ->latest('id')
@@ -237,16 +250,24 @@ class CallToolsWebhookController extends Controller
                     'lead_id' => $lead->id,
                     'note_type' => 'telemarketer',
                     'body' => $telemarketerNotes,
-                    'created_by' => $relationships['created_by'],
+                    'created_by' => $telemarketerNoteAuthorId,
                 ]);
             }
         }
 
-        return response()->json([
-            'message' => $lead->wasRecentlyCreated ? 'Lead created.' : 'Lead updated.',
-            'lead_id' => $lead->getKey(),
-            'calltools_contact_id' => $lead->calltools_contact_id,
-        ], $lead->wasRecentlyCreated ? 201 : 200);
+        return $this->respond(
+            $request,
+            true,
+            $lead->wasRecentlyCreated
+                ? 'Lead sent to Weiss CRM successfully.'
+                : 'Lead updated and returned to Leads Shop successfully.',
+            $lead->wasRecentlyCreated ? 201 : 200,
+            [
+                'message' => $lead->wasRecentlyCreated ? 'Lead created.' : 'Lead updated.',
+                'lead_id' => $lead->getKey(),
+                'calltools_contact_id' => $lead->calltools_contact_id,
+                'lead_name' => $lead->customer_name,
+            ]);
     }
 
     /** @return array{company_id: int, product_id: int, agent_id: int, created_by: int}|JsonResponse */
@@ -394,5 +415,87 @@ class CallToolsWebhookController extends Controller
         }
 
         return null;
+    }
+
+    /** @param list<string> $preferredKeys */
+    private function findPhoneNumber(Request $request, array $preferredKeys): ?string
+    {
+        $direct = $this->firstFilled($request, $preferredKeys);
+
+        if ($direct !== null && $this->looksLikePhoneNumber($direct)) {
+            return $direct;
+        }
+
+        $recognizedKeys = collect($preferredKeys)
+            ->merge([
+                'number', 'phone1', 'phone_1', 'home_phone', 'work_phone',
+                'caller_id', 'caller_number', 'contact_mobile', 'customer_number',
+            ])
+            ->map(fn (string $key): string => $this->normalizeFieldKey($key))
+            ->flip();
+
+        $candidates = [];
+        $walk = function (mixed $value, ?string $key = null) use (&$walk, &$candidates, $recognizedKeys): void {
+            if (is_array($value)) {
+                foreach ($value as $childKey => $childValue) {
+                    $walk($childValue, is_string($childKey) ? $childKey : $key);
+                }
+
+                return;
+            }
+
+            if ($key === null || ! is_scalar($value)) {
+                return;
+            }
+
+            $stringValue = trim((string) $value);
+
+            if ($stringValue !== '' && $recognizedKeys->has($this->normalizeFieldKey($key))) {
+                $candidates[] = $stringValue;
+            }
+        };
+        $walk($request->all());
+
+        foreach ($candidates as $candidate) {
+            if ($this->looksLikePhoneNumber($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeFieldKey(string $key): string
+    {
+        return strtolower((string) preg_replace('/[^a-z0-9]+/i', '', $key));
+    }
+
+    private function looksLikePhoneNumber(string $value): bool
+    {
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return strlen($digits) >= 7 && strlen($digits) <= 15;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function respond(
+        Request $request,
+        bool $success,
+        string $displayMessage,
+        int $status,
+        array $payload = [],
+    ): Response {
+        if ($request->expectsJson()) {
+            return response()->json($payload, $status);
+        }
+
+        return response()->view('calltools-result', [
+            'success' => $success,
+            'title' => $success ? 'Lead sent successfully' : 'Lead was not sent',
+            'message' => $displayMessage,
+            'leadName' => $payload['lead_name'] ?? null,
+            'leadId' => $payload['lead_id'] ?? null,
+            'errors' => $payload['errors'] ?? [],
+        ], $status);
     }
 }

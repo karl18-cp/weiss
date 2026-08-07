@@ -4,6 +4,22 @@
 
 @import './responsive.css';
 
+input.global-clearable-search {
+    padding-right: 0.4rem;
+}
+
+input.global-clearable-search::-webkit-search-cancel-button {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    cursor: pointer;
+    opacity: 0.72;
+}
+
+input.global-clearable-search::-webkit-search-cancel-button:hover {
+    opacity: 1;
+}
+
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
@@ -11,7 +27,7 @@
 
 @theme {
     --font-sans:
-        'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
+        'Manrope', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 
@@ -135,12 +151,18 @@
 }
 
 @layer base {
+    html {
+        font-size: 17px;
+    }
+
     * {
         @apply border-border;
     }
 
     body {
         @apply bg-background text-foreground;
+        font-weight: 500;
+        line-height: 1.5;
     }
 
     :where(
@@ -168,4 +190,39 @@
     ) {
         cursor: not-allowed;
     }
+}
+/* Compact Contacts & Users directory headings. */
+.directory-heading-with-total { display: none !important; }
+.directory-heading-copy { min-width: 0; }
+.directory-heading-copy > span { color: #2d65e5; font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.directory-heading-total { width: fit-content; min-width: max-content; flex: 0 0 auto; margin: 0; }
+.directory-heading-total--generic { display: inline-flex; align-items: center; gap: .75rem; padding: .7rem .9rem; border: 1px solid #e3e8f1; border-radius: .9rem; background: #fff; box-shadow: 0 5px 18px rgb(35 51 79 / 5%); }
+.directory-heading-total--generic > div { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: .7rem; color: #2b64e6; background: #edf3ff; }
+.directory-heading-total--generic svg { width: 1.15rem; }
+.directory-heading-total--generic strong, .directory-heading-total--generic small { display: block; }
+.directory-heading-total--generic strong { font-size: 1.05rem; }
+.directory-heading-total--generic small { color: #8290a5; font-size: .68rem; }
+@media (max-width: 640px) { .directory-heading-with-total { align-items: flex-start; flex-direction: column; } }
+
+/* Inline totals for Contacts & Users directory titles. */
+.directory-heading-title-row {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+}
+.directory-inline-count {
+    display: inline-flex;
+    min-width: 1.75rem;
+    height: 1.55rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0 .5rem;
+    border: 1px solid #cbdcff;
+    border-radius: 999px;
+    color: #245fdf;
+    background: #edf3ff;
+    font-size: .76rem;
+    font-weight: 800;
+    line-height: 1;
 }

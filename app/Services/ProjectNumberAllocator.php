@@ -11,9 +11,14 @@ class ProjectNumberAllocator
 {
     public function allocate(Lead $lead): string
     {
+        return $this->allocateForCompany((int) $lead->company_id);
+    }
+
+    public function allocateForCompany(int $companyId): string
+    {
         $company = Company::query()
             ->lockForUpdate()
-            ->find($lead->company_id);
+            ->find($companyId);
 
         if (! $company) {
             throw ValidationException::withMessages([

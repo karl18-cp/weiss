@@ -6,12 +6,11 @@ import {
     Maximize2,
     Medal,
     Minimize2,
-    Search,
     Trophy,
     UserRound,
     Users,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '@/../css/team-dashboard.css';
 
 type Period = 'daily' | 'weekly' | 'monthly';
@@ -27,6 +26,8 @@ type AgentScore = {
     id: number;
     name: string;
     total: number;
+    confirmed: number;
+    sold: number;
 };
 
 type TeamScore = {
@@ -76,10 +77,8 @@ export default function TeamDashboard({
     summary,
     teams,
 }: TeamDashboardProps) {
-    const [search, setSearch] = useState('');
     const [isScoreFullscreen, setIsScoreFullscreen] = useState(false);
     const dashboardRef = useRef<HTMLElement>(null);
-
     useEffect(() => {
         const syncFullscreenState = () =>
             setIsScoreFullscreen(
@@ -94,21 +93,6 @@ export default function TeamDashboard({
                 syncFullscreenState,
             );
     }, []);
-    const filteredTeams = useMemo(() => {
-        const query = search.trim().toLowerCase();
-
-        return query
-            ? teams.filter(
-                  (team) =>
-                      team.name.toLowerCase().includes(query) ||
-                      team.manager.toLowerCase().includes(query) ||
-                      team.agents.some((agent) =>
-                          agent.name.toLowerCase().includes(query),
-                      ),
-              )
-            : teams;
-    }, [search, teams]);
-
     const applyFilters = (period: Period, date = filters.date) => {
         router.get(
             '/team-dashboard',
@@ -180,72 +164,64 @@ export default function TeamDashboard({
                         onClick={exitScoreFullscreen}
                     >
                         <Minimize2 />
-                        Exit fullscreen
                     </button>
                 )}
                 <header className="team-dashboard-hero">
-                    <span>
-                        <Trophy />
-                    </span>
-                    <div>
-                        <small>Performance scoreboard</small>
-                        <h1>Team Dashboard</h1>
-                        <p>
-                            Leads created by the Agent members of every team.
-                        </p>
+                    <div className="team-dashboard-hero__identity">
+                        <span>
+                            <Trophy />
+                        </span>
+                        <div>
+                            <small>Performance scoreboard</small>
+                            <h1>Team Dashboard</h1>
+                            <p>
+                                Leads created by the Agent members of every team.
+                            </p>
+                        </div>
                     </div>
+                    <div className="team-dashboard-controls team-dashboard-hero__controls">
+                        <div className="team-period-tabs">
+                            {(Object.keys(periodLabels) as Period[]).map(
+                                (period) => (
+                                    <button
+                                        type="button"
+                                        key={period}
+                                        className={filters.period === period ? 'is-active' : ''}
+                                        onClick={() => applyFilters(period)}
+                                    >
+                                        {periodLabels[period]}
+                                    </button>
+                                ),
+                            )}
+                        </div>
+                        <div className="team-date-navigation">
+                            <button type="button" onClick={() => movePeriod(-1)} aria-label="Previous period">
+                                <ChevronLeft />
+                            </button>
+                            <label>
+                                <CalendarDays />
+                                <input
+                                    type="date"
+                                    value={filters.date}
+                                    onChange={(event) => applyFilters(filters.period, event.target.value)}
+                                />
+                            </label>
+                            <strong>{range.label}</strong>
+                            <button type="button" onClick={() => movePeriod(1)} aria-label="Next period">
+                                <ChevronRight />
+                            </button>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className="team-dashboard-hero__fullscreen"
+                        onClick={enterScoreFullscreen}
+                        aria-label="Open team scores in fullscreen"
+                        title="Fullscreen scores"
+                    >
+                        <Maximize2 />
+                    </button>
                 </header>
-
-                <section className="team-dashboard-controls">
-                    <div className="team-period-tabs">
-                        {(Object.keys(periodLabels) as Period[]).map(
-                            (period) => (
-                                <button
-                                    type="button"
-                                    key={period}
-                                    className={
-                                        filters.period === period
-                                            ? 'is-active'
-                                            : ''
-                                    }
-                                    onClick={() => applyFilters(period)}
-                                >
-                                    {periodLabels[period]}
-                                </button>
-                            ),
-                        )}
-                    </div>
-                    <div className="team-date-navigation">
-                        <button
-                            type="button"
-                            onClick={() => movePeriod(-1)}
-                            aria-label="Previous period"
-                        >
-                            <ChevronLeft />
-                        </button>
-                        <label>
-                            <CalendarDays />
-                            <input
-                                type="date"
-                                value={filters.date}
-                                onChange={(event) =>
-                                    applyFilters(
-                                        filters.period,
-                                        event.target.value,
-                                    )
-                                }
-                            />
-                        </label>
-                        <strong>{range.label}</strong>
-                        <button
-                            type="button"
-                            onClick={() => movePeriod(1)}
-                            aria-label="Next period"
-                        >
-                            <ChevronRight />
-                        </button>
-                    </div>
-                </section>
 
                 <section className="team-dashboard-summary">
                     <article>
@@ -293,37 +269,8 @@ export default function TeamDashboard({
                 </section>
 
                 <section className="team-scoreboard">
-                    <header>
-                        <div>
-                            <h2>Team scores</h2>
-                            <p>
-                                Ranked by leads created during the selected
-                                period.
-                            </p>
-                        </div>
-                        <div className="team-scoreboard-actions">
-                            <label>
-                                <Search />
-                                <input
-                                    value={search}
-                                    onChange={(event) =>
-                                        setSearch(event.target.value)
-                                    }
-                                    placeholder="Search team, manager, or agent"
-                                />
-                            </label>
-                            <button
-                                type="button"
-                                onClick={enterScoreFullscreen}
-                            >
-                                <Maximize2 />
-                                Fullscreen scores
-                            </button>
-                        </div>
-                    </header>
-
                     <div className="team-score-list">
-                        {filteredTeams.map((team) => {
+                        {teams.map((team) => {
                             return (
                                 <article
                                     className="team-score-card"
@@ -364,7 +311,7 @@ export default function TeamDashboard({
                                             <div>
                                                 {team.agents.map((agent) => (
                                                     <article key={agent.id}>
-                                                        <span>
+                                                        <span className="team-agent-avatar">
                                                             {agent.name
                                                                 .charAt(0)
                                                                 .toUpperCase()}
@@ -372,7 +319,20 @@ export default function TeamDashboard({
                                                         <strong>
                                                             {agent.name}
                                                         </strong>
-                                                        <b>{agent.total}</b>
+                                                        <span className="team-agent-score-metrics">
+                                                            <span>
+                                                                <small>Total</small>
+                                                                <b>{agent.total}</b>
+                                                            </span>
+                                                            <span>
+                                                                <small>Confirmed</small>
+                                                                <b>{agent.confirmed}</b>
+                                                            </span>
+                                                            <span>
+                                                                <small>Sold</small>
+                                                                <b>{agent.sold}</b>
+                                                            </span>
+                                                        </span>
                                                     </article>
                                                 ))}
                                                 {team.agents.length === 0 && (
@@ -387,13 +347,12 @@ export default function TeamDashboard({
                                 </article>
                             );
                         })}
-                        {filteredTeams.length === 0 && (
+                        {teams.length === 0 && (
                             <div className="team-dashboard-empty">
                                 <Users />
                                 <h3>No teams found</h3>
                                 <p>
-                                    Create teams under Contacts &amp; Users or
-                                    change your search.
+                                    Create teams under Contacts &amp; Users.
                                 </p>
                             </div>
                         )}

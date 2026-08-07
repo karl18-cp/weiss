@@ -493,6 +493,12 @@
     background: linear-gradient(105deg, #326cf0, #2458d5);
 }
 
+.quality-control-detail > form > header .quality-control-return-button {
+    color: #b42318;
+    border: 1px solid #fecaca;
+    background: #fff1f2;
+}
+
 .quality-control-detail button:disabled {
     cursor: not-allowed;
     opacity: 0.5;

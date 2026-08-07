@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Account;
+use App\Models\Agent;
 use App\Models\Company;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -129,6 +130,79 @@ test('non-admin accounts cannot change companies', function () {
             'address' => '123 Main Street',
             'prefix' => 'BC',
             'project_code' => 'BC-001',
+        ])
+        ->assertForbidden();
+});
+
+test('contacts and users edit permission grants create update and delete access', function () {
+    $account = Account::query()->create([
+        'username' => 'contacts-editor@example.com',
+        'password' => 'password',
+        'role' => 'agent',
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Contacts Editor',
+        'account_id' => $account->acc_id,
+    ]);
+    $agent->permissions()->create([
+        'module' => 'contacts_users',
+        'access_level' => 'edit',
+    ]);
+
+    $this->actingAs($account)
+        ->post(route('management.contacts-users.store'), [
+            'company' => 'Editor Created Company',
+            'address' => '123 Main Street',
+            'prefix' => 'ECC',
+            'project_code' => 'ECC-100',
+        ])
+        ->assertRedirect();
+
+    $company = Company::query()->where('company', 'Editor Created Company')->firstOrFail();
+
+    $this->actingAs($account)
+        ->put(route('management.contacts-users.update', $company), [
+            'company' => 'Editor Updated Company',
+            'address' => '456 Main Street',
+            'prefix' => 'EUC',
+            'project_code' => 'EUC-101',
+        ])
+        ->assertRedirect();
+
+    expect($company->refresh()->company)->toBe('Editor Updated Company');
+
+    $this->actingAs($account)
+        ->delete(route('management.contacts-users.destroy', $company))
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('companies', ['com_id' => $company->com_id]);
+});
+
+test('contacts and users view permission remains read only', function () {
+    $account = Account::query()->create([
+        'username' => 'contacts-viewer@example.com',
+        'password' => 'password',
+        'role' => 'agent',
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Contacts Viewer',
+        'account_id' => $account->acc_id,
+    ]);
+    $agent->permissions()->create([
+        'module' => 'contacts_users',
+        'access_level' => 'view',
+    ]);
+
+    $this->actingAs($account)
+        ->get(route('management.contacts-users'))
+        ->assertOk();
+
+    $this->actingAs($account)
+        ->post(route('management.contacts-users.store'), [
+            'company' => 'Blocked Viewer Company',
+            'address' => '',
+            'prefix' => 'BVC',
+            'project_code' => 'BVC-100',
         ])
         ->assertForbidden();
 });

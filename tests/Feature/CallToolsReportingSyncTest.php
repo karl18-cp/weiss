@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Agent;
 use App\Services\CallToolsReportingSync;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
@@ -99,4 +100,36 @@ test('login shift sync closes overlapping sessions when CallTools reports logout
         'stopped_at' => '2026-07-27 17:45:00',
         'duration_seconds' => 17100,
     ]);
+});
+
+test('reporting sync keeps an existing calltools user mapping when another agent name also matches', function () {
+    config([
+        'services.calltools.api_base_url' => 'https://calltools.test',
+        'services.calltools.api_key' => 'test-key',
+        'services.calltools.sync_start_date' => '2026-07-01',
+    ]);
+
+    $callToolsId = 'ca6cbfc2-f388-4e0a-827d-6ae201d89abe';
+    $owner = Agent::query()->create([
+        'agent_name' => 'Existing Owner',
+        'calltools_user_id' => $callToolsId,
+    ]);
+    $duplicateMatch = Agent::query()->create(['agent_name' => 'CallTools Agent']);
+
+    Http::fake(function (Request $request) use ($callToolsId) {
+        if (str_contains($request->url(), '/api/users/')) {
+            return Http::response(['results' => [[
+                'app_user' => $callToolsId,
+                'full_name' => 'CallTools Agent',
+            ]]]);
+        }
+
+        return Http::response(['results' => [], 'next' => null]);
+    });
+
+    $result = app(CallToolsReportingSync::class)->sync(1);
+
+    expect($result['agents'])->toBe(1)
+        ->and($owner->refresh()->calltools_user_id)->toBe($callToolsId)
+        ->and($duplicateMatch->refresh()->calltools_user_id)->toBeNull();
 });

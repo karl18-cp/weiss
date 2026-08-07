@@ -45,7 +45,6 @@ class ProductController extends Controller
 
     public function destroy(Product $product): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
 
         $product->delete();
 

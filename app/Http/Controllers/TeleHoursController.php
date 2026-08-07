@@ -244,11 +244,7 @@ class TeleHoursController extends Controller
 
     private function timezone(string $requested): string
     {
-        if ($requested !== '' && in_array($requested, timezone_identifiers_list(), true)) {
-            return $requested;
-        }
-
-        return (string) config('services.calltools.report_timezone', 'Asia/Manila');
+        return (string) config('app.timezone', 'America/Los_Angeles');
     }
 
     private function lunchSeconds(mixed $appUserIds, CarbonImmutable $from, CarbonImmutable $to): mixed

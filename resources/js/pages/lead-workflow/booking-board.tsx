@@ -1,4 +1,4 @@
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, router } from "@inertiajs/react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -6,6 +6,7 @@ import {
   Clock3,
   MapPin,
   Navigation,
+  RefreshCw,
   Search,
   UserRound,
 } from "lucide-react";
@@ -290,11 +291,13 @@ export default function BookingBoard({
     ? appointmentDateKey(visibleLeads[0].appointment_at)
     : today;
   const [selectedDate, setSelectedDate] = useState(
-    visibleLeads.some(
-      (lead) => appointmentDateKey(lead.appointment_at) === today,
-    )
+    viewerRole === "salesman"
       ? today
-      : firstDate,
+      : visibleLeads.some(
+            (lead) => appointmentDateKey(lead.appointment_at) === today,
+          )
+        ? today
+        : firstDate,
   );
   const [view, setView] = useState<ViewMode>("daily");
   const [search, setSearch] = useState("");
@@ -302,6 +305,7 @@ export default function BookingBoard({
     "all",
   );
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const selectedDateValue = dateFromKey(selectedDate);
 
   const periodLeads = useMemo(() => {
@@ -379,6 +383,17 @@ export default function BookingBoard({
     setSelectedId(null);
   };
 
+  const refreshBookings = () => {
+    setRefreshing(true);
+    setSelectedDate(localDateKey(new Date()));
+    setSelectedId(null);
+    router.reload({
+      only: ["leads", "salesmen"],
+      preserveScroll: true,
+      onFinish: () => setRefreshing(false),
+    });
+  };
+
   const periodTitle =
     view === "daily"
       ? longDateFormatter.format(selectedDateValue)
@@ -408,6 +423,18 @@ export default function BookingBoard({
             </p>
           </div>
           <div className="booking-board-summary">
+            {viewerRole === "salesman" && (
+              <button
+                type="button"
+                className="booking-board-refresh"
+                onClick={refreshBookings}
+                disabled={refreshing}
+                aria-label="Refresh assigned bookings"
+              >
+                <RefreshCw className={refreshing ? "is-spinning" : ""} />
+                <strong>{refreshing ? "Refreshing" : "Refresh"}</strong>
+              </button>
+            )}
             <span>
               <CalendarDays />
               <strong>{periodLeads.length}</strong> appointments

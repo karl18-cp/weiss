@@ -81,7 +81,7 @@ export default function Products({ products }: { products: Product[] }) {
         <>
             <Head title="Products" />
             <main className="products-page">
-                <header className="products-header">
+                <header className="products-header directory-heading-with-total">
                     <div>
                         <span>Contacts &amp; Users</span>
                         <h1>Products</h1>
@@ -90,9 +90,7 @@ export default function Products({ products }: { products: Product[] }) {
                             CRM.
                         </p>
                     </div>
-                </header>
-
-                <section className="products-summary">
+                <section className="products-summary directory-heading-total">
                     <div className="products-summary__icon">
                         <Package />
                     </div>
@@ -101,11 +99,15 @@ export default function Products({ products }: { products: Product[] }) {
                         <span>Total products</span>
                     </div>
                 </section>
+                </header>
 
                 <div className="products-workspace">
                     <DirectoryNavigation active="Products">
                         <div className="products-directory-heading">
-                            <h2>Product catalog</h2>
+                            <div className="directory-heading-title-row">
+                                <h2>Product catalog</h2>
+                                <span className="directory-inline-count">{filteredProducts.length}</span>
+                            </div>
                             <p>Select a product to edit</p>
                         </div>
 

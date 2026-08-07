@@ -83,6 +83,122 @@ test('assigning a salesman is recorded in lead history', function () {
     ]);
 });
 
+test('project details can update the company and product', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 12500]);
+
+    $project = $lead->project()->firstOrFail();
+    $company = Company::query()->create([
+        'com_id' => 2,
+        'company' => 'Replacement Company',
+        'address' => '',
+        'prefix' => 'RC',
+        'project_code' => 'RC-100',
+    ]);
+    $product = Product::query()->create(['product_name' => 'Replacement Product']);
+
+    $this->actingAs($account)
+        ->put(route('management.projects.update', $project), [
+            'project_number' => $project->project_number,
+            'status' => 'progress',
+            'company_id' => $company->com_id,
+            'product_id' => $product->prod_id,
+            'customer_name' => 'Updated Customer',
+            'primary_number' => '+1 (408) 555-0110',
+            'secondary_number' => '+1 (408) 555-0111',
+            'mobile_number' => '+1 (408) 555-0112',
+            'email' => 'updated@example.com',
+            'address' => '99 Updated Street',
+            'city' => 'Oakland',
+            'state' => 'CA',
+            'zip_code' => '94601',
+            'source' => 'Updated Source',
+            'appointment_at' => '2026-08-12 14:30:00',
+            'lead_created_at' => '2026-08-01 09:15:00',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($lead->refresh()->company_id)->toBe($company->com_id)
+        ->and($lead->product_id)->toBe($product->prod_id)
+        ->and($lead->customer_name)->toBe('Updated Customer')
+        ->and($lead->created_at->format('Y-m-d H:i'))->toBe('2026-08-01 09:15')
+        ->and($project->refresh()->status)->toBe('progress')
+        ->and($project->sales()->where('type', 'original')->firstOrFail()->product_id)->toBe($product->prod_id);
+});
+
+test('an authenticated user can create a project directly from projects', function () {
+    ['account' => $account, 'lead' => $fixtureLead] = projectSaleFixtures();
+    $company = $fixtureLead->company;
+    $product = $fixtureLead->product;
+    $agent = $fixtureLead->agent;
+
+    $leadCount = Lead::query()->count();
+
+    $this->actingAs($account)
+        ->post(route('management.projects.store'), [
+            'customer_name' => 'Direct Project Customer',
+            'contact_name' => 'Direct Contact',
+            'primary_number' => '+1 (408) 555-0199',
+            'mobile_number' => '+1 (408) 555-0188',
+            'email' => 'direct-project@example.com',
+            'address' => '500 Direct Avenue',
+            'city' => 'San Jose',
+            'state' => 'CA',
+            'zip_code' => '95113',
+            'company_id' => $company->com_id,
+            'product_id' => $product->prod_id,
+            'telemarketer_id' => $agent->agent_id,
+            'salesman_id' => null,
+            'manager_id' => null,
+            'project_number' => '',
+            'status' => 'new',
+            'amount' => 25000,
+            'budget' => 18000,
+            'notes' => 'Standalone project notes.',
+            'signed_date' => '2026-08-06',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $project = \App\Models\Project::query()
+        ->where('customer_name', 'Direct Project Customer')
+        ->firstOrFail();
+
+    expect(Lead::query()->count())->toBe($leadCount)
+        ->and($project->lead_id)->toBeNull()
+        ->and($project->contact_name)->toBe('Direct Contact')
+        ->and($project->project_number)->toBe('PC-001')
+        ->and($project->amount)->toBe('25000.00')
+        ->and($project->budget)->toBe('18000.00')
+        ->and($project->manual_notes)->toBe('Standalone project notes.')
+        ->and($project->created_at->toDateString())->toBe('2026-08-06')
+        ->and($project->sales()->where('type', 'original')->firstOrFail()->amount)->toBe('25000.00');
+});
+
+test('changing an appointment records the previous and new dates in lead history', function () {
+    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+    $previousAppointment = $lead->appointment_at->copy();
+    $nextAppointment = $previousAppointment->copy()->addDays(3)->setTime(14, 30);
+
+    $this->actingAs($account)
+        ->patch(route('lead-workflow.leads-shop.appointment.update', $lead), [
+            'appointment_at' => $nextAppointment->format('Y-m-d H:i:s'),
+        ])
+        ->assertRedirect();
+
+    $history = $lead->notes()
+        ->where('note_type', 'appointment_date_change')
+        ->latest()
+        ->firstOrFail();
+
+    expect($history->created_by)->toBe($account->acc_id)
+        ->and($history->body)->toContain('Appointment changed from')
+        ->and($history->body)->toContain(' to ')
+        ->and($lead->refresh()->appointment_at->timestamp)->toBe($nextAppointment->timestamp);
+});
+
 test('accepting a sale creates a related project', function () {
     ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
     $lead->update(['salesman_1_id' => $salesman->salesman_id]);

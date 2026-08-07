@@ -10,7 +10,7 @@ export default function LA(props: LeadsShopProps) {
           "Review LA leads, document the latest outcome, and schedule the next action.",
         status: "la",
         listTitle: "Waiting for LA",
-        dateLabel: "Appointment dates",
+        dateLabel: "LA dates",
         dateField: "appointment_at",
       }}
     />

@@ -79,7 +79,7 @@
     display: grid;
     min-height: 0;
     flex: 1;
-    grid-template-columns: 14rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1.25rem;
 }
 
@@ -215,6 +215,8 @@
 }
 
 .teams-form-panel {
+    display: flex;
+    flex-direction: column;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -247,7 +249,10 @@
 }
 
 .teams-form {
-    display: grid;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
     gap: 1.25rem;
     margin-top: 1.25rem;
 }
@@ -304,6 +309,10 @@
 }
 
 .team-members {
+    display: flex;
+    min-height: 18rem;
+    flex: 1;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid #e1e7f0;
     border-radius: .9rem;
@@ -320,6 +329,25 @@
 
 .team-members h3 {
     font-size: .8rem;
+    font-weight: 800;
+}
+
+.team-members-title {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+}
+
+.team-members-title > span {
+    display: inline-grid;
+    min-width: 1.65rem;
+    height: 1.35rem;
+    place-items: center;
+    padding-inline: .4rem;
+    border-radius: 999px;
+    color: #285fdc;
+    background: #e7efff;
+    font-size: .7rem;
     font-weight: 800;
 }
 
@@ -341,8 +369,10 @@
 
 .team-member-grid {
     display: grid;
-    max-height: 18rem;
+    min-height: 12rem;
+    flex: 1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
     gap: .55rem;
     overflow-y: auto;
     padding: 0 .85rem .85rem;
@@ -416,6 +446,7 @@
 
 .teams-actions {
     display: flex;
+    margin-top: auto;
     justify-content: flex-end;
     gap: .55rem;
     padding-top: 1rem;

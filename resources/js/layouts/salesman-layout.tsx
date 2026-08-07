@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { CalendarDays, LogOut, UsersRound } from 'lucide-react';
+import { CalendarDays, FileText, LogOut, UsersRound } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import SalesmanPwaControls from '@/components/salesman-pwa-controls';
 import { logout } from '@/routes';
@@ -13,6 +13,11 @@ const links = [
         icon: CalendarDays,
     },
     { label: 'My Leads', href: '/salesman/leads', icon: UsersRound },
+    {
+        label: 'Lead Information',
+        href: '/salesman/lead-information',
+        icon: FileText,
+    },
 ];
 
 export default function SalesmanLayout({ children }: PropsWithChildren) {
@@ -25,7 +30,10 @@ export default function SalesmanLayout({ children }: PropsWithChildren) {
     return (
         <div className="salesman-portal">
             <header className="salesman-portal__header">
-                <Link href="/salesman/booking-board" className="salesman-portal__brand">
+                <Link
+                    href="/salesman/booking-board"
+                    className="salesman-portal__brand"
+                >
                     <img src="/images/weiss-logo.png" alt="WEISS" />
                     <span>
                         <strong>Weiss Sales</strong>
@@ -47,7 +55,10 @@ export default function SalesmanLayout({ children }: PropsWithChildren) {
             <main className="salesman-portal__content">{children}</main>
             <SalesmanPwaControls publicKey={props.pwa.pushPublicKey} />
 
-            <nav className="salesman-portal__nav" aria-label="Salesman navigation">
+            <nav
+                className="salesman-portal__nav"
+                aria-label="Salesman navigation"
+            >
                 {links.map(({ label, href, icon: Icon }) => (
                     <Link
                         key={href}

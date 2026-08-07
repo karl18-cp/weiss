@@ -64,8 +64,6 @@ class CompanyController extends Controller
 
     public function destroy(Company $company): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
-
         $company->delete();
 
         Inertia::flash('toast', [
@@ -78,13 +76,11 @@ class CompanyController extends Controller
 
     public function archive(Company $company): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
-
         $company->update(['archived_at' => now()]);
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'Company archived.',
+            'message' => 'Company moved to Inactive.',
         ]);
 
         return back();
@@ -92,13 +88,11 @@ class CompanyController extends Controller
 
     public function restore(Company $company): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
-
         $company->update(['archived_at' => null]);
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'Company restored.',
+            'message' => 'Company restored to Active.',
         ]);
 
         return back();

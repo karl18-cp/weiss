@@ -15,6 +15,7 @@ import '@/../css/salesmen.css';
 import DirectoryNavigation from '@/components/directory-navigation';
 import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
+import { formatPhoneNumber } from '@/lib/phone-number';
 import ModulePermissionsEditor, {
     type PermissionAccess,
 } from '@/components/module-permissions-editor';
@@ -42,6 +43,7 @@ export default function Salesmen({
     const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Salesman | null>(null);
     const [search, setSearch] = useState('');
+    const [directoryStatus, setDirectoryStatus] = useState<'active' | 'inactive'>('active');
     const blankPermissions = Object.fromEntries(
         Object.keys(permissionModules).map((module) => [module, 'none']),
     ) as Record<string, PermissionAccess>;
@@ -57,16 +59,21 @@ export default function Salesmen({
 
     const filteredSalesmen = useMemo(() => {
         const query = search.trim().toLowerCase();
+        const statusFiltered = salesmen.filter((salesman) =>
+            directoryStatus === 'inactive'
+                ? Boolean(salesman.account?.suspended_at)
+                : !salesman.account?.suspended_at,
+        );
 
         return query
-            ? salesmen.filter((salesman) =>
+            ? statusFiltered.filter((salesman) =>
                   [salesman.salesman_name, salesman.phone]
                       .join(' ')
                       .toLowerCase()
                       .includes(query),
               )
-            : salesmen;
-    }, [salesmen, search]);
+            : statusFiltered;
+    }, [salesmen, directoryStatus, search]);
 
     const resetForm = () => {
         setSelected(null);
@@ -141,24 +148,32 @@ export default function Salesmen({
         <>
             <Head title="Salesmen" />
             <main className="agents-page salesmen-page">
-                <header className="agents-header">
-                    <span>Contacts &amp; Users</span>
-                    <h1>Salesmen</h1>
-                    <p>Create and maintain salesman records in Weiss CRM.</p>
-                </header>
-                <section className="agents-count">
-                    <div>
-                        <Users />
+                <header className="agents-header directory-heading-with-total">
+                    <div className="directory-heading-copy">
+                        <span>Contacts &amp; Users</span>
+                        <h1>Salesmen</h1>
+                        <p>Create and maintain salesman records in Weiss CRM.</p>
                     </div>
-                    <span>
-                        <strong>{salesmen.length}</strong>
-                        <small>Total salesmen</small>
-                    </span>
-                </section>
+                    <section className="agents-count directory-heading-total">
+                        <div><Users /></div>
+                        <span><strong>{salesmen.length}</strong><small>Total salesmen</small></span>
+                    </section>
+                </header>
                 <div className="agents-workspace">
-                    <DirectoryNavigation active="Salesman">
+                    <DirectoryNavigation
+                        active="Salesman"
+                        status={directoryStatus}
+                        onStatusChange={(status) => {
+                            setDirectoryStatus(status);
+                            resetForm();
+                            setSearch('');
+                        }}
+                    >
                         <div className="agents-directory-heading">
-                            <h2>Salesman directory</h2>
+                            <div className="directory-heading-title-row">
+                                <h2>Salesman directory</h2>
+                                <span className="directory-inline-count">{filteredSalesmen.length}</span>
+                            </div>
                             <p>Select a salesman to edit</p>
                         </div>
                         <label className="agents-search">
@@ -205,7 +220,7 @@ export default function Salesmen({
                                         <small>
                                             {salesman.company?.company ??
                                                 'No company'}{' '}
-                                            · {salesman.phone || 'No phone'}
+                                            · {formatPhoneNumber(salesman.phone)}
                                         </small>
                                     </span>
                                 </button>

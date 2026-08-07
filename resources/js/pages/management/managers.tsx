@@ -8,6 +8,7 @@ import {
     ShieldCheck,
     Trash2,
     UserRound,
+    Users,
     X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -46,6 +47,7 @@ export default function Managers({
     ) as Record<string, Access>;
     const [selected, setSelected] = useState<Manager | null>(null);
     const [search, setSearch] = useState('');
+    const [directoryStatus, setDirectoryStatus] = useState<'active' | 'inactive'>('active');
     const form = useForm({
         manager_name: '',
         username: '',
@@ -58,9 +60,14 @@ export default function Managers({
     });
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
+        const statusFiltered = managers.filter((manager) =>
+            directoryStatus === 'inactive'
+                ? Boolean(manager.account.suspended_at)
+                : !manager.account.suspended_at,
+        );
 
         return q
-            ? managers.filter((manager) =>
+            ? statusFiltered.filter((manager) =>
                   [
                       manager.manager_name,
                       manager.account.username,
@@ -70,8 +77,8 @@ export default function Managers({
                       .toLowerCase()
                       .includes(q),
               )
-            : managers;
-    }, [managers, search]);
+            : statusFiltered;
+    }, [managers, directoryStatus, search]);
 
     const reset = () => {
         setSelected(null);
@@ -165,16 +172,33 @@ export default function Managers({
         <>
             <Head title="Managers" />
             <main className="managers-page">
-                <header className="managers-header">
-                    <span>Contacts &amp; Users</span>
-                    <h1>Managers</h1>
-                    <p>Create manager accounts and control their access.</p>
+                <header className="managers-header directory-heading-with-total">
+                    <div className="directory-heading-copy">
+                        <span>Contacts &amp; Users</span>
+                        <h1>Managers</h1>
+                        <p>Create manager accounts and control their access.</p>
+                    </div>
+                    <section className="directory-heading-total directory-heading-total--generic">
+                        <div><Users /></div>
+                        <span><strong>{managers.length}</strong><small>Total managers</small></span>
+                    </section>
                 </header>
                 <div className="managers-workspace">
-                    <DirectoryNavigation active="Managers">
+                    <DirectoryNavigation
+                        active="Managers"
+                        status={directoryStatus}
+                        onStatusChange={(status) => {
+                            setDirectoryStatus(status);
+                            reset();
+                            setSearch('');
+                        }}
+                    >
                         <div className="managers-directory-heading">
-                            <h2>Manager directory</h2>
-                            <p>{managers.length} manager accounts</p>
+                            <div className="directory-heading-title-row">
+                                <h2>Manager directory</h2>
+                                <span className="directory-inline-count">{filtered.length}</span>
+                            </div>
+                            <p>Select a manager to edit</p>
                         </div>
                         <label className="managers-search">
                             <Search />
@@ -402,15 +426,38 @@ export default function Managers({
                                                         )
                                                     }
                                                 >
-                                                    <option value="none">
-                                                        None
-                                                    </option>
-                                                    <option value="view">
-                                                        View
-                                                    </option>
-                                                    <option value="edit">
-                                                        Edit
-                                                    </option>
+                                                    {module === 'dial_raw_only' ? (
+                                                        <>
+                                                            <option value="none">
+                                                                Unrestricted
+                                                            </option>
+                                                            <option value="edit">
+                                                                Raw leads only
+                                                            </option>
+                                                        </>
+                                                    ) : module === 'toss_action' ||
+                                                    module === 'view_all_kit_managers' ? (
+                                                        <>
+                                                            <option value="none">
+                                                                Not allowed
+                                                            </option>
+                                                            <option value="edit">
+                                                                Allowed
+                                                            </option>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <option value="none">
+                                                                None
+                                                            </option>
+                                                            <option value="view">
+                                                                View
+                                                            </option>
+                                                            <option value="edit">
+                                                                Edit
+                                                            </option>
+                                                        </>
+                                                    )}
                                                 </select>
                                             </label>
                                         ),

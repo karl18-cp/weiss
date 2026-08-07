@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\SalesmanRequest;
-use App\Models\Salesman;
 use App\Models\Account;
 use App\Models\Company;
+use App\Models\Salesman;
 use App\Support\ManagerAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +63,6 @@ class SalesmanController extends Controller
 
     public function destroy(Salesman $salesman): RedirectResponse
     {
-        abort_unless(request()->user()?->role === 'admin', 403);
 
         DB::transaction(function () use ($salesman): void {
             $account = $salesman->account;
@@ -78,7 +77,9 @@ class SalesmanController extends Controller
 
     private function createAccount(array $data): ?Account
     {
-        if (empty($data['username'])) return null;
+        if (empty($data['username'])) {
+            return null;
+        }
 
         return Account::query()->create([
             'username' => $data['username'],
@@ -92,10 +93,13 @@ class SalesmanController extends Controller
     {
         if (empty($data['username'])) {
             $account?->delete();
+
             return null;
         }
 
-        if (! $account) return $this->createAccount($data);
+        if (! $account) {
+            return $this->createAccount($data);
+        }
 
         $updates = [
             'username' => $data['username'],
@@ -104,7 +108,9 @@ class SalesmanController extends Controller
                 ? ($data['suspended'] ? ($account->suspended_at ?? now()) : null)
                 : $account->suspended_at,
         ];
-        if (! empty($data['password'])) $updates['password'] = $data['password'];
+        if (! empty($data['password'])) {
+            $updates['password'] = $data['password'];
+        }
         $account->update($updates);
 
         return $account;

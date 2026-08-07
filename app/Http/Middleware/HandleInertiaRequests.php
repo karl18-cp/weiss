@@ -54,7 +54,7 @@ class HandleInertiaRequests extends Middleware
                 },
             ],
             'pwa' => [
-                'pushPublicKey' => fn () => $request->user()?->role === 'salesman'
+                'pushPublicKey' => fn () => $request->user()
                     ? config('services.webpush.public_key')
                     : null,
             ],
@@ -72,6 +72,9 @@ class HandleInertiaRequests extends Middleware
                     'leads_shop' => $sum(Lead::LEADS_SHOP_STATUSES),
                     'confirm_leads' => $sum(['confirmed']),
                     'dispatch_leads' => $sum(['dispatched']),
+                    'sag' => Lead::query()
+                        ->whereHas('project', fn ($project) => $project->where('status', 'completed'))
+                        ->count(),
                     'reschedule' => $sum(['reschedule']),
                     'rehash' => $sum(['rehash', 'rehash_ng', 'rehash_toss', 'rehash_cb']),
                     '555' => $sum(['555']),

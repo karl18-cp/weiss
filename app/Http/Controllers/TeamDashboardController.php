@@ -7,6 +7,8 @@ use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -14,7 +16,7 @@ class TeamDashboardController extends Controller
 {
     public function __invoke(Request $request): Response
     {
-        $timezone = (string) config('services.calltools.report_timezone', 'Asia/Manila');
+        $timezone = (string) config('app.timezone', 'America/Los_Angeles');
         $period = in_array($request->string('period')->toString(), ['daily', 'weekly', 'monthly'], true)
             ? $request->string('period')->toString()
             : 'daily';
@@ -23,18 +25,33 @@ class TeamDashboardController extends Controller
         $dates = collect(CarbonPeriod::create($start, '1 day', $end))
             ->map(fn ($date): string => $date->format('Y-m-d'));
 
+        $createdAtExpression = Schema::hasTable('lead_movements')
+            ? 'COALESCE((SELECT MIN(lm.created_at) FROM lead_movements lm WHERE lm.lead_id = leads.id), leads.created_at)'
+            : 'leads.created_at';
+
         $leads = Lead::query()
+            ->select(['leads.id', 'agent_id', 'status'])
             ->withExists('project')
-            ->whereBetween('created_at', [
+            ->whereBetween(DB::raw($createdAtExpression), [
                 $start->utc(),
                 $end->endOfDay()->utc(),
             ])
-            ->get(['agent_id', 'created_at', 'status']);
+            ->selectRaw("{$createdAtExpression} as effective_created_at")
+            ->get();
+
+        $soldLeads = Lead::query()
+            ->select(['leads.id', 'agent_id', 'appointment_at'])
+            ->whereHas('project')
+            ->whereBetween('appointment_at', [
+                $start->startOfDay()->format('Y-m-d H:i:s'),
+                $end->endOfDay()->format('Y-m-d H:i:s'),
+            ])
+            ->get();
 
         $scores = $leads
             ->groupBy(fn (Lead $lead): int => (int) $lead->agent_id)
             ->map(fn ($agentLeads) => $agentLeads
-                ->groupBy(fn (Lead $lead): string => CarbonImmutable::parse($lead->created_at, 'UTC')
+                ->groupBy(fn (Lead $lead): string => CarbonImmutable::parse($lead->effective_created_at, 'UTC')
                     ->setTimezone($timezone)
                     ->format('Y-m-d')));
 
@@ -45,15 +62,19 @@ class TeamDashboardController extends Controller
             ])
             ->orderBy('team_name')
             ->get()
-            ->map(function (Team $team) use ($dates, $leads, $scores): array {
+            ->map(function (Team $team) use ($dates, $leads, $scores, $soldLeads): array {
                 $agentScores = $team->agents
-                    ->map(function ($agent) use ($dates, $scores): array {
-                        $daily = $scores->get((int) $agent->agent_id, collect());
+                    ->map(function ($agent) use ($dates, $leads, $scores, $soldLeads): array {
+                        $agentId = (int) $agent->agent_id;
+                        $daily = $scores->get($agentId, collect());
+                        $agentLeads = $leads->where('agent_id', $agentId);
 
                         return [
-                            'id' => (int) $agent->agent_id,
+                            'id' => $agentId,
                             'name' => $agent->agent_name,
                             'total' => $dates->sum(fn (string $date): int => $daily->get($date, collect())->count()),
+                            'confirmed' => $agentLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
+                            'sold' => $soldLeads->where('agent_id', $agentId)->count(),
                         ];
                     })
                     ->sortByDesc('total')
@@ -84,7 +105,7 @@ class TeamDashboardController extends Controller
                     'memberCount' => $team->agents->count(),
                     'total' => $dailyScores->sum('count'),
                     'confirmed' => $teamLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
-                    'sold' => $teamLeads->where('project_exists', true)->count(),
+                    'sold' => $soldLeads->whereIn('agent_id', $teamAgentIds)->count(),
                     'dailyScores' => $dailyScores,
                     'agents' => $agentScores,
                 ];

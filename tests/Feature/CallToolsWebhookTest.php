@@ -79,6 +79,12 @@ test('calltools webhook creates and updates one lead per contact', function () {
         'agent_name' => 'CallTools Agent',
         'company_id' => $agentCompany->com_id,
     ]);
+    $matchedAgentAccount = Account::query()->create([
+        'username' => 'calltools-agent@example.com',
+        'password' => 'password',
+        'role' => 'agent',
+    ]);
+    $matchedAgent->update(['account_id' => $matchedAgentAccount->acc_id]);
     $matchedProduct = Product::query()->create(['product_name' => 'Electrical / Plumbing']);
 
     $payload = [
@@ -115,16 +121,19 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->and($lead->appointment_at->format('Y-m-d H:i:s'))->toBe('2026-07-22 14:30:00')
         ->and($lead->calltools_campaign_name)->toBe('Summer Campaign')
         ->and($lead->telemarketer_notes)->toBe('Interested customer');
-    expect(LeadNote::query()
+    $telemarketerNote = LeadNote::query()
         ->where('lead_id', $lead->id)
         ->where('note_type', 'telemarketer')
-        ->value('body'))->toBe('Interested customer');
+        ->firstOrFail();
+    expect($telemarketerNote->body)->toBe('Interested customer')
+        ->and($telemarketerNote->created_by)->toBe($matchedAgentAccount->acc_id);
 
     $originalLeadId = $lead->id;
     $lead->forceFill([
         'status' => 'dispatched',
         'created_at' => now()->subDays(10),
     ])->save();
+    $originalCreatedAt = $lead->created_at->copy();
     $resentAt = now()->addMinute()->startOfSecond();
     $this->travelTo($resentAt);
 
@@ -148,7 +157,7 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->and($resentLead->address)->toBe('456 Updated Avenue')
         ->and($resentLead->city)->toBe('Tampa')
         ->and($resentLead->primary_number)->toBe('+15557654321')
-        ->and($resentLead->created_at->equalTo($resentAt))->toBeTrue()
+        ->and($resentLead->created_at->equalTo($originalCreatedAt))->toBeTrue()
         ->and(LeadNote::query()->where('lead_id', $lead->id)->count())->toBe(1);
 });
 
@@ -209,6 +218,42 @@ test('calltools webhook accepts native connector phone fields and derives a cont
     $lead = Lead::query()->where('primary_number', '+1 (555) 123-4567')->firstOrFail();
 
     expect($lead->calltools_contact_id)->toStartWith('phone-');
+});
+
+test('calltools webhook finds camel case and nested phone fields', function () {
+    configureCallToolsWebhook();
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => 'nested-phone-contact',
+            'contact' => ['phoneNumber' => '+1 (408) 555-0199'],
+        ])
+        ->assertCreated();
+
+    expect(Lead::query()->where('calltools_contact_id', 'nested-phone-contact')->value('primary_number'))
+        ->toBe('+1 (408) 555-0199');
+});
+
+test('calltools browser submission receives a friendly result screen', function () {
+    configureCallToolsWebhook();
+
+    $this->withToken('test-webhook-secret')
+        ->post(route('webhooks.calltools'), [
+            'contact_id' => 'browser-response-contact',
+            'first_name' => 'Taylor',
+            'last_name' => 'Customer',
+            'phone_number' => '+15551234567',
+        ])
+        ->assertCreated()
+        ->assertSee('Lead sent successfully')
+        ->assertSee('Taylor Customer')
+        ->assertSee('You can close this page');
+
+    $this->withToken('test-webhook-secret')
+        ->post(route('webhooks.calltools'), ['contact_id' => 'missing-phone-contact'])
+        ->assertUnprocessable()
+        ->assertSee('Lead was not sent')
+        ->assertSee('could not find the lead phone number');
 });
 
 test('calltools webhook normalizes connector appointment date formats', function () {

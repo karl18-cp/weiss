@@ -1,4 +1,4 @@
-const CACHE = 'weiss-sales-v1';
+const CACHE = 'weiss-sales-v2';
 const APP_SHELL = [
   '/manifest.webmanifest',
   '/pwa/icon-192.png',
@@ -23,10 +23,19 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || event.request.mode === 'navigate') return;
 
+  const requestUrl = new URL(event.request.url);
+  const isAppShellAsset = requestUrl.origin === self.location.origin
+    && APP_SHELL.includes(requestUrl.pathname);
+
+  // Never cache Inertia page responses or API/data requests. Those responses
+  // contain live CRM totals and lead statuses and must always come from the
+  // server. Only the small, immutable PWA shell is available offline.
+  if (!isAppShellAsset) return;
+
   event.respondWith(
     caches.match(event.request).then((cached) =>
       cached || fetch(event.request).then((response) => {
-        if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+        if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         }

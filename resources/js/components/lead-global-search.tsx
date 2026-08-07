@@ -1,7 +1,8 @@
 import { router } from '@inertiajs/react';
-import { MapPin, Phone, Search } from 'lucide-react';
+import { MapPin, Phone, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import '@/../css/lead-global-search.css';
+import { formatPhoneNumber } from '@/lib/phone-number';
 
 type Result = { id: number; customer: string; phone: string | null; address: string; product: string | null; company: string | null; location: string; url: string };
 
@@ -29,8 +30,16 @@ export default function LeadGlobalSearch({ placeholder = 'Search customers, phon
 
     const visit = (result: Result) => { setOpen(false); router.visit(result.url); };
 
+    const clearSearch = () => {
+        requestId.current += 1;
+        setQuery('');
+        setResults([]);
+        setLoading(false);
+        setOpen(false);
+    };
+
     return <div className={`lead-global-search ${className}`} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
-        <div className="lead-global-search__input"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} onFocus={() => query.trim().length >= 2 && setOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' && results[0]) { event.preventDefault(); visit(results[0]); } if (event.key === 'Escape') setOpen(false); }} placeholder={placeholder} aria-label="Search leads" autoComplete="off" />{loading && <span className="lead-global-search__loading" />}</div>
-        {open && <div className="lead-global-search__results">{results.map((result) => <button key={result.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => visit(result)}><span className="lead-global-search__avatar">{result.customer.charAt(0).toUpperCase()}</span><span className="lead-global-search__details"><strong>{result.customer}</strong><small>{result.phone && <span><Phone />{result.phone}</span>}{result.address && <span><MapPin />{result.address}</span>}</small>{(result.product || result.company) && <em>{[result.product, result.company].filter(Boolean).join(' · ')}</em>}</span><span className="lead-global-search__location">{result.location}</span></button>)}{!loading && results.length === 0 && <p>No accessible leads found.</p>}</div>}
+        <div className="lead-global-search__input"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} onFocus={() => query.trim().length >= 2 && setOpen(true)} onKeyDown={(event) => { if (event.key === 'Enter' && results[0]) { event.preventDefault(); visit(results[0]); } if (event.key === 'Escape') setOpen(false); }} placeholder={placeholder} aria-label="Search leads" autoComplete="off" />{loading && <span className="lead-global-search__loading" />}{query.length > 0 && <button type="button" className="lead-global-search__clear" onClick={clearSearch} aria-label="Clear search" title="Clear search"><X aria-hidden="true" /></button>}</div>
+        {open && <div className="lead-global-search__results">{results.map((result) => <button key={result.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => visit(result)}><span className="lead-global-search__avatar">{result.customer.charAt(0).toUpperCase()}</span><span className="lead-global-search__details"><strong>{result.customer}</strong><small>{result.phone && <span><Phone />{formatPhoneNumber(result.phone)}</span>}{result.address && <span><MapPin />{result.address}</span>}</small>{(result.product || result.company) && <em>{[result.product, result.company].filter(Boolean).join(' · ')}</em>}</span><span className="lead-global-search__location">{result.location}</span></button>)}{!loading && results.length === 0 && <p>No accessible leads found.</p>}</div>}
     </div>;
 }

@@ -1,0 +1,58 @@
+.salesman-pwa {
+    position: fixed;
+    right: 14rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    z-index: 95;
+    display: flex;
+    max-width: calc(100vw - 1.5rem);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+}
+
+.salesman-pwa button {
+    display: inline-flex;
+    min-height: 2.45rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #d9e2ee;
+    border-radius: 999px;
+    color: #23416e;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 5px 18px rgb(15 23 42 / 12%);
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+
+.salesman-pwa button:disabled { opacity: 0.55; }
+.salesman-pwa button svg { width: 0.85rem; }
+.salesman-pwa p {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.6rem;
+    color: #334155;
+    background: #fff;
+    box-shadow: 0 5px 18px rgb(15 23 42 / 12%);
+    font-size: 0.62rem;
+}
+
+@media (max-width: 640px) {
+    .salesman-pwa {
+        right: 12.5rem;
+        bottom: calc(0.6rem + env(safe-area-inset-bottom));
+        max-width: calc(100vw - 13.1rem);
+    }
+
+    .salesman-pwa button {
+        min-height: 2.25rem;
+        padding: 0.45rem 0.6rem;
+    }
+
+    .salesman-pwa p {
+        position: fixed;
+        right: 0.6rem;
+        bottom: calc(3.6rem + env(safe-area-inset-bottom));
+        width: min(25rem, calc(100vw - 1.2rem));
+    }
+}

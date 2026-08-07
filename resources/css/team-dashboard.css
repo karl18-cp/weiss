@@ -14,6 +14,7 @@
 .team-dashboard-hero {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 1rem;
     padding: 1.3rem 1.5rem;
     border-radius: 1.2rem;
@@ -22,7 +23,36 @@
     box-shadow: 0 12px 30px rgb(28 74 166 / 18%);
 }
 
-.team-dashboard-hero > span {
+.team-dashboard-hero__fullscreen {
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    flex: 0 0 2.6rem;
+    place-items: center;
+    border: 1px solid #ffffff55;
+    border-radius: .7rem;
+    color: #fff;
+    background: #ffffff17;
+    transition: background .15s ease, transform .15s ease;
+}
+
+.team-dashboard-hero__fullscreen:hover {
+    background: #ffffff2b;
+    transform: translateY(-1px);
+}
+
+.team-dashboard-hero__fullscreen svg {
+    width: 1.1rem;
+}
+
+.team-dashboard-hero__identity {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 1rem;
+}
+
+.team-dashboard-hero__identity > span {
     display: grid;
     width: 3.5rem;
     height: 3.5rem;
@@ -65,6 +95,57 @@
     border: 1px solid #dde5f1;
     border-radius: 1rem;
     background: #fff;
+}
+
+.team-dashboard-hero__controls {
+    box-sizing: border-box;
+    width: min(58rem, 65%);
+    max-width: 100%;
+    min-width: min(58rem, 65%);
+    flex: 0 1 auto;
+    border-color: #ffffff38;
+    background: #ffffff18;
+    box-shadow: inset 0 1px 0 #ffffff18;
+}
+
+.team-dashboard-hero__controls .team-date-navigation {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.team-dashboard-hero__controls .team-date-navigation > button {
+    flex: 0 0 2.45rem;
+}
+
+.team-dashboard-hero__controls .team-date-navigation strong {
+    min-width: 0;
+    flex: 1 1 8rem;
+}
+
+.team-dashboard-hero__controls .team-period-tabs {
+    background: #12387599;
+}
+
+.team-dashboard-hero__controls .team-period-tabs button {
+    color: #dce8ff;
+}
+
+.team-dashboard-hero__controls .team-period-tabs button.is-active {
+    color: #173f8f;
+    background: #fff;
+}
+
+.team-dashboard-hero__controls .team-date-navigation > button,
+.team-dashboard-hero__controls .team-date-navigation label {
+    border-color: #ffffff45;
+    color: #fff;
+    background: #12387588;
+}
+
+.team-dashboard-hero__controls .team-date-navigation input,
+.team-dashboard-hero__controls .team-date-navigation strong {
+    color: #fff;
+    color-scheme: dark;
 }
 
 .team-period-tabs {
@@ -227,76 +308,16 @@
     background: #fff;
 }
 
-.team-scoreboard > header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem 1.15rem;
-    border-bottom: 1px solid #e6ebf2;
-}
-
-.team-scoreboard h2 {
-    font-size: 1rem;
-    font-weight: 850;
-}
-
-.team-scoreboard header p {
-    color: #7b8799;
-    font-size: .72rem;
-}
-
-.team-scoreboard-actions {
-    display: flex;
-    width: min(34rem, 58%);
-    align-items: center;
-    justify-content: flex-end;
-    gap: .55rem;
-}
-
-.team-scoreboard-actions label {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    height: 2.6rem;
-    align-items: center;
-    gap: .55rem;
-    padding-inline: .75rem;
-    border: 1px solid #dce4ef;
-    border-radius: .7rem;
-    background: #f8fafc;
-}
-
-.team-scoreboard-actions label svg {
-    width: 1rem;
-    color: #8996a8;
-}
-
-.team-scoreboard-actions input {
-    width: 100%;
-    min-width: 0;
-    background: transparent;
-    font-size: .75rem;
-    outline: 0;
-}
-
-.team-scoreboard-actions > button,
 .team-fullscreen-exit {
-    display: inline-flex;
-    min-height: 2.6rem;
-    align-items: center;
-    justify-content: center;
-    gap: .45rem;
-    padding-inline: .8rem;
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    place-items: center;
     border-radius: .7rem;
     color: #fff;
     background: #2d67e8;
-    font-size: .72rem;
-    font-weight: 800;
-    white-space: nowrap;
 }
 
-.team-scoreboard-actions > button svg,
 .team-fullscreen-exit svg {
     width: .95rem;
 }
@@ -318,10 +339,6 @@
 .team-dashboard-page.is-score-fullscreen > .team-dashboard-controls,
 .team-dashboard-page.is-score-fullscreen > .team-dashboard-summary,
 .team-dashboard-page.is-score-fullscreen > .team-dashboard-timezone,
-.team-dashboard-page.is-score-fullscreen .team-scoreboard > header {
-    display: none;
-}
-
 .team-dashboard-page.is-score-fullscreen .team-scoreboard {
     min-height: 0;
     border: 0;
@@ -488,7 +505,7 @@
 
 .team-agent-scores article {
     display: grid;
-    grid-template-columns: 1.8rem minmax(0, 1fr) auto;
+    grid-template-columns: 1.8rem minmax(0, 1fr) minmax(8.5rem, auto);
     align-items: center;
     gap: .55rem;
     padding: .42rem .5rem;
@@ -496,7 +513,7 @@
     background: #f6f8fc;
 }
 
-.team-agent-scores article > span {
+.team-agent-scores .team-agent-avatar {
     display: grid;
     width: 1.8rem;
     height: 1.8rem;
@@ -515,11 +532,40 @@
     white-space: nowrap;
 }
 
-.team-agent-scores article > b {
+.team-agent-score-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(2.3rem, auto));
+    align-items: center;
+    gap: .3rem;
+}
+
+.team-agent-score-metrics > span {
+    display: grid;
+    justify-items: center;
+    gap: .05rem;
+}
+
+.team-agent-score-metrics small {
+    color: #8a96a8;
+    font-size: .48rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.team-agent-score-metrics b {
     min-width: 1.8rem;
     color: #245edc;
     font-size: .8rem;
     text-align: center;
+}
+
+.team-agent-score-metrics > span:nth-child(2) b {
+    color: #159455;
+}
+
+.team-agent-score-metrics > span:nth-child(3) b {
+    color: #7c3aed;
 }
 
 .team-agent-scores p {
@@ -561,9 +607,15 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .team-dashboard-controls {
+    .team-dashboard-hero {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .team-dashboard-hero__controls {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
     }
 
     .team-date-navigation strong {
@@ -611,21 +663,6 @@
 
     .team-date-navigation > button:last-of-type {
         grid-column: 3;
-    }
-
-    .team-scoreboard > header {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .team-scoreboard-actions {
-        width: 100%;
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .team-scoreboard-actions label {
-        width: 100%;
     }
 
 }

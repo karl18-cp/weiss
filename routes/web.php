@@ -1,17 +1,19 @@
 <?php
 
+use App\Http\Controllers\AgentAttendanceController;
 use App\Http\Controllers\AgentController;
-use App\Http\Controllers\CallLogController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ContractorController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DataTeleHoursController;
+use App\Http\Controllers\GoogleDriveStatusController;
 use App\Http\Controllers\LeadCardController;
 use App\Http\Controllers\LeadDataController;
 use App\Http\Controllers\LeadImportController;
 use App\Http\Controllers\LeadQueueController;
 use App\Http\Controllers\LeadSearchController;
 use App\Http\Controllers\LeadsShopController;
+use App\Http\Controllers\ManagerActivityController;
 use App\Http\Controllers\ManagerController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProjectController;
@@ -23,14 +25,22 @@ use App\Http\Controllers\RingCentralRecordingController;
 use App\Http\Controllers\SalesmanController;
 use App\Http\Controllers\SalesmanPortalController;
 use App\Http\Controllers\SalesmanPushSubscriptionController;
-use App\Http\Controllers\TeleHoursController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamDashboardController;
+use App\Http\Controllers\TeleHoursController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified', 'manager.permission'])->group(function () {
+    Route::get('agent/dashboard', [AgentAttendanceController::class, 'index'])
+        ->name('agent.dashboard');
+    Route::post('agent/time-in', [AgentAttendanceController::class, 'clockIn'])
+        ->middleware('throttle:10,1')
+        ->name('agent.time-in');
+    Route::post('agent/time-out', [AgentAttendanceController::class, 'clockOut'])
+        ->middleware('throttle:10,1')
+        ->name('agent.time-out');
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('team-dashboard', TeamDashboardController::class)->name('team-dashboard');
     Route::redirect('salesman', '/salesman/booking-board')->name('salesman.home');
@@ -38,6 +48,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         ->name('salesman.booking-board');
     Route::get('salesman/leads', [SalesmanPortalController::class, 'leads'])
         ->name('salesman.leads');
+    Route::get('salesman/lead-information', [SalesmanPortalController::class, 'leadInformation'])
+        ->name('salesman.lead-information');
     Route::post('salesman/leads/{lead}/appointment-result-notes', [SalesmanPortalController::class, 'storeAppointmentResultNote'])
         ->name('salesman.leads.appointment-result-notes.store');
     Route::post('salesman/push-subscriptions', [SalesmanPushSubscriptionController::class, 'store'])
@@ -47,6 +59,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
     Route::post('salesman/push-subscriptions/test', [SalesmanPushSubscriptionController::class, 'test'])
         ->name('salesman.push-subscriptions.test');
     Route::get('lead-search', LeadSearchController::class)->name('lead-search');
+    Route::get('integrations/google-drive/status', GoogleDriveStatusController::class)
+        ->name('integrations.google-drive.status');
     Route::post('integrations/ringcentral/calls', RingCentralCallController::class)
         ->middleware('throttle:10,1')
         ->name('integrations.ringcentral.calls.store');
@@ -58,6 +72,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
     Route::prefix('lead-workflow')->name('lead-workflow.')->group(function () {
         Route::get('lead-card', [LeadCardController::class, 'index'])->name('lead-card');
         Route::post('lead-card', [LeadCardController::class, 'store'])->name('lead-card.store');
+        Route::get('leads-shop/latest-marker', [LeadsShopController::class, 'latestMarker'])
+            ->name('leads-shop.latest-marker');
         Route::get('leads-shop', [LeadsShopController::class, 'index'])->name('leads-shop');
         Route::put('leads-shop/{lead}', [LeadsShopController::class, 'update'])->name('leads-shop.update');
         Route::delete('leads-shop/{lead}', [LeadsShopController::class, 'destroy'])->name('leads-shop.destroy');
@@ -67,10 +83,11 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::patch('leads-shop/{lead}/status', [LeadsShopController::class, 'updateStatus'])->name('leads-shop.status.update');
         Route::patch('leads-shop/{lead}/salesmen', [LeadsShopController::class, 'assignSalesmen'])->name('leads-shop.salesmen.update');
         Route::patch('leads-shop/{lead}/appointment-result', [LeadsShopController::class, 'updateAppointmentResult'])->name('leads-shop.appointment-result.update');
+        Route::patch('leads-shop/{lead}/appointment', [LeadsShopController::class, 'updateAppointment'])->name('leads-shop.appointment.update');
         Route::post('leads-shop/{lead}/sale', [LeadsShopController::class, 'sell'])->name('leads-shop.sale');
-        Route::patch('leads-shop/{lead}/second-agent', [LeadsShopController::class, 'assignSecondAgent'])->name('leads-shop.second-agent.update');
         Route::get('confirm-leads', [LeadQueueController::class, 'confirm'])->name('confirm-leads');
         Route::get('dispatch-leads', [LeadQueueController::class, 'dispatch'])->name('dispatch-leads');
+        Route::get('sag', [LeadQueueController::class, 'sag'])->name('sag');
         Route::get('reschedule', [LeadQueueController::class, 'reschedule'])->name('reschedule');
         Route::get('rehash', [LeadQueueController::class, 'rehash'])->name('rehash');
         Route::get('555', [LeadQueueController::class, 'fiveFiveFive'])->name('five-five-five');
@@ -79,6 +96,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('toss-leads', [LeadQueueController::class, 'toss'])->name('toss-leads');
         Route::get('keep-in-touch', [LeadQueueController::class, 'keepInTouch'])->name('keep-in-touch');
         Route::get('data', [LeadDataController::class, 'index'])->name('data');
+        Route::redirect('data/manager-activity', '/lead-workflow/call-logs')->name('data.manager-activity');
+        Route::patch('data/{lead}/original-agent', [LeadDataController::class, 'updateOriginalAgent'])->name('data.original-agent.update');
         Route::post('data/import', LeadImportController::class)->name('data.import');
         Route::get('data/vendor-invoices', [LeadDataController::class, 'vendorInvoices'])->name('data.vendor-invoices');
         Route::get('data/receivables', [LeadDataController::class, 'receivables'])->name('data.receivables');
@@ -87,12 +106,21 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::post('data/tele-hours', [DataTeleHoursController::class, 'store'])->name('data.tele-hours.store');
         Route::get('booking-board', [LeadQueueController::class, 'bookingBoard'])->name('booking-board');
         Route::get('tele-hours', TeleHoursController::class)->name('tele-hours');
-        Route::get('call-logs', CallLogController::class)->name('call-logs');
+        Route::get('call-logs', ManagerActivityController::class)->name('call-logs');
     });
 
     Route::prefix('management')->name('management.')->group(function () {
+        Route::redirect('manager-history', '/lead-workflow/call-logs')->name('manager-history');
         Route::get('quality-control', [QualityControlController::class, 'index'])->name('quality-control');
+        Route::patch('quality-control/{project}/return-to-dispatch', [QualityControlController::class, 'returnToDispatch'])
+            ->name('quality-control.return-to-dispatch');
         Route::get('projects', [ProjectController::class, 'index'])->name('projects');
+        Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
+        Route::patch('projects/tele-lead-visibility/bulk', [ProjectController::class, 'bulkUpdateTeleLeadVisibility'])
+            ->name('projects.tele-lead-visibility.bulk-update');
+        Route::patch('projects/{project}/tele-lead-visibility', [ProjectController::class, 'updateTeleLeadVisibility'])
+            ->name('projects.tele-lead-visibility.update');
+        Route::post('projects/sync-drive-folders', [ProjectController::class, 'syncDriveFolders'])->name('projects.sync-drive-folders');
         Route::put('projects/{project}', [ProjectController::class, 'updateDetails'])->name('projects.update');
         Route::post('projects/{project}/sales', [ProjectController::class, 'storeReferral'])->name('projects.sales.store');
         Route::put('projects/{project}/sales/{sale}', [ProjectController::class, 'updateSale'])->name('projects.sales.update');

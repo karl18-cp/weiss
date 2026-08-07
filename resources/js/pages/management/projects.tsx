@@ -1,27 +1,37 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
+    ArrowUpDown,
     BriefcaseBusiness,
     CalendarDays,
     CheckCircle2,
+    ChevronDown,
+    ChevronUp,
     CircleDollarSign,
     ClipboardList,
     Eye,
+    ExternalLink,
     FileText,
+    FolderSync,
     Landmark,
     Mail,
     MapPin,
     Pencil,
     Phone,
+    PhoneCall,
     Plus,
     Trash2,
     Upload,
     UserRound,
     Users,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { createElement, useMemo, useState } from 'react';
 import '@/../css/projects.css';
 import { useSystemModal } from '@/components/system-modal-provider';
+import { RingCentralCallButton } from '@/components/ringcentral-call-button';
+import { appointmentDate, appointmentInputValue } from '@/lib/appointment-date';
+import { formatPhoneNumber } from '@/lib/phone-number';
+import { CRM_TIME_ZONE, crmDateKey } from '@/lib/crm-time';
 import {
     Dialog,
     DialogContent,
@@ -32,7 +42,29 @@ import {
 } from '@/components/ui/dialog';
 
 type ProductOption = { prod_id: number; product_name: string };
+type CompanyOption = { com_id: number; company: string; prefix: string };
+type AgentOption = { agent_id: number; agent_name: string };
+type SalesmanOption = {
+    salesman_id: number;
+    salesman_name: string;
+    phone: string | null;
+};
+type ManagerOption = { manager_id: number; manager_name: string };
 type ProjectStatusFilter = 'all' | 'new' | 'progress' | 'completed';
+type ProjectSortDirection = 'asc' | 'desc';
+type ProjectSortKey =
+    | 'signed'
+    | 'status'
+    | 'customer'
+    | 'company'
+    | 'projectNumber'
+    | 'city'
+    | 'phone'
+    | 'agent'
+    | 'salesman'
+    | 'sale'
+    | 'product'
+    | 'notes';
 
 type ProjectSale = {
     id: number;
@@ -101,6 +133,8 @@ type ProjectDocument = {
 
 type Project = {
     id: number;
+    lead_id: number | null;
+    tele_lead_excluded: boolean;
     project_number: string | null;
     amount: string;
     status: string;
@@ -111,6 +145,7 @@ type Project = {
     accounting_transactions: AccountingTransaction[];
     lead: {
         id: number;
+        created_at: string;
         customer_name: string;
         appointment_at: string;
         city: string;
@@ -123,12 +158,12 @@ type Project = {
         zip_code: string;
         source: string;
         telemarketer_notes: string;
-        company: { company: string; prefix: string } | null;
-        product: { product_name: string } | null;
+        company: CompanyOption | null;
+        product: ProductOption | null;
         agent: { agent_name: string } | null;
         second_agent: { agent_name: string } | null;
-        salesman_one: { salesman_name: string } | null;
-        salesman_two: { salesman_name: string } | null;
+        salesman_one: { salesman_name: string; phone: string | null } | null;
+        salesman_two: { salesman_name: string; phone: string | null } | null;
         notes: {
             id: number;
             note_type: string;
@@ -148,6 +183,29 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
     day: 'numeric',
     year: 'numeric',
 });
+
+const localDateValue = () => crmDateKey();
+
+const dateTimeInputValue = (value: string | null) => {
+    if (!value) return '';
+
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: CRM_TIME_ZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        })
+            .formatToParts(new Date(value))
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, part.value]),
+    );
+
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+};
 
 const formatFileSize = (bytes: number | null) => {
     if (!bytes) {
@@ -202,15 +260,25 @@ const paymentReference = (method: keyof typeof paymentPrefixes, value = '') => {
 export default function Projects({
     projects,
     products,
+    companies,
+    agents,
+    salesmen,
+    managers,
     contractors,
     requesters,
     currentRequester,
+    googleDriveUrl,
 }: {
     projects: Project[];
     products: ProductOption[];
+    companies: CompanyOption[];
+    agents: AgentOption[];
+    salesmen: SalesmanOption[];
+    managers: ManagerOption[];
     contractors: ContractorOption[];
     requesters: string[];
     currentRequester: string | null;
+    googleDriveUrl: string | null;
 }) {
     const { confirm } = useSystemModal();
     const requestedProjectId =
@@ -221,6 +289,10 @@ export default function Projects({
     >('PRJ');
     const [projectStatusFilter, setProjectStatusFilter] =
         useState<ProjectStatusFilter>('all');
+    const [projectSort, setProjectSort] = useState<{
+        key: ProjectSortKey;
+        direction: ProjectSortDirection;
+    }>({ key: 'signed', direction: 'desc' });
     const [selectedId, setSelectedId] = useState<number | null>(() =>
         projects.some((project) => project.id === requestedProjectId)
             ? requestedProjectId
@@ -242,10 +314,92 @@ export default function Projects({
         string | null
     >(null);
     const [editingProjectDetails, setEditingProjectDetails] = useState(false);
+    const [creatingProject, setCreatingProject] = useState(false);
+    const [syncingDriveFolders, setSyncingDriveFolders] = useState(false);
+    const [projectOnlySelectionMode, setProjectOnlySelectionMode] =
+        useState(false);
+    const [selectedProjectOnlyIds, setSelectedProjectOnlyIds] = useState<
+        number[]
+    >([]);
+    const [updatingProjectOnly, setUpdatingProjectOnly] = useState(false);
     const projectDetailsForm = useForm({
         project_number: '',
         status: 'new',
+        company_id: '',
+        product_id: '',
+        customer_name: '',
+        primary_number: '',
+        secondary_number: '',
+        mobile_number: '',
+        email: '',
+        address: '',
+        city: '',
+        state: '',
+        zip_code: '',
+        source: '',
+        appointment_at: '',
+        lead_created_at: '',
     });
+    const projectCreateForm = useForm({
+        customer_name: '',
+        contact_name: '',
+        primary_number: '',
+        mobile_number: '',
+        email: '',
+        address: '',
+        city: '',
+        state: 'CA',
+        zip_code: '',
+        company_id: '',
+        product_id: '',
+        telemarketer_id: '',
+        salesman_id: '',
+        manager_id: '',
+        project_number: '',
+        status: 'new',
+        amount: '',
+        budget: '',
+        notes: '',
+        signed_date: localDateValue(),
+    });
+
+    const closeProjectCreate = () => {
+        setCreatingProject(false);
+        projectCreateForm.clearErrors();
+    };
+
+    const saveNewProject = () => {
+        projectCreateForm.post('/management/projects', {
+            preserveScroll: true,
+            onSuccess: () => {
+                setCreatingProject(false);
+                projectCreateForm.reset();
+                projectCreateForm.setData('signed_date', localDateValue());
+            },
+        });
+    };
+
+    const syncDriveFolders = async () => {
+        const accepted = await confirm({
+            title: 'Sync project folders?',
+            message:
+                'The CRM will create missing folders inside Open projects. Existing matching folders will be skipped.',
+            confirmLabel: 'Sync folders',
+            tone: 'info',
+        });
+
+        if (!accepted) return;
+
+        setSyncingDriveFolders(true);
+        router.post(
+            '/management/projects/sync-drive-folders',
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setSyncingDriveFolders(false),
+            },
+        );
+    };
     const [saleModal, setSaleModal] = useState<{
         mode: 'create' | 'edit';
         sale: ProjectSale | null;
@@ -357,16 +511,160 @@ export default function Projects({
         () => projects.find((project) => project.id === selectedId) ?? null,
         [projects, selectedId],
     );
-    const filteredProjects = useMemo(
-        () =>
+    const filteredProjects = useMemo(() => {
+        const statusFiltered =
             projectStatusFilter === 'all'
                 ? projects
                 : projects.filter(
                       (project) =>
                           (project.status || 'new') === projectStatusFilter,
-                  ),
-        [projects, projectStatusFilter],
-    );
+                  );
+        const valueFor = (project: Project): string | number => {
+            switch (projectSort.key) {
+                case 'signed':
+                    return new Date(project.created_at).getTime();
+                case 'status':
+                    return project.status || 'new';
+                case 'customer':
+                    return project.lead.customer_name;
+                case 'company':
+                    return project.lead.company?.prefix ?? '';
+                case 'projectNumber':
+                    return projectNumber(project);
+                case 'city':
+                    return project.lead.city;
+                case 'phone':
+                    return project.lead.primary_number;
+                case 'agent':
+                    return project.lead.agent?.agent_name ?? '';
+                case 'salesman':
+                    return [
+                        project.lead.salesman_one?.salesman_name,
+                        project.lead.salesman_two?.salesman_name,
+                    ]
+                        .filter(Boolean)
+                        .join(' & ');
+                case 'sale':
+                    return project.sales.reduce(
+                        (sum, sale) => sum + Number(sale.amount),
+                        0,
+                    );
+                case 'product':
+                    return project.lead.product?.product_name ?? '';
+                case 'notes':
+                    return latestNote(project);
+            }
+        };
+
+        return [...statusFiltered].sort((left, right) => {
+            const leftValue = valueFor(left);
+            const rightValue = valueFor(right);
+            const comparison =
+                typeof leftValue === 'number' && typeof rightValue === 'number'
+                    ? leftValue - rightValue
+                    : String(leftValue).localeCompare(
+                          String(rightValue),
+                          undefined,
+                          {
+                              numeric: true,
+                              sensitivity: 'base',
+                          },
+                      );
+
+            return projectSort.direction === 'asc' ? comparison : -comparison;
+        });
+    }, [projects, projectSort, projectStatusFilter]);
+
+    const toggleProjectSort = (key: ProjectSortKey) => {
+        setProjectSort((current) => ({
+            key,
+            direction:
+                current.key === key
+                    ? current.direction === 'asc'
+                        ? 'desc'
+                        : 'asc'
+                    : key === 'signed' || key === 'sale'
+                      ? 'desc'
+                      : 'asc',
+        }));
+    };
+
+    const selectableProjectIds = filteredProjects
+        .filter((project) => project.lead_id !== null)
+        .map((project) => project.id);
+    const allVisibleProjectsSelected =
+        selectableProjectIds.length > 0 &&
+        selectableProjectIds.every((id) => selectedProjectOnlyIds.includes(id));
+
+    const toggleProjectOnlySelection = (projectId: number) => {
+        if (!selectableProjectIds.includes(projectId)) return;
+
+        setSelectedProjectOnlyIds((current) =>
+            current.includes(projectId)
+                ? current.filter((id) => id !== projectId)
+                : [...current, projectId],
+        );
+    };
+
+    const cancelProjectOnlySelection = () => {
+        setProjectOnlySelectionMode(false);
+        setSelectedProjectOnlyIds([]);
+    };
+
+    const bulkUpdateProjectOnly = (projectOnly: boolean) => {
+        if (selectedProjectOnlyIds.length === 0 || updatingProjectOnly) return;
+
+        router.patch(
+            '/management/projects/tele-lead-visibility/bulk',
+            {
+                project_ids: selectedProjectOnlyIds,
+                project_only: projectOnly,
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onStart: () => setUpdatingProjectOnly(true),
+                onFinish: () => setUpdatingProjectOnly(false),
+                onSuccess: cancelProjectOnlySelection,
+            },
+        );
+    };
+
+    const sortableProjectHeader = (key: ProjectSortKey, label: string) => {
+        const active = projectSort.key === key;
+
+        return (
+            <th
+                aria-sort={
+                    active
+                        ? projectSort.direction === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                        : 'none'
+                }
+            >
+                <button
+                    type="button"
+                    className={
+                        active ? 'projects-sort is-active' : 'projects-sort'
+                    }
+                    onClick={() => toggleProjectSort(key)}
+                    title={`Sort by ${label}`}
+                >
+                    <span>{label}</span>
+                    {active ? (
+                        projectSort.direction === 'asc' ? (
+                            <ChevronUp aria-hidden="true" />
+                        ) : (
+                            <ChevronDown aria-hidden="true" />
+                        )
+                    ) : (
+                        <ArrowUpDown aria-hidden="true" />
+                    )}
+                </button>
+            </th>
+        );
+    };
     const projectStatusCounts = useMemo(
         () => ({
             all: projects.length,
@@ -459,6 +757,22 @@ export default function Projects({
         projectDetailsForm.setData({
             project_number: projectNumber(project),
             status: project.status || 'new',
+            company_id: String(project.lead.company?.com_id ?? ''),
+            product_id: String(project.lead.product?.prod_id ?? ''),
+            customer_name: project.lead.customer_name,
+            primary_number: project.lead.primary_number,
+            secondary_number: project.lead.secondary_number ?? '',
+            mobile_number: project.lead.mobile_number ?? '',
+            email: project.lead.email ?? '',
+            address: project.lead.address,
+            city: project.lead.city,
+            state: project.lead.state,
+            zip_code: project.lead.zip_code,
+            source: project.lead.source,
+            appointment_at: appointmentInputValue(
+                project.lead.appointment_at ?? '',
+            ),
+            lead_created_at: dateTimeInputValue(project.lead.created_at),
         });
         projectDetailsForm.clearErrors();
     };
@@ -469,6 +783,22 @@ export default function Projects({
         projectDetailsForm.setData({
             project_number: projectNumber(selected),
             status: selected.status || 'new',
+            company_id: String(selected.lead.company?.com_id ?? ''),
+            product_id: String(selected.lead.product?.prod_id ?? ''),
+            customer_name: selected.lead.customer_name,
+            primary_number: selected.lead.primary_number,
+            secondary_number: selected.lead.secondary_number ?? '',
+            mobile_number: selected.lead.mobile_number ?? '',
+            email: selected.lead.email ?? '',
+            address: selected.lead.address,
+            city: selected.lead.city,
+            state: selected.lead.state,
+            zip_code: selected.lead.zip_code,
+            source: selected.lead.source,
+            appointment_at: appointmentInputValue(
+                selected.lead.appointment_at ?? '',
+            ),
+            lead_created_at: dateTimeInputValue(selected.lead.created_at),
         });
         projectDetailsForm.clearErrors();
         setEditingProjectDetails(true);
@@ -485,6 +815,19 @@ export default function Projects({
 
     const noteByType = (project: Project, type: string) =>
         project.lead.notes.find((note) => note.note_type === type)?.body || '—';
+
+    const salesmanAssignmentHistory = (project: Project) =>
+        project.lead.notes
+            .filter((note) =>
+                ['salesman_sent', 'salesman_assignment'].includes(
+                    note.note_type,
+                ),
+            )
+            .sort(
+                (first, second) =>
+                    new Date(second.created_at).getTime() -
+                    new Date(first.created_at).getTime(),
+            );
 
     const projectSaleTotal = (project: Project) =>
         project.sales.reduce((sum, sale) => sum + Number(sale.amount), 0);
@@ -621,7 +964,7 @@ export default function Projects({
 
         invoiceForm.setData({
             invoice_number: 'INV#',
-            invoice_date: new Date().toLocaleDateString('en-CA'),
+            invoice_date: crmDateKey(),
             contractor_id: '',
             amount: '',
             notes: '',
@@ -745,7 +1088,7 @@ export default function Projects({
                 accountingMode === 'receivable'
                     ? 'Customer Payment'
                     : 'Vendor Payment',
-            transaction_date: new Date().toLocaleDateString('en-CA'),
+            transaction_date: crmDateKey(),
             payment_method: 'check',
             reference_number: 'CH#',
             counterparty:
@@ -865,7 +1208,7 @@ export default function Projects({
     const openReferralSale = () => {
         saleForm.setData({
             amount: '',
-            sale_date: new Date().toLocaleDateString('en-CA'),
+            sale_date: crmDateKey(),
             product_id: '',
         });
         saleForm.clearErrors();
@@ -937,7 +1280,7 @@ export default function Projects({
         }
 
         scheduledPaymentForm.setData({
-            expected_date: new Date().toLocaleDateString('en-CA'),
+            expected_date: crmDateKey(),
             payment_stage: '',
             amount: '',
             qb: false,
@@ -1031,11 +1374,86 @@ export default function Projects({
                         <h1>Projects</h1>
                         <p>Sold leads accepted from the Dispatch workflow.</p>
                     </div>
-                    <div className="projects-summary">
-                        <CircleDollarSign />
-                        <div>
-                            <strong>{currencyFormatter.format(total)}</strong>
-                            <span>{projects.length} active projects</span>
+                    {activeTab === 'PRJ' && (
+                        <div
+                            className="projects-status-filter projects-header-status-filter"
+                            aria-label="Filter projects by status"
+                        >
+                            {(
+                                [
+                                    ['all', 'All'],
+                                    ['new', 'New'],
+                                    ['progress', 'In Progress'],
+                                    ['completed', 'Completed'],
+                                ] as const
+                            ).map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    className={
+                                        projectStatusFilter === value
+                                            ? 'is-active'
+                                            : ''
+                                    }
+                                    aria-pressed={projectStatusFilter === value}
+                                    onClick={() =>
+                                        setProjectStatusFilter(value)
+                                    }
+                                >
+                                    <span>{label}</span>
+                                    <strong>{projectStatusCounts[value]}</strong>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="projects-header-actions">
+                        <button
+                            type="button"
+                            className="projects-add-project"
+                            onClick={() => {
+                                projectCreateForm.clearErrors();
+                                setCreatingProject(true);
+                            }}
+                        >
+                            <Plus />
+                            Add project
+                        </button>
+                        <button
+                            type="button"
+                            className="projects-drive-sync"
+                            onClick={syncDriveFolders}
+                            disabled={syncingDriveFolders}
+                        >
+                            <FolderSync
+                                className={
+                                    syncingDriveFolders ? 'is-spinning' : ''
+                                }
+                            />
+                            {syncingDriveFolders
+                                ? 'Syncing folders…'
+                                : 'Sync project folders'}
+                        </button>
+                        {googleDriveUrl
+                            ? createElement(
+                                  'a',
+                                  {
+                                      className: 'projects-drive-sync',
+                                      href: googleDriveUrl,
+                                      target: '_blank',
+                                      rel: 'noopener noreferrer',
+                                  },
+                                  createElement(ExternalLink),
+                                  'Open Google Drive',
+                              )
+                            : null}
+                        <div className="projects-summary">
+                            <CircleDollarSign />
+                            <div>
+                                <strong>
+                                    {currencyFormatter.format(total)}
+                                </strong>
+                                <span>{projects.length} active projects</span>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -1099,7 +1517,7 @@ export default function Projects({
                         </strong>
                         <span>
                             Customer primary:{' '}
-                            {selected?.lead.primary_number ?? '—'}
+                            {formatPhoneNumber(selected?.lead.primary_number)}
                         </span>
                     </div>
                     <div>
@@ -1107,7 +1525,7 @@ export default function Projects({
                         <strong>{selected?.lead.email || 'No email'}</strong>
                         <span>
                             Customer mobile:{' '}
-                            {selected?.lead.mobile_number || '—'}
+                            {formatPhoneNumber(selected?.lead.mobile_number)}
                         </span>
                     </div>
                 </section>
@@ -2433,57 +2851,155 @@ export default function Projects({
 
                     {activeTab === 'PRJ' && (
                         <section className="projects-panel">
-                            <div
-                                className="projects-status-filter"
-                                aria-label="Filter projects by status"
-                            >
-                                {(
-                                    [
-                                        ['all', 'All'],
-                                        ['new', 'New'],
-                                        ['progress', 'In Progress'],
-                                        ['completed', 'Completed'],
-                                    ] as const
-                                ).map(([value, label]) => (
-                                    <button
-                                        key={value}
-                                        type="button"
-                                        className={
-                                            projectStatusFilter === value
-                                                ? 'is-active'
-                                                : ''
-                                        }
-                                        aria-pressed={
-                                            projectStatusFilter === value
-                                        }
-                                        onClick={() =>
-                                            setProjectStatusFilter(value)
-                                        }
-                                    >
-                                        <span>{label}</span>
-                                        <strong>
-                                            {projectStatusCounts[value]}
-                                        </strong>
-                                    </button>
-                                ))}
+                            <div className="projects-table-toolbar">
+                                <div className="projects-project-only-actions">
+                                    {!projectOnlySelectionMode ? (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setProjectOnlySelectionMode(
+                                                    true,
+                                                )
+                                            }
+                                        >
+                                            Manage project-only
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <span>
+                                                {selectedProjectOnlyIds.length}{' '}
+                                                selected
+                                            </span>
+                                            <button
+                                                type="button"
+                                                disabled={
+                                                    selectedProjectOnlyIds.length ===
+                                                        0 || updatingProjectOnly
+                                                }
+                                                onClick={() =>
+                                                    bulkUpdateProjectOnly(true)
+                                                }
+                                            >
+                                                Mark project only
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={
+                                                    selectedProjectOnlyIds.length ===
+                                                        0 || updatingProjectOnly
+                                                }
+                                                onClick={() =>
+                                                    bulkUpdateProjectOnly(false)
+                                                }
+                                            >
+                                                Show in Tele Leads
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="is-cancel"
+                                                disabled={updatingProjectOnly}
+                                                onClick={
+                                                    cancelProjectOnlySelection
+                                                }
+                                            >
+                                                Cancel
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                             <div className="projects-table-wrap">
                                 <table className="projects-table">
                                     <thead>
                                         <tr>
-                                            <th>Signed</th>
-                                            <th>Status</th>
-                                            <th>Customer</th>
-                                            <th>Company</th>
-                                            <th>Project Number</th>
-                                            <th>City</th>
-                                            <th>Phone</th>
-                                            <th>Agent</th>
-                                            <th>Salesman</th>
-                                            <th>Sale</th>
-                                            <th>Product</th>
+                                            {projectOnlySelectionMode && (
+                                                <th className="projects-project-only-heading">
+                                                    <label>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={
+                                                                allVisibleProjectsSelected
+                                                            }
+                                                            disabled={
+                                                                selectableProjectIds.length ===
+                                                                0
+                                                            }
+                                                            aria-label="Select all visible projects"
+                                                            onChange={() =>
+                                                                setSelectedProjectOnlyIds(
+                                                                    allVisibleProjectsSelected
+                                                                        ? selectedProjectOnlyIds.filter(
+                                                                              (
+                                                                                  id,
+                                                                              ) =>
+                                                                                  !selectableProjectIds.includes(
+                                                                                      id,
+                                                                                  ),
+                                                                          )
+                                                                        : Array.from(
+                                                                              new Set(
+                                                                                  [
+                                                                                      ...selectedProjectOnlyIds,
+                                                                                      ...selectableProjectIds,
+                                                                                  ],
+                                                                              ),
+                                                                          ),
+                                                                )
+                                                            }
+                                                        />
+                                                        Select
+                                                    </label>
+                                                </th>
+                                            )}
+                                            {sortableProjectHeader(
+                                                'signed',
+                                                'Signed',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'status',
+                                                'Status',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'customer',
+                                                'Customer',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'company',
+                                                'Company',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'projectNumber',
+                                                'Project Number',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'city',
+                                                'City',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'phone',
+                                                'Phone',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'agent',
+                                                'Agent',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'salesman',
+                                                'Salesman',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'sale',
+                                                'Sale',
+                                            )}
+                                            {sortableProjectHeader(
+                                                'product',
+                                                'Product',
+                                            )}
                                             <th>Contract</th>
-                                            <th>Notes</th>
+                                            {sortableProjectHeader(
+                                                'notes',
+                                                'Notes',
+                                            )}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -2499,6 +3015,37 @@ export default function Projects({
                                                     selectProject(project)
                                                 }
                                             >
+                                                {projectOnlySelectionMode && (
+                                                    <td
+                                                        className="projects-project-only"
+                                                        onClick={(event) =>
+                                                            event.stopPropagation()
+                                                        }
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedProjectOnlyIds.includes(
+                                                                project.id,
+                                                            )}
+                                                            disabled={
+                                                                project.lead_id ===
+                                                                null
+                                                            }
+                                                            aria-label={`Select ${project.lead?.customer_name || project.project_number || `project ${project.id}`}`}
+                                                            title={
+                                                                project.lead_id ===
+                                                                null
+                                                                    ? 'Standalone projects are already project-only'
+                                                                    : 'Select project'
+                                                            }
+                                                            onChange={() =>
+                                                                toggleProjectOnlySelection(
+                                                                    project.id,
+                                                                )
+                                                            }
+                                                        />
+                                                    </td>
+                                                )}
                                                 <td>
                                                     {dateFormatter.format(
                                                         new Date(
@@ -2531,10 +3078,10 @@ export default function Projects({
                                                 </td>
                                                 <td>{project.lead.city}</td>
                                                 <td>
-                                                    {
+                                                    {formatPhoneNumber(
                                                         project.lead
-                                                            .primary_number
-                                                    }
+                                                            .primary_number,
+                                                    )}
                                                 </td>
                                                 <td>
                                                     {project.lead.agent
@@ -2576,7 +3123,7 @@ export default function Projects({
                                         {filteredProjects.length === 0 && (
                                             <tr>
                                                 <td
-                                                    colSpan={13}
+                                                    colSpan={14}
                                                     className="projects-empty"
                                                 >
                                                     <BriefcaseBusiness />
@@ -2592,9 +3139,8 @@ export default function Projects({
                                                         projects
                                                     </strong>
                                                     <span>
-                                                        Choose another status
-                                                        to view matching
-                                                        projects.
+                                                        Choose another status to
+                                                        view matching projects.
                                                     </span>
                                                 </td>
                                             </tr>
@@ -2669,49 +3215,268 @@ export default function Projects({
                                     </header>
                                     <div className="project-detail-fields">
                                         <div className="is-wide">
+                                            <UserRound />
+                                            <span>
+                                                <small>Customer</small>
+                                                {editingProjectDetails ? (
+                                                    <input
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data
+                                                                .customer_name
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'customer_name',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <strong>
+                                                        {
+                                                            selected.lead
+                                                                .customer_name
+                                                        }
+                                                    </strong>
+                                                )}
+                                            </span>
+                                        </div>
+                                        <div className="is-wide">
                                             <MapPin />
                                             <span>
                                                 <small>Address</small>
-                                                <strong>
-                                                    {selected.lead.address}
-                                                </strong>
-                                                <em>
-                                                    {selected.lead.city},{' '}
-                                                    {selected.lead.state}{' '}
-                                                    {selected.lead.zip_code}
-                                                </em>
+                                                {editingProjectDetails ? (
+                                                    <div className="project-inline-address">
+                                                        <input
+                                                            className="is-wide"
+                                                            value={
+                                                                projectDetailsForm
+                                                                    .data
+                                                                    .address
+                                                            }
+                                                            onChange={(event) =>
+                                                                projectDetailsForm.setData(
+                                                                    'address',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="Street address"
+                                                        />
+                                                        <input
+                                                            value={
+                                                                projectDetailsForm
+                                                                    .data.city
+                                                            }
+                                                            onChange={(event) =>
+                                                                projectDetailsForm.setData(
+                                                                    'city',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="City"
+                                                        />
+                                                        <input
+                                                            value={
+                                                                projectDetailsForm
+                                                                    .data.state
+                                                            }
+                                                            onChange={(event) =>
+                                                                projectDetailsForm.setData(
+                                                                    'state',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="State"
+                                                        />
+                                                        <input
+                                                            value={
+                                                                projectDetailsForm
+                                                                    .data
+                                                                    .zip_code
+                                                            }
+                                                            onChange={(event) =>
+                                                                projectDetailsForm.setData(
+                                                                    'zip_code',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="ZIP code"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <strong>
+                                                            {
+                                                                selected.lead
+                                                                    .address
+                                                            }
+                                                        </strong>
+                                                        <em>
+                                                            {selected.lead.city}
+                                                            ,{' '}
+                                                            {
+                                                                selected.lead
+                                                                    .state
+                                                            }{' '}
+                                                            {
+                                                                selected.lead
+                                                                    .zip_code
+                                                            }
+                                                        </em>
+                                                    </>
+                                                )}
                                             </span>
                                         </div>
                                         <div>
                                             <Phone />
                                             <span>
                                                 <small>Primary phone</small>
-                                                <strong>
-                                                    {
-                                                        selected.lead
-                                                            .primary_number
-                                                    }
-                                                </strong>
+                                                <span className="project-call-row">
+                                                    {editingProjectDetails ? (
+                                                        <input
+                                                            value={
+                                                                projectDetailsForm
+                                                                    .data
+                                                                    .primary_number
+                                                            }
+                                                            onChange={(event) =>
+                                                                projectDetailsForm.setData(
+                                                                    'primary_number',
+                                                                    event.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                        />
+                                                    ) : (
+                                                        <strong>
+                                                            {formatPhoneNumber(
+                                                                selected.lead
+                                                                    .primary_number,
+                                                            )}
+                                                        </strong>
+                                                    )}
+                                                    {(editingProjectDetails
+                                                        ? projectDetailsForm
+                                                              .data
+                                                              .primary_number
+                                                        : selected.lead
+                                                              .primary_number
+                                                    )?.trim() && (
+                                                        <RingCentralCallButton
+                                                            leadId={
+                                                                selected.lead
+                                                                    .id ||
+                                                                undefined
+                                                            }
+                                                            phone={
+                                                                editingProjectDetails
+                                                                    ? projectDetailsForm
+                                                                          .data
+                                                                          .primary_number
+                                                                    : selected
+                                                                          .lead
+                                                                          .primary_number
+                                                            }
+                                                            phoneSlot="primary"
+                                                            className="project-call-button"
+                                                            title="Call customer with RingCentral"
+                                                        >
+                                                            <PhoneCall />
+                                                            <span>Call</span>
+                                                        </RingCentralCallButton>
+                                                    )}
+                                                </span>
                                             </span>
                                         </div>
                                         <div>
                                             <Phone />
                                             <span>
                                                 <small>Mobile</small>
-                                                <strong>
-                                                    {selected.lead
-                                                        .mobile_number || '—'}
-                                                </strong>
+                                                {editingProjectDetails ? (
+                                                    <input
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data
+                                                                .mobile_number
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'mobile_number',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <strong>
+                                                        {formatPhoneNumber(
+                                                            selected.lead
+                                                                .mobile_number,
+                                                        )}
+                                                    </strong>
+                                                )}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <Phone />
+                                            <span>
+                                                <small>Secondary phone</small>
+                                                {editingProjectDetails ? (
+                                                    <input
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data
+                                                                .secondary_number
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'secondary_number',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <strong>
+                                                        {formatPhoneNumber(
+                                                            selected.lead
+                                                                .secondary_number,
+                                                        )}
+                                                    </strong>
+                                                )}
                                             </span>
                                         </div>
                                         <div className="is-wide">
                                             <Mail />
                                             <span>
                                                 <small>Email</small>
-                                                <strong>
-                                                    {selected.lead.email ||
-                                                        'No email provided'}
-                                                </strong>
+                                                {editingProjectDetails ? (
+                                                    <input
+                                                        type="email"
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data.email
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'email',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <strong>
+                                                        {selected.lead.email ||
+                                                            'No email provided'}
+                                                    </strong>
+                                                )}
                                             </span>
                                         </div>
                                     </div>
@@ -2765,34 +3530,196 @@ export default function Projects({
                                         </div>
                                         <div>
                                             <small>Company</small>
-                                            <strong>
-                                                {selected.lead.company
-                                                    ?.prefix || '—'}
-                                            </strong>
+                                            {editingProjectDetails ? (
+                                                <>
+                                                    <select
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data.company_id
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'company_id',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="">
+                                                            Select company
+                                                        </option>
+                                                        {companies.map(
+                                                            (company) => (
+                                                                <option
+                                                                    key={
+                                                                        company.com_id
+                                                                    }
+                                                                    value={
+                                                                        company.com_id
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        company.company
+                                                                    }{' '}
+                                                                    (
+                                                                    {
+                                                                        company.prefix
+                                                                    }
+                                                                    )
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                    {projectDetailsForm.errors
+                                                        .company_id && (
+                                                        <em>
+                                                            {
+                                                                projectDetailsForm
+                                                                    .errors
+                                                                    .company_id
+                                                            }
+                                                        </em>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <strong>
+                                                    {selected.lead.company
+                                                        ?.prefix || '—'}
+                                                </strong>
+                                            )}
                                         </div>
                                         <div>
                                             <small>Product</small>
-                                            <strong>
-                                                {selected.lead.product
-                                                    ?.product_name || '—'}
-                                            </strong>
+                                            {editingProjectDetails ? (
+                                                <>
+                                                    <select
+                                                        value={
+                                                            projectDetailsForm
+                                                                .data.product_id
+                                                        }
+                                                        onChange={(event) =>
+                                                            projectDetailsForm.setData(
+                                                                'product_id',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="">
+                                                            Select product
+                                                        </option>
+                                                        {products.map(
+                                                            (product) => (
+                                                                <option
+                                                                    key={
+                                                                        product.prod_id
+                                                                    }
+                                                                    value={
+                                                                        product.prod_id
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        product.product_name
+                                                                    }
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </select>
+                                                    {projectDetailsForm.errors
+                                                        .product_id && (
+                                                        <em>
+                                                            {
+                                                                projectDetailsForm
+                                                                    .errors
+                                                                    .product_id
+                                                            }
+                                                        </em>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <strong>
+                                                    {selected.lead.product
+                                                        ?.product_name || '—'}
+                                                </strong>
+                                            )}
                                         </div>
                                         <div>
                                             <small>Lead source</small>
-                                            <strong>
-                                                {selected.lead.source}
-                                            </strong>
+                                            {editingProjectDetails ? (
+                                                <input
+                                                    value={
+                                                        projectDetailsForm.data
+                                                            .source
+                                                    }
+                                                    onChange={(event) =>
+                                                        projectDetailsForm.setData(
+                                                            'source',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            ) : (
+                                                <strong>
+                                                    {selected.lead.source}
+                                                </strong>
+                                            )}
                                         </div>
                                         <div>
                                             <small>Appointment</small>
-                                            <strong>
-                                                {dateFormatter.format(
-                                                    new Date(
-                                                        selected.lead
-                                                            .appointment_at,
-                                                    ),
-                                                )}
-                                            </strong>
+                                            {editingProjectDetails ? (
+                                                <input
+                                                    type="datetime-local"
+                                                    value={
+                                                        projectDetailsForm.data
+                                                            .appointment_at
+                                                    }
+                                                    onChange={(event) =>
+                                                        projectDetailsForm.setData(
+                                                            'appointment_at',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            ) : (
+                                                <strong>
+                                                    {selected.lead
+                                                        .appointment_at
+                                                        ? dateFormatter.format(
+                                                              appointmentDate(
+                                                                  selected.lead
+                                                                      .appointment_at,
+                                                              ),
+                                                          )
+                                                        : '—'}
+                                                </strong>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <small>Lead created</small>
+                                            {editingProjectDetails ? (
+                                                <input
+                                                    type="datetime-local"
+                                                    value={
+                                                        projectDetailsForm.data
+                                                            .lead_created_at
+                                                    }
+                                                    onChange={(event) =>
+                                                        projectDetailsForm.setData(
+                                                            'lead_created_at',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            ) : (
+                                                <strong>
+                                                    {dateFormatter.format(
+                                                        new Date(
+                                                            selected.lead
+                                                                .created_at,
+                                                        ),
+                                                    )}
+                                                </strong>
+                                            )}
                                         </div>
                                         <div>
                                             <small>Status</small>
@@ -2829,7 +3756,8 @@ export default function Projects({
                                                         <em>
                                                             {
                                                                 projectDetailsForm
-                                                                    .errors.status
+                                                                    .errors
+                                                                    .status
                                                             }
                                                         </em>
                                                     )}
@@ -3001,19 +3929,53 @@ export default function Projects({
                                         </div>
                                         <div>
                                             <small>Salesman 1</small>
-                                            <strong>
-                                                {selected.lead.salesman_one
-                                                    ?.salesman_name ||
-                                                    'Unassigned'}
-                                            </strong>
+                                            <span className="project-call-row">
+                                                <strong>
+                                                    {selected.lead.salesman_one
+                                                        ?.salesman_name ||
+                                                        'Unassigned'}
+                                                </strong>
+                                                {selected.lead.salesman_one?.phone?.trim() && (
+                                                    <RingCentralCallButton
+                                                        phone={
+                                                            selected.lead
+                                                                .salesman_one
+                                                                .phone
+                                                        }
+                                                        phoneSlot="primary"
+                                                        className="project-call-button"
+                                                        title={`Call ${selected.lead.salesman_one.salesman_name} with RingCentral`}
+                                                    >
+                                                        <PhoneCall />
+                                                        <span>Call</span>
+                                                    </RingCentralCallButton>
+                                                )}
+                                            </span>
                                         </div>
                                         <div>
                                             <small>Salesman 2</small>
-                                            <strong>
-                                                {selected.lead.salesman_two
-                                                    ?.salesman_name ||
-                                                    'Unassigned'}
-                                            </strong>
+                                            <span className="project-call-row">
+                                                <strong>
+                                                    {selected.lead.salesman_two
+                                                        ?.salesman_name ||
+                                                        'Unassigned'}
+                                                </strong>
+                                                {selected.lead.salesman_two?.phone?.trim() && (
+                                                    <RingCentralCallButton
+                                                        phone={
+                                                            selected.lead
+                                                                .salesman_two
+                                                                .phone
+                                                        }
+                                                        phoneSlot="primary"
+                                                        className="project-call-button"
+                                                        title={`Call ${selected.lead.salesman_two.salesman_name} with RingCentral`}
+                                                    >
+                                                        <PhoneCall />
+                                                        <span>Call</span>
+                                                    </RingCentralCallButton>
+                                                )}
+                                            </span>
                                         </div>
                                     </div>
                                 </article>
@@ -3068,12 +4030,497 @@ export default function Projects({
                                                 )}
                                             </p>
                                         </div>
+                                        <div className="project-salesman-history">
+                                            <small>
+                                                Salesman assignment history
+                                            </small>
+                                            {salesmanAssignmentHistory(selected)
+                                                .length > 0 ? (
+                                                <ul>
+                                                    {salesmanAssignmentHistory(
+                                                        selected,
+                                                    ).map((note) => (
+                                                        <li key={note.id}>
+                                                            <span>
+                                                                {note.body}
+                                                            </span>
+                                                            <time>
+                                                                {new Date(
+                                                                    note.created_at,
+                                                                ).toLocaleString()}
+                                                            </time>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                <p>
+                                                    No previous salesman
+                                                    assignments recorded.
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 </article>
                             </div>
                         </section>
                     )}
                 </div>
+
+                <Dialog
+                    open={creatingProject}
+                    onOpenChange={(open) =>
+                        open ? setCreatingProject(true) : closeProjectCreate()
+                    }
+                >
+                    <DialogContent className="project-create-modal">
+                        <form
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                saveNewProject();
+                            }}
+                        >
+                            <DialogHeader>
+                                <DialogTitle>Add project</DialogTitle>
+                                <DialogDescription>
+                                    Create a standalone project. This will not
+                                    create a lead or appear in Tele Leads.
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="project-create-form">
+                                <label>
+                                    <span>Customer name</span>
+                                    <input
+                                        value={
+                                            projectCreateForm.data.customer_name
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'customer_name',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.customer_name}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Contact</span>
+                                    <input
+                                        value={
+                                            projectCreateForm.data.contact_name
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'contact_name',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.contact_name}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Phone</span>
+                                    <input
+                                        type="tel"
+                                        value={
+                                            projectCreateForm.data
+                                                .primary_number
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'primary_number',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {
+                                            projectCreateForm.errors
+                                                .primary_number
+                                        }
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Mobile number</span>
+                                    <input
+                                        type="tel"
+                                        value={
+                                            projectCreateForm.data.mobile_number
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'mobile_number',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.mobile_number}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Company</span>
+                                    <select
+                                        value={
+                                            projectCreateForm.data.company_id
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'company_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">Select company</option>
+                                        {companies.map((company) => (
+                                            <option
+                                                key={company.com_id}
+                                                value={company.com_id}
+                                            >
+                                                {company.company}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <small>
+                                        {projectCreateForm.errors.company_id}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Product</span>
+                                    <select
+                                        value={
+                                            projectCreateForm.data.product_id
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'product_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">Select product</option>
+                                        {products.map((product) => (
+                                            <option
+                                                key={product.prod_id}
+                                                value={product.prod_id}
+                                            >
+                                                {product.product_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <small>
+                                        {projectCreateForm.errors.product_id}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Telemarketer</span>
+                                    <select
+                                        value={
+                                            projectCreateForm.data
+                                                .telemarketer_id
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'telemarketer_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">
+                                            Select telemarketer
+                                        </option>
+                                        {agents.map((agent) => (
+                                            <option
+                                                key={agent.agent_id}
+                                                value={agent.agent_id}
+                                            >
+                                                {agent.agent_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <small>
+                                        {
+                                            projectCreateForm.errors
+                                                .telemarketer_id
+                                        }
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Salesman</span>
+                                    <select
+                                        value={
+                                            projectCreateForm.data.salesman_id
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'salesman_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">
+                                            Select salesman
+                                        </option>
+                                        {salesmen.map((salesman) => (
+                                            <option
+                                                key={salesman.salesman_id}
+                                                value={salesman.salesman_id}
+                                            >
+                                                {salesman.salesman_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <small>
+                                        {projectCreateForm.errors.salesman_id}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Original sale</span>
+                                    <input
+                                        type="number"
+                                        min="0.01"
+                                        step="0.01"
+                                        value={projectCreateForm.data.amount}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'amount',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.amount}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Budget</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={projectCreateForm.data.budget}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'budget',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.budget}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Signed date</span>
+                                    <input
+                                        type="date"
+                                        value={
+                                            projectCreateForm.data.signed_date
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'signed_date',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.signed_date}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Status</span>
+                                    <select
+                                        value={projectCreateForm.data.status}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'status',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="new">New</option>
+                                        <option value="progress">
+                                            In Progress
+                                        </option>
+                                        <option value="completed">
+                                            Completed
+                                        </option>
+                                        <option value="canceled">
+                                            Canceled
+                                        </option>
+                                    </select>
+                                    <small>
+                                        {projectCreateForm.errors.status}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Project number</span>
+                                    <input
+                                        placeholder="Leave blank to assign automatically"
+                                        value={
+                                            projectCreateForm.data
+                                                .project_number
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'project_number',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {
+                                            projectCreateForm.errors
+                                                .project_number
+                                        }
+                                    </small>
+                                </label>
+                                <label className="is-wide">
+                                    <span>Address</span>
+                                    <input
+                                        value={projectCreateForm.data.address}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'address',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.address}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>City</span>
+                                    <input
+                                        value={projectCreateForm.data.city}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'city',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.city}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>State</span>
+                                    <input
+                                        value={projectCreateForm.data.state}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'state',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.state}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>ZIP code</span>
+                                    <input
+                                        value={projectCreateForm.data.zip_code}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'zip_code',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.zip_code}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Email</span>
+                                    <input
+                                        type="email"
+                                        value={projectCreateForm.data.email}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'email',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.email}
+                                    </small>
+                                </label>
+                                <label>
+                                    <span>Manager</span>
+                                    <select
+                                        value={
+                                            projectCreateForm.data.manager_id
+                                        }
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'manager_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">Select manager</option>
+                                        {managers.map((manager) => (
+                                            <option
+                                                key={manager.manager_id}
+                                                value={manager.manager_id}
+                                            >
+                                                {manager.manager_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <small>
+                                        {projectCreateForm.errors.manager_id}
+                                    </small>
+                                </label>
+                                <label className="is-full">
+                                    <span>Notes</span>
+                                    <textarea
+                                        value={projectCreateForm.data.notes}
+                                        onChange={(event) =>
+                                            projectCreateForm.setData(
+                                                'notes',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    <small>
+                                        {projectCreateForm.errors.notes}
+                                    </small>
+                                </label>
+                            </div>
+
+                            <DialogFooter>
+                                <button
+                                    type="button"
+                                    className="project-modal-cancel"
+                                    onClick={closeProjectCreate}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="project-modal-save"
+                                    disabled={projectCreateForm.processing}
+                                >
+                                    {projectCreateForm.processing
+                                        ? 'Adding…'
+                                        : 'Add project'}
+                                </button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
 
                 <Dialog
                     open={saleModal !== null}

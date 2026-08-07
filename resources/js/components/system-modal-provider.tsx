@@ -122,7 +122,11 @@ export function SystemModalProvider({
             const data = flash?.toast as FlashToast | undefined;
 
             if (data) {
-                notify({ message: data.message, tone: data.type });
+                notify({
+                    title: data.title,
+                    message: data.message,
+                    tone: data.type,
+                });
             }
         });
     }, [notify]);

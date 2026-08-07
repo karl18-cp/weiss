@@ -52,7 +52,7 @@ return [
         'api_base_url' => env('CALLTOOLS_API_BASE_URL', 'https://app.calltools.io'),
         'api_key' => env('CALLTOOLS_API_KEY'),
         'sync_start_date' => env('CALLTOOLS_SYNC_START_DATE', '2026-07-01'),
-        'report_timezone' => env('CALLTOOLS_REPORT_TIMEZONE', 'Asia/Manila'),
+        'report_timezone' => env('APP_TIMEZONE', 'America/Los_Angeles'),
         'webhook_secret' => env('CALLTOOLS_WEBHOOK_SECRET'),
         'default_company_id' => env('CALLTOOLS_DEFAULT_COMPANY_ID'),
         'default_product_id' => env('CALLTOOLS_DEFAULT_PRODUCT_ID'),
@@ -69,6 +69,13 @@ return [
         'subject' => env('VAPID_SUBJECT', env('APP_URL')),
         'public_key' => env('VAPID_PUBLIC_KEY'),
         'private_key' => env('VAPID_PRIVATE_KEY'),
+    ],
+
+    'google_drive' => [
+        'client_id' => env('GOOGLE_DRIVE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_DRIVE_CLIENT_SECRET'),
+        'refresh_token' => env('GOOGLE_DRIVE_REFRESH_TOKEN'),
+        'root_folder_id' => env('GOOGLE_DRIVE_ROOT_FOLDER_ID'),
     ],
 
 ];
