@@ -47,6 +47,9 @@ export default function SalesmanLeadInformation({
     const noteForm = useForm({ body: '' });
     const [actionProcessing, setActionProcessing] = useState(false);
     const [actionMessage, setActionMessage] = useState('');
+    const [showSoldAmount, setShowSoldAmount] = useState(false);
+    const [saleAmount, setSaleAmount] = useState('');
+    const [saleAmountError, setSaleAmountError] = useState('');
     const [showMapChoices, setShowMapChoices] = useState(false);
     const phoneNumber = lead?.primary_number || lead?.mobile_number || '';
     const dialNumber = phoneNumber.replace(/[^\d+]/g, '');
@@ -63,6 +66,19 @@ export default function SalesmanLeadInformation({
     const sendAppointmentAction = (action: 'on_my_way' | 'sold' | 'not_sold') => {
         if (!lead || actionProcessing) return;
 
+        if (action === 'sold' && !showSoldAmount) {
+            setActionMessage('');
+            setSaleAmountError('');
+            setShowSoldAmount(true);
+            return;
+        }
+
+        const numericSaleAmount = Number(saleAmount);
+        if (action === 'sold' && (!Number.isFinite(numericSaleAmount) || numericSaleAmount <= 0)) {
+            setSaleAmountError('Enter the sold amount before confirming the sale.');
+            return;
+        }
+
         const labels = {
             on_my_way: 'On My Way',
             sold: 'Sold',
@@ -73,18 +89,24 @@ export default function SalesmanLeadInformation({
         setActionMessage(`Sending ${labels[action]}…`);
         router.post(
             `/salesman/leads/${lead.id}/appointment-result-notes`,
-            { action },
+            action === 'sold' ? { action, sale_amount: numericSaleAmount } : { action },
             {
                 preserveScroll: true,
                 preserveState: true,
-                onSuccess: () =>
+                onSuccess: () => {
+                    setShowSoldAmount(false);
+                    setSaleAmount('');
+                    setSaleAmountError('');
                     setActionMessage(
                         `${labels[action]} was saved and sent to managers and admins.`,
-                    ),
-                onError: () =>
+                    );
+                },
+                onError: (errors) => {
+                    if (errors.sale_amount) setSaleAmountError(errors.sale_amount);
                     setActionMessage(
                         'The status could not be sent. Please try again.',
-                    ),
+                    );
+                },
                 onFinish: () => setActionProcessing(false),
             },
         );
@@ -216,6 +238,37 @@ export default function SalesmanLeadInformation({
                                 <CircleX /> Not Sold
                             </button>
                         </div>
+                        {showSoldAmount && (
+                            <div className="salesman-appointment-result__sold-amount">
+                                <label htmlFor="salesman-sale-amount">Sold amount</label>
+                                <div>
+                                    <span>$</span>
+                                    <input
+                                        id="salesman-sale-amount"
+                                        type="number"
+                                        min="0.01"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={saleAmount}
+                                        onChange={(event) => {
+                                            setSaleAmount(event.target.value);
+                                            setSaleAmountError('');
+                                        }}
+                                        placeholder="0.00"
+                                        autoFocus
+                                    />
+                                </div>
+                                {saleAmountError && <small>{saleAmountError}</small>}
+                                <div className="salesman-appointment-result__sold-buttons">
+                                    <button type="button" className="is-cancel" onClick={() => { setShowSoldAmount(false); setSaleAmountError(''); }}>
+                                        Cancel
+                                    </button>
+                                    <button type="button" className="is-sold" disabled={actionProcessing} onClick={() => sendAppointmentAction('sold')}>
+                                        <BadgeDollarSign /> Confirm sold
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         {actionMessage && (
                             <p className="salesman-appointment-result__status" role="status">
                                 {actionMessage}

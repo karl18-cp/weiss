@@ -1816,6 +1816,36 @@
     box-shadow: inset 3px 0 #326cf0;
 }
 
+.projects-table tbody tr.is-search-target td,
+.projects-table tbody tr.is-search-target:hover td,
+.projects-table tbody tr.is-search-target.is-selected td {
+    color: #6b4f00;
+    background: #fff3a3;
+}
+
+.projects-table tbody tr.is-search-target td:first-child {
+    box-shadow:
+        inset 4px 0 #eab308,
+        0 0 0 2px rgb(234 179 8 / 55%),
+        0 0 18px rgb(250 204 21 / 72%);
+    animation: project-search-target-glow 1.05s ease-in-out infinite alternate;
+}
+
+@keyframes project-search-target-glow {
+    from {
+        box-shadow:
+            inset 4px 0 #eab308,
+            0 0 0 2px rgb(234 179 8 / 45%),
+            0 0 10px rgb(250 204 21 / 45%);
+    }
+    to {
+        box-shadow:
+            inset 4px 0 #ca8a04,
+            0 0 0 3px rgb(234 179 8 / 72%),
+            0 0 24px rgb(250 204 21 / 88%);
+    }
+}
+
 .projects-table td strong {
     color: #26344b;
 }

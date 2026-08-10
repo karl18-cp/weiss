@@ -29,12 +29,19 @@ class ProjectStoreRequest extends FormRequest
             'telemarketer_id' => ['nullable', 'integer', 'exists:agents,agent_id'],
             'salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
             'manager_id' => ['nullable', 'integer', 'exists:managers,manager_id'],
-            'project_number' => ['nullable', 'string', 'max:100', Rule::unique('projects', 'project_number')],
+            'project_number' => ['exclude_unless:status,progress', 'nullable', 'string', 'max:100', Rule::unique('projects', 'project_number')],
             'status' => ['required', 'in:new,progress,completed,canceled'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'budget' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'notes' => ['nullable', 'string', 'max:10000'],
             'signed_date' => ['required', 'date'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'project_number.unique' => 'This project number already exists.',
         ];
     }
 }

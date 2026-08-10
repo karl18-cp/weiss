@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'lead_id', 'account_id', 'phone_number', 'normalized_phone', 'direction',
     'telephony_session_id', 'ringcentral_call_log_id', 'result', 'duration_seconds',
     'recording_id', 'recording_path', 'recording_content_type', 'initiated_at',
-    'started_at', 'ended_at', 'matched_at', 'recorded_at',
+    'started_at', 'ended_at', 'matched_at', 'recorded_at', 'sync_checked_at',
 ])]
 class RingCentralCall extends Model
 {
@@ -35,6 +35,7 @@ class RingCentralCall extends Model
             'ended_at' => 'datetime',
             'matched_at' => 'datetime',
             'recorded_at' => 'datetime',
+            'sync_checked_at' => 'datetime',
         ];
     }
 

@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Schema;
 ])]
 class Lead extends Model
 {
-    public const LEADS_SHOP_STATUSES = ['fresh', 'raw', 'cb', 'naov'];
+    public const LEADS_SHOP_STATUSES = ['fresh', 'raw', 'cb', 'naov', 'verify'];
 
     public function toArray(): array
     {

@@ -479,6 +479,69 @@
 .salesman-appointment-result__quick-actions .is-sold { background: #159455; }
 .salesman-appointment-result__quick-actions .is-not-sold { background: #dc3545; }
 
+.salesman-appointment-result__sold-amount {
+    margin-top: 0.65rem;
+    padding: 0.7rem;
+    border: 1px solid #b9dfc9;
+    border-radius: 0.65rem;
+    background: #effaf4;
+}
+
+.salesman-appointment-result__sold-amount > label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #166534;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.salesman-appointment-result__sold-amount > div:first-of-type {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #9bcfaf;
+    border-radius: 0.55rem;
+    background: #fff;
+}
+
+.salesman-appointment-result__sold-amount > div:first-of-type span {
+    padding-left: 0.7rem;
+    color: #166534;
+    font-weight: 800;
+}
+
+.salesman-appointment-result__sold-amount input {
+    width: 100%;
+    padding: 0.7rem 0.6rem;
+    border: 0;
+    outline: 0;
+    color: #172033;
+    background: transparent;
+    font: inherit;
+    font-weight: 700;
+}
+
+.salesman-appointment-result__sold-amount > small {
+    display: block;
+    margin-top: 0.3rem;
+    color: #dc2626;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+
+.salesman-appointment-result__sold-buttons {
+    display: grid;
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 0.45rem;
+}
+
+.salesman-appointment-result__sold-buttons .is-cancel {
+    color: #475569;
+    background: #e2e8f0;
+}
+
+.salesman-appointment-result__sold-buttons .is-sold { background: #159455; }
+
 .salesman-appointment-result > .salesman-appointment-result__status {
     margin-top: 0.55rem;
     padding: 0.55rem 0.7rem;

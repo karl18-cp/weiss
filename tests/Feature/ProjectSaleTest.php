@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Contractor;
 use App\Models\Lead;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\Salesman;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -125,6 +126,8 @@ test('project details can update the company and product', function () {
         ->and($lead->customer_name)->toBe('Updated Customer')
         ->and($lead->created_at->format('Y-m-d H:i'))->toBe('2026-08-01 09:15')
         ->and($project->refresh()->status)->toBe('progress')
+        ->and($project->project_number)->toBe('RC-100')
+        ->and($company->refresh()->project_code)->toBe('RC-101')
         ->and($project->sales()->where('type', 'original')->firstOrFail()->product_id)->toBe($product->prod_id);
 });
 
@@ -162,19 +165,21 @@ test('an authenticated user can create a project directly from projects', functi
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
-    $project = \App\Models\Project::query()
+    $project = Project::query()
         ->where('customer_name', 'Direct Project Customer')
         ->firstOrFail();
 
     expect(Lead::query()->count())->toBe($leadCount)
         ->and($project->lead_id)->toBeNull()
         ->and($project->contact_name)->toBe('Direct Contact')
-        ->and($project->project_number)->toBe('PC-001')
+        ->and($project->project_number)->toBeNull()
         ->and($project->amount)->toBe('25000.00')
         ->and($project->budget)->toBe('18000.00')
         ->and($project->manual_notes)->toBe('Standalone project notes.')
         ->and($project->created_at->toDateString())->toBe('2026-08-06')
         ->and($project->sales()->where('type', 'original')->firstOrFail()->amount)->toBe('25000.00');
+
+    expect($company->refresh()->project_code)->toBe('PC-001');
 });
 
 test('changing an appointment records the previous and new dates in lead history', function () {
@@ -210,7 +215,7 @@ test('accepting a sale creates a related project', function () {
 
     $this->assertDatabaseHas('projects', [
         'lead_id' => $lead->id,
-        'project_number' => 'PC-001',
+        'project_number' => null,
         'amount' => 12500.50,
         'status' => 'new',
         'created_by' => $account->acc_id,
@@ -227,7 +232,7 @@ test('accepting a sale creates a related project', function () {
         'type' => 'original',
         'amount' => 12500.50,
     ]);
-    expect($lead->company->refresh()->project_code)->toBe('PC-002');
+    expect($lead->company->refresh()->project_code)->toBe('PC-001');
 
     $this->actingAs($account)
         ->get(route('management.projects'))
@@ -241,7 +246,7 @@ test('accepting a sale creates a related project', function () {
         );
 });
 
-test('company project codes are allocated sequentially for new projects', function () {
+test('newly accepted sales remain unnumbered until work starts', function () {
     ['account' => $account, 'lead' => $firstLead, 'salesman' => $salesman] = projectSaleFixtures();
     $firstLead->update(['salesman_1_id' => $salesman->salesman_id]);
     $secondLead = $firstLead->replicate();
@@ -255,9 +260,62 @@ test('company project codes are allocated sequentially for new projects', functi
         'amount' => 15000,
     ])->assertRedirect();
 
-    expect($firstLead->refresh()->project->project_number)->toBe('PC-001')
-        ->and($secondLead->refresh()->project->project_number)->toBe('PC-002')
-        ->and($firstLead->company->refresh()->project_code)->toBe('PC-003');
+    expect($firstLead->refresh()->project->project_number)->toBeNull()
+        ->and($secondLead->refresh()->project->project_number)->toBeNull()
+        ->and($firstLead->company->refresh()->project_code)->toBe('PC-001');
+});
+
+test('a dispatched sale can become a new project without company or product details', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update([
+        'salesman_1_id' => $salesman->salesman_id,
+        'company_id' => null,
+        'product_id' => null,
+    ]);
+
+    $this->actingAs($account)
+        ->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 7500])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('projects', [
+        'lead_id' => $lead->id,
+        'project_number' => null,
+        'status' => 'new',
+        'amount' => 7500,
+    ]);
+    expect($lead->refresh()->status)->toBe('project');
+});
+
+test('duplicate project numbers show a clear validation error', function () {
+    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+
+    Project::query()->create([
+        'lead_id' => $lead->id,
+        'project_number' => 'PC-777',
+        'amount' => 1000,
+        'status' => 'progress',
+        'created_by' => $account->acc_id,
+    ]);
+
+    $this->actingAs($account)
+        ->post(route('management.projects.store'), [
+            'customer_name' => 'Duplicate Number Customer',
+            'primary_number' => '+1 (408) 555-0100',
+            'address' => '700 Duplicate Street',
+            'city' => 'San Jose',
+            'state' => 'CA',
+            'zip_code' => '95113',
+            'company_id' => $lead->company_id,
+            'product_id' => $lead->product_id,
+            'project_number' => 'PC-777',
+            'status' => 'progress',
+            'amount' => 1000,
+            'signed_date' => '2026-08-06',
+        ])
+        ->assertSessionHasErrors([
+            'project_number' => 'This project number already exists.',
+        ]);
 });
 
 test('sold appointment results must use the sale workflow', function () {

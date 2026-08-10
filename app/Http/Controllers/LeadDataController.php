@@ -320,6 +320,7 @@ class LeadDataController extends Controller
 
         return match ($lead->status ?: 'fresh') {
             'fresh' => 'Freshly In',
+            'verify' => 'Verify',
             'cb', 'rehash_cb', 'kit_cb' => 'CB',
             'naov' => 'NAOV',
             'toss', 'rehash_toss', 'kit_toss' => 'Toss',

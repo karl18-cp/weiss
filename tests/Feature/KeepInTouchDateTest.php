@@ -4,6 +4,7 @@ use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Lead;
 use App\Models\LeadMovement;
+use App\Models\LeadNote;
 use App\Models\Manager;
 use App\Models\ManagerPermission;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -134,6 +135,59 @@ test('keep in touch can open leads without appointment dates', function () {
             ->where('selectedDate', 'unscheduled')
             ->has('leads', 1)
             ->where('leads.0.customer_name', 'Unscheduled KIT'));
+});
+
+test('sidebar search keeps an explicitly requested lead visible outside the active date bucket', function () {
+    $admin = Account::query()->create([
+        'username' => 'keep-in-touch-sidebar-search-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+
+    createKeepInTouchLead($admin, 'Latest Scheduled KIT', 'kit', '2026-08-08 12:00:00');
+    $requestedLead = createKeepInTouchLead($admin, 'Requested Unscheduled KIT', 'kit', null);
+
+    $this->actingAs($admin)
+        ->get(route('lead-workflow.keep-in-touch', [
+            'lead' => $requestedLead->id,
+            'focus' => 'search',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedDate', '2026-08-08')
+            ->has('leads', 2)
+            ->where('leads.0.id', $requestedLead->id));
+});
+
+test('expanded notes receive the complete saved history', function () {
+    $admin = Account::query()->create([
+        'username' => 'keep-in-touch-complete-note-history-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+
+    $lead = createKeepInTouchLead(
+        $admin,
+        'Complete Note History Lead',
+        'kit',
+        '2026-08-08 12:00:00',
+    );
+
+    foreach (range(1, 30) as $number) {
+        LeadNote::query()->create([
+            'lead_id' => $lead->id,
+            'note_type' => 'confirmation',
+            'body' => "Confirmation note {$number}",
+            'created_by' => $admin->acc_id,
+        ]);
+    }
+
+    $this->actingAs($admin)
+        ->get(route('lead-workflow.keep-in-touch', ['date' => '2026-08-08']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('leads', 1)
+            ->has('leads.0.notes', 30));
 });
 
 test('keep in touch loads all matching subtypes for a selected appointment date', function () {

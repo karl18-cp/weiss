@@ -90,7 +90,7 @@ export default function LeadCard({
     const serviceUnavailableTimer = useRef<number | null>(null);
 
     useEffect(() => {
-        const removeListener = router.on('invalid', (event) => {
+        const removeListener = router.on('httpException', (event) => {
             const pending = serviceUnavailableRetry.current;
 
             if (event.detail.response.status !== 503 || !pending) {

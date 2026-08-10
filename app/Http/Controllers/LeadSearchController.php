@@ -19,7 +19,11 @@ class LeadSearchController extends Controller
         $digits = preg_replace('/\D+/', '', $query) ?: '';
         $user = $request->user();
         $leads = Lead::query()
-            ->with(['company:com_id,company', 'product:prod_id,product_name'])
+            ->with([
+                'company:com_id,company',
+                'product:prod_id,product_name',
+                'project:id,lead_id',
+            ])
             ->when($user?->role === 'salesman', function ($builder) use ($user): void {
                 $salesmanId = $user->salesman?->salesman_id;
                 if (! $salesmanId) {
@@ -83,6 +87,10 @@ class LeadSearchController extends Controller
             default => ['Leads Shop', '/lead-workflow/leads-shop', 'leads_shop'],
         };
 
+        $url = $module === 'projects' && $lead->project
+            ? $path.'?project='.$lead->project->id.'&focus=search'
+            : $path.'?lead='.$lead->id.'&focus=search';
+
         return [
             'id' => $lead->id, 'customer' => $lead->customer_name,
             'phone' => PhoneNumberVisibility::canView()
@@ -90,7 +98,7 @@ class LeadSearchController extends Controller
                 : PhoneNumberVisibility::mask($lead->primary_number ?: ($lead->mobile_number ?: $lead->secondary_number)),
             'address' => collect([$lead->address, $lead->city, $lead->state, $lead->zip_code])->filter()->implode(', '),
             'product' => $lead->product?->product_name, 'company' => $lead->company?->company,
-            'location' => $location, 'module' => $module, 'url' => $path.'?lead='.$lead->id,
+            'location' => $location, 'module' => $module, 'url' => $url,
         ];
     }
 

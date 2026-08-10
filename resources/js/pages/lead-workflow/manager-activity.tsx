@@ -127,12 +127,17 @@ export default function ManagerActivity({
     managers,
     filters,
     canViewAll,
+    movementTotals,
 }: {
     activities: Paginated<Activity>;
     calls: Paginated<Call>;
     managers: ManagerOption[];
     filters: Filters;
     canViewAll: boolean;
+    movementTotals: {
+        confirmed: number;
+        dispatched: number;
+    };
 }) {
     const [view, setView] = useState<'calls' | 'history'>(filters.view);
     const [search, setSearch] = useState(filters.search ?? '');
@@ -143,17 +148,35 @@ export default function ManagerActivity({
     const [to, setTo] = useState(filters.to ?? '');
     const [talkedTo, setTalkedTo] = useState(Boolean(filters.talked_to));
 
-    const requestFilters = (overrides: Record<string, string | boolean | undefined> = {}) => ({
-        view,
-        search: search || undefined,
-        manager: canViewAll && manager ? manager : undefined,
-        from: from || undefined,
-        to: to || undefined,
-        talked_to: talkedTo || undefined,
-        call_sort: filters.call_sort,
-        call_direction: filters.call_direction,
-        ...overrides,
-    });
+    const requestFilters = (overrides: Record<string, string | boolean | undefined> = {}) => {
+        const requestedView = (overrides.view as 'calls' | 'history' | undefined) ?? view;
+
+        return {
+            view: requestedView,
+            search: search || undefined,
+            manager: canViewAll && manager ? manager : undefined,
+            from: from || undefined,
+            to: to || undefined,
+            talked_to: requestedView === 'calls' && talkedTo ? true : undefined,
+            call_sort: requestedView === 'calls' ? filters.call_sort : undefined,
+            call_direction: requestedView === 'calls' ? filters.call_direction : undefined,
+            ...overrides,
+        };
+    };
+
+    const switchView = (nextView: 'calls' | 'history') => {
+        setView(nextView);
+        router.get(
+            '/lead-workflow/call-logs',
+            requestFilters({
+                view: nextView,
+                talked_to: nextView === 'calls' && talkedTo ? true : undefined,
+                call_sort: nextView === 'calls' ? filters.call_sort : undefined,
+                call_direction: nextView === 'calls' ? filters.call_direction : undefined,
+            }),
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
 
     const applyFilters = (event: React.FormEvent) => {
         event.preventDefault();
@@ -207,6 +230,14 @@ export default function ManagerActivity({
                             <strong>{activities.total.toLocaleString()}</strong>
                             lead actions
                         </span>
+                        <span>
+                            <strong>{movementTotals.confirmed.toLocaleString()}</strong>
+                            moved to confirm
+                        </span>
+                        <span>
+                            <strong>{movementTotals.dispatched.toLocaleString()}</strong>
+                            moved to dispatch
+                        </span>
                     </div>
                 </header>
 
@@ -259,16 +290,18 @@ export default function ManagerActivity({
                             onChange={(event) => setTo(event.target.value)}
                         />
                     </label>
-                    <label>
-                        <span>Calls</span>
-                        <select
-                            value={talkedTo ? 'talked' : 'all'}
-                            onChange={(event) => setTalkedTo(event.target.value === 'talked')}
-                        >
-                            <option value="all">All calls</option>
-                            <option value="talked">Talked to (over 20 sec)</option>
-                        </select>
-                    </label>
+                    {view === 'calls' && (
+                        <label>
+                            <span>Calls</span>
+                            <select
+                                value={talkedTo ? 'talked' : 'all'}
+                                onChange={(event) => setTalkedTo(event.target.value === 'talked')}
+                            >
+                                <option value="all">All calls</option>
+                                <option value="talked">Talked to (over 20 sec)</option>
+                            </select>
+                        </label>
+                    )}
                     <button type="submit">Apply filters</button>
                 </form>
 
@@ -277,7 +310,7 @@ export default function ManagerActivity({
                         <button
                             type="button"
                             className={view === 'calls' ? 'is-active' : ''}
-                            onClick={() => setView('calls')}
+                            onClick={() => switchView('calls')}
                         >
                             <PhoneCall /> Called Leads
                             <b>{calls.total}</b>
@@ -285,7 +318,7 @@ export default function ManagerActivity({
                         <button
                             type="button"
                             className={view === 'history' ? 'is-active' : ''}
-                            onClick={() => setView('history')}
+                            onClick={() => switchView('history')}
                         >
                             <History /> Lead History
                             <b>{activities.total}</b>

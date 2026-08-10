@@ -260,3 +260,26 @@ test('toss leads have their own workflow queue', function () {
             ->where('leads.0.id', $toss->id)
             ->where('leads.0.status', 'toss'));
 });
+
+test('moving a toss lead to verify opens it in the verify queue', function () {
+    $admin = dataAdmin();
+    $lead = dataLead(['status' => 'toss']);
+
+    $this->actingAs($admin)
+        ->from(route('lead-workflow.toss-leads'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), [
+            'status' => 'verify',
+        ])
+        ->assertRedirect(route('lead-workflow.leads-shop', [
+            'lead' => $lead->id,
+        ]));
+
+    expect($lead->fresh()->status)->toBe('verify');
+
+    $this->get(route('lead-workflow.leads-shop', ['lead' => $lead->id]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/leads-shop')
+            ->where('leads.0.id', $lead->id)
+            ->where('leads.0.status', 'verify'));
+});

@@ -73,7 +73,7 @@ class HandleInertiaRequests extends Middleware
                     'confirm_leads' => $sum(['confirmed']),
                     'dispatch_leads' => $sum(['dispatched']),
                     'sag' => Lead::query()
-                        ->whereHas('project', fn ($project) => $project->where('status', 'completed'))
+                        ->whereHas('project', fn ($project) => $project->whereIn('status', ['completed', 'canceled']))
                         ->count(),
                     'reschedule' => $sum(['reschedule']),
                     'rehash' => $sum(['rehash', 'rehash_ng', 'rehash_toss', 'rehash_cb']),

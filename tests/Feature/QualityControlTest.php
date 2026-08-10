@@ -122,4 +122,11 @@ test('a mistaken project can be returned to dispatch without deleting project re
 
     $this->get(route('management.quality-control'))
         ->assertInertia(fn (Assert $page) => $page->has('projects', 0));
+
+    $this->get(route('lead-workflow.sag'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/sag')
+            ->has('leads', 1)
+            ->where('leads.0.id', $projectLead->id),
+        );
 });

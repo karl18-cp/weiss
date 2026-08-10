@@ -21,7 +21,7 @@ class ManagerAccess
         'contacts_users' => 'Contacts & Users',
         'view_all_kit_managers' => "View All Managers' Keep in Touch Leads",
         'toss_action' => 'Move Leads to TOSS',
-        'dial_raw_only' => 'Leads Shop Dialing: Raw Leads Only',
+        'dial_raw_only' => 'Leads Shop Dialing: Raw & Verify Only',
         'full_phone_numbers' => 'View Full Phone Numbers',
     ];
 

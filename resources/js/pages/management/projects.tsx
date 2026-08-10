@@ -25,7 +25,7 @@ import {
     UserRound,
     Users,
 } from 'lucide-react';
-import { createElement, useMemo, useState } from 'react';
+import { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import '@/../css/projects.css';
 import { useSystemModal } from '@/components/system-modal-provider';
 import { RingCentralCallButton } from '@/components/ringcentral-call-button';
@@ -50,7 +50,12 @@ type SalesmanOption = {
     phone: string | null;
 };
 type ManagerOption = { manager_id: number; manager_name: string };
-type ProjectStatusFilter = 'all' | 'new' | 'progress' | 'completed';
+type ProjectStatusFilter =
+    | 'all'
+    | 'new'
+    | 'progress'
+    | 'completed'
+    | 'canceled';
 type ProjectSortDirection = 'asc' | 'desc';
 type ProjectSortKey =
     | 'signed'
@@ -284,6 +289,9 @@ export default function Projects({
     const requestedProjectId =
         Number(new URLSearchParams(window.location.search).get('project')) ||
         null;
+    const isSearchFocus =
+        new URLSearchParams(window.location.search).get('focus') === 'search';
+    const focusedProjectRowRef = useRef<HTMLTableRowElement | null>(null);
     const [activeTab, setActiveTab] = useState<
         'PRJ' | 'DTL' | 'SP' | 'INV' | 'ACT' | 'DOC'
     >('PRJ');
@@ -499,9 +507,7 @@ export default function Projects({
             return project.project_number;
         }
 
-        const prefix = project.lead.company?.prefix?.trim() || 'PROJECT';
-
-        return `${prefix}-${String(project.id).padStart(5, '0')}`;
+        return 'Not assigned';
     };
 
     const latestNote = (project: Project) =>
@@ -556,7 +562,7 @@ export default function Projects({
             }
         };
 
-        return [...statusFiltered].sort((left, right) => {
+        const sorted = [...statusFiltered].sort((left, right) => {
             const leftValue = valueFor(left);
             const rightValue = valueFor(right);
             const comparison =
@@ -573,7 +579,40 @@ export default function Projects({
 
             return projectSort.direction === 'asc' ? comparison : -comparison;
         });
-    }, [projects, projectSort, projectStatusFilter]);
+
+        if (isSearchFocus && requestedProjectId) {
+            sorted.sort((left, right) =>
+                left.id === requestedProjectId
+                    ? -1
+                    : right.id === requestedProjectId
+                      ? 1
+                      : 0,
+            );
+        }
+
+        return sorted;
+    }, [
+        isSearchFocus,
+        projects,
+        projectSort,
+        projectStatusFilter,
+        requestedProjectId,
+    ]);
+
+    useEffect(() => {
+        if (!isSearchFocus || !requestedProjectId) return;
+
+        setProjectStatusFilter('all');
+        const frame = window.requestAnimationFrame(() => {
+            focusedProjectRowRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+                inline: 'nearest',
+            });
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [filteredProjects.length, isSearchFocus, requestedProjectId]);
 
     const toggleProjectSort = (key: ProjectSortKey) => {
         setProjectSort((current) => ({
@@ -677,6 +716,9 @@ export default function Projects({
             completed: projects.filter(
                 (project) => project.status === 'completed',
             ).length,
+            canceled: projects.filter(
+                (project) => project.status === 'canceled',
+            ).length,
         }),
         [projects],
     );
@@ -755,7 +797,7 @@ export default function Projects({
         setSelectedDocumentKey(null);
         setEditingProjectDetails(false);
         projectDetailsForm.setData({
-            project_number: projectNumber(project),
+            project_number: project.project_number ?? '',
             status: project.status || 'new',
             company_id: String(project.lead.company?.com_id ?? ''),
             product_id: String(project.lead.product?.prod_id ?? ''),
@@ -781,7 +823,7 @@ export default function Projects({
         if (!selected) return;
 
         projectDetailsForm.setData({
-            project_number: projectNumber(selected),
+            project_number: selected.project_number ?? '',
             status: selected.status || 'new',
             company_id: String(selected.lead.company?.com_id ?? ''),
             product_id: String(selected.lead.product?.prod_id ?? ''),
@@ -1385,6 +1427,7 @@ export default function Projects({
                                     ['new', 'New'],
                                     ['progress', 'In Progress'],
                                     ['completed', 'Completed'],
+                                    ['canceled', 'Cancelled'],
                                 ] as const
                             ).map(([value, label]) => (
                                 <button
@@ -3006,11 +3049,26 @@ export default function Projects({
                                         {filteredProjects.map((project) => (
                                             <tr
                                                 key={project.id}
-                                                className={
+                                                ref={
+                                                    isSearchFocus &&
+                                                    requestedProjectId ===
+                                                        project.id
+                                                        ? focusedProjectRowRef
+                                                        : undefined
+                                                }
+                                                data-project-id={project.id}
+                                                className={[
                                                     selectedId === project.id
                                                         ? 'is-selected'
-                                                        : ''
-                                                }
+                                                        : '',
+                                                    isSearchFocus &&
+                                                    requestedProjectId ===
+                                                        project.id
+                                                        ? 'is-search-target'
+                                                        : '',
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' ')}
                                                 onClick={() =>
                                                     selectProject(project)
                                                 }
@@ -3510,6 +3568,7 @@ export default function Projects({
                                                                     .value,
                                                             )
                                                         }
+                                                        placeholder="Enter a project number manually or leave blank"
                                                     />
                                                     {projectDetailsForm.errors
                                                         .project_number && (
@@ -3730,13 +3789,22 @@ export default function Projects({
                                                             projectDetailsForm
                                                                 .data.status
                                                         }
-                                                        onChange={(event) =>
-                                                            projectDetailsForm.setData(
-                                                                'status',
+                                                        onChange={(event) => {
+                                                            const status =
                                                                 event.target
-                                                                    .value,
-                                                            )
-                                                        }
+                                                                    .value;
+                                                            projectDetailsForm.setData(
+                                                                (current) => ({
+                                                                    ...current,
+                                                                    status,
+                                                                    project_number:
+                                                                        status ===
+                                                                        'new'
+                                                                            ? ''
+                                                                            : current.project_number,
+                                                                }),
+                                                            );
+                                                        }}
                                                     >
                                                         <option value="new">
                                                             New
@@ -4336,12 +4404,19 @@ export default function Projects({
                                     <span>Status</span>
                                     <select
                                         value={projectCreateForm.data.status}
-                                        onChange={(event) =>
+                                        onChange={(event) => {
+                                            const status = event.target.value;
                                             projectCreateForm.setData(
-                                                'status',
-                                                event.target.value,
-                                            )
-                                        }
+                                                (current) => ({
+                                                    ...current,
+                                                    status,
+                                                    project_number:
+                                                        status === 'progress'
+                                                            ? current.project_number
+                                                            : '',
+                                                }),
+                                            );
+                                        }}
                                     >
                                         <option value="new">New</option>
                                         <option value="progress">
@@ -4361,7 +4436,16 @@ export default function Projects({
                                 <label>
                                     <span>Project number</span>
                                     <input
-                                        placeholder="Leave blank to assign automatically"
+                                        placeholder={
+                                            projectCreateForm.data.status ===
+                                            'progress'
+                                                ? 'Leave blank to assign automatically'
+                                                : 'Assigned when status becomes In Progress'
+                                        }
+                                        disabled={
+                                            projectCreateForm.data.status !==
+                                            'progress'
+                                        }
                                         value={
                                             projectCreateForm.data
                                                 .project_number

@@ -432,7 +432,7 @@ export default function Managers({
                                                                 Unrestricted
                                                             </option>
                                                             <option value="edit">
-                                                                Raw leads only
+                                                                Raw &amp; Verify only
                                                             </option>
                                                         </>
                                                     ) : module === 'toss_action' ||

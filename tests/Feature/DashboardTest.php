@@ -221,6 +221,18 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
         'status' => 'new',
         'created_by' => $account->acc_id,
     ]);
+    $returnedToDispatch = $makeLead(
+        'Returned Sale',
+        'dispatched',
+        $inside->subDays(4)->toDateTimeString(),
+        '2026-07-29 16:00:00',
+    );
+    Project::create([
+        'lead_id' => $returnedToDispatch->id,
+        'amount' => 2500,
+        'status' => 'canceled',
+        'created_by' => $account->acc_id,
+    ]);
     $differentAppointmentDay = $makeLead(
         'Created Today But Sold On Another Appointment Day',
         'project',

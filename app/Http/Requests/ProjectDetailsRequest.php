@@ -16,7 +16,7 @@ class ProjectDetailsRequest extends FormRequest
     {
         return [
             'project_number' => [
-                'required',
+                'nullable',
                 'string',
                 'max:100',
                 Rule::unique('projects', 'project_number')->ignore($this->route('project')),
@@ -36,6 +36,13 @@ class ProjectDetailsRequest extends FormRequest
             'source' => ['required', 'string', 'max:255'],
             'appointment_at' => ['nullable', 'date'],
             'lead_created_at' => ['required', 'date'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'project_number.unique' => 'This project number already exists.',
         ];
     }
 }

@@ -7,8 +7,8 @@
         "npm": ">=10"
     },
     "scripts": {
-        "build": "vite build",
-        "build:ssr": "vite build && vite build --ssr",
+        "build": "vite build && node scripts/normalize-vite-manifest.mjs",
+        "build:ssr": "vite build && node scripts/normalize-vite-manifest.mjs && vite build --ssr",
         "deploy:check": "bash scripts/check-godaddy-deployment.sh",
         "dev": "vite",
         "format": "prettier --write resources/",

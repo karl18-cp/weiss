@@ -19,16 +19,16 @@ use App\Models\Project;
 use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
 use App\Models\ProjectSale;
-use App\Models\ScheduledPayment;
 use App\Models\Salesman;
+use App\Models\ScheduledPayment;
 use App\Services\GoogleDriveProjectStorage;
 use App\Services\ProjectNumberAllocator;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -93,9 +93,11 @@ class ProjectController extends Controller
         $project = DB::transaction(function () use ($request, $data, $projectNumbers): Project {
             $project = Project::query()->create([
                 'lead_id' => null,
-                'project_number' => filled($data['project_number'] ?? null)
-                    ? trim($data['project_number'])
-                    : $projectNumbers->allocateForCompany((int) $data['company_id']),
+                'project_number' => $data['status'] === 'progress'
+                    ? (filled($data['project_number'] ?? null)
+                        ? trim($data['project_number'])
+                        : $projectNumbers->allocateForCompany((int) $data['company_id']))
+                    : null,
                 'customer_name' => $data['customer_name'],
                 'contact_name' => $data['contact_name'] ?? null,
                 'company_id' => $data['company_id'],
@@ -233,13 +235,28 @@ class ProjectController extends Controller
         return back();
     }
 
-    public function updateDetails(ProjectDetailsRequest $request, Project $project): RedirectResponse
-    {
+    public function updateDetails(
+        ProjectDetailsRequest $request,
+        Project $project,
+        ProjectNumberAllocator $projectNumbers,
+    ): RedirectResponse {
         $data = $request->validated();
 
-        DB::transaction(function () use ($project, $data): void {
+        DB::transaction(function () use ($project, $data, $projectNumbers): void {
+            $projectNumber = match ($data['status']) {
+                'new' => filled($data['project_number'] ?? null)
+                    ? trim($data['project_number'])
+                    : null,
+                'progress' => filled($data['project_number'] ?? null)
+                    ? trim($data['project_number'])
+                    : $projectNumbers->allocateForCompany((int) $data['company_id']),
+                default => filled($data['project_number'] ?? null)
+                    ? trim($data['project_number'])
+                    : $project->project_number,
+            };
+
             $project->update([
-                'project_number' => $data['project_number'],
+                'project_number' => $projectNumber,
                 'status' => $data['status'],
             ]);
             $lead = $project->lead()->first();

@@ -10,15 +10,16 @@ use RuntimeException;
 
 class RingCentralService
 {
-    public function callLog(CarbonInterface $from): array
+    public function callLog(CarbonInterface $from, ?CarbonInterface $to = null): array
     {
         $this->assertConfigured();
         $response = $this->api()
             ->withToken($this->accessToken())
+            ->retry(3, 750)
             ->get('/restapi/v1.0/account/~/call-log', [
                 'view' => 'Detailed',
                 'dateFrom' => $from->utc()->toIso8601String(),
-                'dateTo' => now()->utc()->toIso8601String(),
+                'dateTo' => ($to ?? now())->utc()->toIso8601String(),
                 'perPage' => 1000,
             ]);
 

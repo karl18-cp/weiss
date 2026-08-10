@@ -9,6 +9,7 @@ use App\Services\WebPushService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -123,6 +124,7 @@ class SalesmanPortalController extends Controller
         $validated = $request->validate([
             'body' => ['nullable', 'required_without:action', 'string', 'max:5000'],
             'action' => ['nullable', 'required_without:body', 'string', 'in:on_my_way,sold,not_sold'],
+            'sale_amount' => ['nullable', 'required_if:action,sold', 'numeric', 'min:0.01', 'max:999999999.99'],
         ]);
 
         $actionLabels = [
@@ -131,16 +133,32 @@ class SalesmanPortalController extends Controller
             'not_sold' => 'Not Sold',
         ];
         $action = $validated['action'] ?? null;
+        $saleAmount = $action === 'sold' ? (float) $validated['sale_amount'] : null;
         $body = $action !== null
-            ? $actionLabels[$action]
+            ? 'Salesman update: '.$actionLabels[$action]
             : trim((string) ($validated['body'] ?? ''));
 
-        LeadNote::query()->create([
-            'lead_id' => $lead->id,
-            'note_type' => 'appointment_result',
-            'body' => $body,
-            'created_by' => $user->getAuthIdentifier(),
-        ]);
+        if ($saleAmount !== null) {
+            $body .= ' — Sale amount: $'.number_format($saleAmount, 2);
+        }
+
+        DB::transaction(function () use ($lead, $body, $user, $action): void {
+            LeadNote::query()->create([
+                'lead_id' => $lead->id,
+                'note_type' => 'appointment_result',
+                'body' => $body,
+                'created_by' => $user->getAuthIdentifier(),
+            ]);
+
+            if ($action !== null) {
+                LeadNote::query()->create([
+                    'lead_id' => $lead->id,
+                    'note_type' => 'dispatch',
+                    'body' => $body,
+                    'created_by' => $user->getAuthIdentifier(),
+                ]);
+            }
+        });
 
         if ($action !== null) {
             $salesmanName = $user->salesman->salesman_name;

@@ -53,7 +53,9 @@ export default function ModulePermissionsEditor({
                             {module === 'dial_raw_only' ? (
                                 <>
                                     <option value="none">Unrestricted</option>
-                                    <option value="edit">Raw leads only</option>
+                                    <option value="edit">
+                                        Raw &amp; Verify only
+                                    </option>
                                 </>
                             ) : module === 'toss_action' ||
                               module === 'view_all_kit_managers' ? (

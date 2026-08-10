@@ -19,9 +19,12 @@ class RingCentralCallIntentController extends Controller
         ]);
         $user = $request->user();
 
-        if (ManagerAccess::hasEnabledFlag($user, 'dial_raw_only') && $lead->status !== 'raw') {
+        if (
+            ManagerAccess::hasEnabledFlag($user, 'dial_raw_only')
+            && ! in_array($lead->status, ['raw', 'verify'], true)
+        ) {
             throw ValidationException::withMessages([
-                'phone_slot' => 'Your dialing permission is limited to Raw leads. Move or select a Raw lead before dialing.',
+                'phone_slot' => 'Your dialing permission is limited to Raw and Verify leads. Move or select a Raw or Verify lead before dialing.',
             ]);
         }
 

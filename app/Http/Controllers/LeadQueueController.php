@@ -9,6 +9,7 @@ use App\Models\LeadAgentAssignment;
 use App\Models\Manager;
 use App\Models\Product;
 use App\Models\Salesman;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
@@ -102,7 +103,11 @@ class LeadQueueController extends Controller
 
     public function sag(): Response
     {
-        return $this->renderQueue('lead-workflow/sag', 'project', 'completed');
+        return $this->renderQueue(
+            'lead-workflow/sag',
+            null,
+            ['completed', 'canceled'],
+        );
     }
 
     public function reschedule(): Response
@@ -142,8 +147,8 @@ class LeadQueueController extends Controller
 
     private function renderQueue(
         string $page,
-        string|array $status,
-        ?string $projectStatus = null,
+        string|array|null $status,
+        string|array|null $projectStatus = null,
         string $dateGranularity = 'day',
     ): Response {
         $search = trim((string) request()->query('search', ''));
@@ -162,7 +167,7 @@ class LeadQueueController extends Controller
         if ($dateGranularity === 'month' && preg_match('/^\d{4}-\d{2}$/', $offsetDate)) {
             $offsetDate .= '-01';
         }
-        $timezoneOffset = (int) (\Carbon\CarbonImmutable::parse($offsetDate, $crmTimezone)->utcOffset() / 60);
+        $timezoneOffset = (int) (CarbonImmutable::parse($offsetDate, $crmTimezone)->utcOffset() / 60);
         $dateExpression = $dateField === 'created_at' && Schema::hasTable('lead_movements')
             ? 'COALESCE((SELECT MIN(lm.created_at) FROM lead_movements lm WHERE lm.lead_id = leads.id), leads.created_at)'
             : 'leads.'.$dateField;
@@ -183,10 +188,10 @@ class LeadQueueController extends Controller
             : "DATE({$dateExpression})";
 
         $queueQuery = Lead::query()
-            ->whereIn('status', (array) $status)
+            ->when($status !== null, fn ($query) => $query->whereIn('status', (array) $status))
             ->when($projectStatus, fn ($query) => $query->whereHas(
                 'project',
-                fn ($project) => $project->where('status', $projectStatus),
+                fn ($project) => $project->whereIn('status', (array) $projectStatus),
             ))
             ->when($search !== '', function ($query) use ($search): void {
                 $like = '%'.$search.'%';
@@ -326,9 +331,37 @@ class LeadQueueController extends Controller
                     fn ($query) => $query->where('city', $selectedCity),
                     fn ($query) => $query->when(
                         $selectedDate,
-                        fn ($query) => $selectedDate === 'unscheduled' && $includesUnscheduledBucket
-                            ? $query->whereNull('appointment_at')
-                            : $query->whereRaw("{$periodExpression} = ?", [$selectedDate]),
+                        function ($query) use (
+                            $selectedDate,
+                            $includesUnscheduledBucket,
+                            $periodExpression,
+                            $requestedLeadId,
+                        ): void {
+                            $query->where(function ($dateQuery) use (
+                                $selectedDate,
+                                $includesUnscheduledBucket,
+                                $periodExpression,
+                                $requestedLeadId,
+                            ): void {
+                                if ($selectedDate === 'unscheduled' && $includesUnscheduledBucket) {
+                                    $dateQuery->whereNull('appointment_at');
+                                } else {
+                                    $dateQuery->whereRaw("{$periodExpression} = ?", [$selectedDate]);
+                                }
+
+                                // A sidebar/global-search selection must remain
+                                // visible even when it has no appointment or its
+                                // appointment falls outside the active date bucket.
+                                // The explicit lead ID is still constrained by the
+                                // queue status and the user's module permission.
+                                if ($requestedLeadId) {
+                                    $dateQuery->orWhere(
+                                        $dateQuery->getModel()->getQualifiedKeyName(),
+                                        $requestedLeadId,
+                                    );
+                                }
+                            });
+                        },
                         fn ($query) => $query->whereRaw('1 = 0'),
                     ),
                 )
@@ -340,7 +373,10 @@ class LeadQueueController extends Controller
                     'secondManager:manager_id,manager_name',
                     'salesmanOne:salesman_id,salesman_name',
                     'salesmanTwo:salesman_id,salesman_name',
-                    'notes' => fn ($query) => $query->latest()->limit(25),
+                    // Expanded notes must show the complete saved history, not
+                    // only the newest subset. The frontend groups these records
+                    // by note type and keeps the list independently scrollable.
+                    'notes' => fn ($query) => $query->latest(),
                     'notes.creator:acc_id,username',
                     'appointmentResultNotes',
                     ...(Schema::hasTable('ringcentral_calls')
@@ -374,10 +410,10 @@ class LeadQueueController extends Controller
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
             'cities' => Lead::query()
-                ->whereIn('status', (array) $status)
+                ->when($status !== null, fn ($query) => $query->whereIn('status', (array) $status))
                 ->when($projectStatus, fn ($query) => $query->whereHas(
                     'project',
-                    fn ($project) => $project->where('status', $projectStatus),
+                    fn ($project) => $project->whereIn('status', (array) $projectStatus),
                 ))
                 ->whereNotNull('city')
                 ->where('city', '!=', '')

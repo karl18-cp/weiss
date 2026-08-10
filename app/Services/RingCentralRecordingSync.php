@@ -20,24 +20,71 @@ class RingCentralRecordingSync
         $checked = 0;
 
         $pendingQuery = RingCentralCall::query()
-            ->where('initiated_at', '<=', now()->subSeconds(15))
-            ->whereNull('recording_path')
-            ->whereNull('recording_id');
+            // Call timestamps are persisted in UTC even though the CRM's
+            // display timezone is America/Los_Angeles.
+            ->where('initiated_at', '<=', now()->utc()->subSeconds(15))
+            ->whereNull('matched_at');
         $backfillRun = now()->minute % 10 === 0;
         $calls = (clone $pendingQuery)
+            // Unchecked calls come first. Previously the same unmatched rows
+            // occupied every batch and prevented the rest of the queue from
+            // ever being compared with RingCentral.
+            ->orderByRaw('sync_checked_at is not null')
+            ->orderBy('sync_checked_at')
             ->when(
                 $backfillRun,
                 fn ($query) => $query->oldest('initiated_at'),
                 fn ($query) => $query->latest('initiated_at'),
             )
-            ->limit($backfillRun ? 150 : 500)
+            ->limit($backfillRun ? 100 : 200)
             ->get();
 
         if ($calls->isNotEmpty()) {
             $usedIds = RingCentralCall::query()->whereNotNull('ringcentral_call_log_id')->pluck('ringcentral_call_log_id')->all();
-            $result = $this->syncBatch($calls, $usedIds, $recordings, $downloadLimit);
+            $result = $this->syncBatchSafely(
+                $calls,
+                $usedIds,
+                $recordings,
+                $downloadLimit,
+                'unmatched-calls',
+            );
             $matched = $result['matched'];
             $checked = $result['checked'];
+        }
+
+        // RingCentral commonly publishes a completed call-log row before its
+        // recording metadata is ready. Those calls used to be marked matched
+        // and were therefore never inspected again, leaving the CRM stuck on
+        // "Waiting for RingCentral" forever. Revisit a small, recent batch
+        // until the recording ID appears, without hammering the API every
+        // minute for the same call.
+        $recordingMetadataCalls = RingCentralCall::query()
+            ->whereNotNull('matched_at')
+            ->whereNotNull('ringcentral_call_log_id')
+            ->whereNull('recording_id')
+            ->where('initiated_at', '>=', now()->utc()->subDays(45))
+            ->where(function ($query): void {
+                $query->whereNull('sync_checked_at')
+                    ->orWhere('sync_checked_at', '<=', now()->utc()->subMinutes(5));
+            })
+            ->latest('initiated_at')
+            ->limit(50)
+            ->get();
+
+        if ($recordingMetadataCalls->isNotEmpty()) {
+            $usedIds ??= RingCentralCall::query()
+                ->whereNotNull('ringcentral_call_log_id')
+                ->pluck('ringcentral_call_log_id')
+                ->all();
+            $result = $this->syncBatchSafely(
+                $recordingMetadataCalls,
+                $usedIds,
+                $recordings,
+                $downloadLimit,
+                'recording-metadata',
+            );
+            $matched += $result['matched'];
+            $checked += $result['checked'];
         }
 
         if ($recordings < $downloadLimit) {
@@ -63,13 +110,42 @@ class RingCentralRecordingSync
     }
 
     /** @return array{matched: int, checked: int} */
+    private function syncBatchSafely(
+        $calls,
+        array &$usedIds,
+        int &$recordings,
+        int $downloadLimit,
+        string $queue,
+    ): array {
+        try {
+            return $this->syncBatch($calls, $usedIds, $recordings, $downloadLimit);
+        } catch (\Throwable $exception) {
+            // One transient API/DNS failure must not prevent the independent
+            // metadata and download queues from making progress.
+            Log::warning('RingCentral call-log sync batch failed.', [
+                'queue' => $queue,
+                'calls' => $calls->count(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return ['matched' => 0, 'checked' => 0];
+        }
+    }
+
+    /** @return array{matched: int, checked: int} */
     private function syncBatch($calls, array &$usedIds, int &$recordings, int $downloadLimit): array
     {
         if ($calls->isEmpty()) {
             return ['matched' => 0, 'checked' => 0];
         }
 
-        $records = collect($this->ringCentral->callLog($calls->min('initiated_at')->copy()->subMinutes(10)))
+        // Keep the RingCentral query close to this batch. Asking from an old
+        // pending call through "now" can exceed the API's 1,000-row page and
+        // silently omit the exact records this batch needs.
+        $records = collect($this->ringCentral->callLog(
+            $calls->min('initiated_at')->copy()->subMinutes(10),
+            $calls->max('initiated_at')->copy()->addMinutes(10),
+        ))
             ->filter(fn (array $record): bool => strcasecmp((string) ($record['direction'] ?? ''), 'Outbound') === 0);
         $matched = 0;
 
@@ -79,6 +155,8 @@ class RingCentralRecordingSync
                 : $this->match($call, $records->reject(fn (array $record): bool => in_array((string) ($record['id'] ?? ''), $usedIds, true)));
 
             if (! is_array($record)) {
+                $call->update(['sync_checked_at' => now()->utc()]);
+
                 continue;
             }
 
@@ -94,6 +172,7 @@ class RingCentralRecordingSync
                 'started_at' => $startedAt,
                 'ended_at' => $startedAt->addSeconds($duration),
                 'matched_at' => now()->utc(),
+                'sync_checked_at' => now()->utc(),
             ]);
             $usedIds[] = (string) ($record['id'] ?? '');
             $matched++;

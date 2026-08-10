@@ -63,6 +63,15 @@ class LeadRequest extends FormRequest
             'agent_id' => ['required', 'integer', 'exists:agents,agent_id'],
             'salesman_1_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
             'salesman_2_id' => ['nullable', 'integer', 'different:salesman_1_id', 'exists:salesmen,salesman_id'],
+            // Creation time corrections are only allowed while a transferred
+            // legacy lead is waiting in Verify. The shared edit form keeps
+            // this key in its payload even when the input is hidden, so safely
+            // exclude it elsewhere instead of rejecting an unrelated edit.
+            'lead_created_at' => [
+                Rule::excludeIf(! ($isUpdate && $lead instanceof Lead && $lead->status === 'verify')),
+                'nullable',
+                'date',
+            ],
         ];
     }
 }

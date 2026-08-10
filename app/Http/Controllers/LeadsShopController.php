@@ -16,7 +16,6 @@ use App\Models\LeadNote;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Salesman;
-use App\Services\ProjectNumberAllocator;
 use App\Support\ManagerAccess;
 use App\Support\PhoneNumberVisibility;
 use Carbon\CarbonImmutable;
@@ -52,6 +51,9 @@ class LeadsShopController extends Controller
         $requestedLeadId = $request->integer('lead') ?: null;
         $search = trim((string) $request->query('search', ''));
         $selectedCity = trim((string) $request->query('city', ''));
+        $activeShopStatus = $request->query('queue_status') === 'verify'
+            ? 'verify'
+            : null;
         $dateField = $request->query('date_field') === 'appointment_at'
             ? 'appointment_at'
             : 'created_at';
@@ -105,6 +107,8 @@ class LeadsShopController extends Controller
                         ->orWhereHas('agent', fn ($relation) => $relation->where('agent_name', 'like', $like));
                 });
             });
+
+        $verifyCount = (clone $queueQuery)->where('status', 'verify')->count();
 
         $dateRows = (clone $queueQuery)
             ->whereNotNull($dateField)
@@ -202,14 +206,21 @@ class LeadsShopController extends Controller
         return Inertia::render('lead-workflow/leads-shop', [
             'leads' => (clone $queueQuery)
                 ->when(
+                    $activeShopStatus === 'verify',
+                    fn ($query) => $query->where('status', 'verify'),
+                )
+                ->when(
                     $selectedCity !== '' && $selectedCity !== 'all',
                     fn ($query) => $query->where('city', $selectedCity),
                     fn ($query) => $query->when(
-                        $selectedDate,
-                        fn ($query) => $dateField === 'created_at'
-                            ? $query->whereBetween(DB::raw($effectiveCreatedAtExpression), [$createdFrom, $createdTo])
-                            : $query->whereDate('appointment_at', $selectedDate),
-                        fn ($query) => $query->whereRaw('1 = 0'),
+                        $activeShopStatus !== 'verify',
+                        fn ($query) => $query->when(
+                            $selectedDate,
+                            fn ($query) => $dateField === 'created_at'
+                                ? $query->whereBetween(DB::raw($effectiveCreatedAtExpression), [$createdFrom, $createdTo])
+                                : $query->whereDate('appointment_at', $selectedDate),
+                            fn ($query) => $query->whereRaw('1 = 0'),
+                        ),
                     ),
                 )
                 ->with([
@@ -247,6 +258,8 @@ class LeadsShopController extends Controller
             'dateRows' => $dateRows,
             'selectedDate' => $selectedDate,
             'selectedCity' => $selectedCity !== '' ? $selectedCity : 'all',
+            'activeShopStatus' => $activeShopStatus,
+            'verifyCount' => $verifyCount,
             'dateField' => $dateField,
             'timezoneOffset' => (int) ($selectedCaliforniaDay->utcOffset() / 60),
             'movementDestinations' => $movementDestinations,
@@ -275,6 +288,10 @@ class LeadsShopController extends Controller
     {
         DB::transaction(function () use ($request, $lead): void {
             $data = $request->validated();
+            $correctedCreatedAt = filled($data['lead_created_at'] ?? null)
+                ? CarbonImmutable::parse($data['lead_created_at'], 'America/Los_Angeles')->utc()
+                : null;
+            unset($data['lead_created_at']);
             if (! PhoneNumberVisibility::canView($request->user())) {
                 unset($data['primary_number'], $data['secondary_number'], $data['mobile_number']);
             }
@@ -292,6 +309,15 @@ class LeadsShopController extends Controller
                 ...$data,
                 'crm_qualification_completed_at' => now(),
             ]);
+
+            if ($correctedCreatedAt !== null) {
+                // Lead-created date filters use the earliest movement as the
+                // historical creation marker. Correct both timestamps so the
+                // transferred lead leaves today's counts everywhere.
+                $lead->forceFill(['created_at' => $correctedCreatedAt])->saveQuietly();
+                $lead->movements()->reorder()->oldest('created_at')->oldest('id')->first()
+                    ?->forceFill(['created_at' => $correctedCreatedAt])->saveQuietly();
+            }
 
             $this->recordSalesmanChanges($request, $lead, $previousSalesmen);
             $this->appendAgentAssignment($request, $lead, $reassignedAgentId);
@@ -389,6 +415,12 @@ class LeadsShopController extends Controller
         $validated = $request->validated();
         $status = $validated['status'];
         $appointmentResultNote = trim((string) ($validated['appointment_result_note'] ?? ''));
+        $sourcePath = (string) parse_url(
+            (string) $request->headers->get('referer', ''),
+            PHP_URL_PATH,
+        );
+        $openVerifiedLead = $status === 'verify'
+            && str_ends_with($sourcePath, '/lead-workflow/toss-leads');
 
         if ($status === 'toss' && ! ManagerAccess::canEdit($request->user(), 'toss_action')) {
             Inertia::flash('toast', [
@@ -436,6 +468,12 @@ class LeadsShopController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead status updated.']);
 
+        if ($openVerifiedLead) {
+            return redirect()->route('lead-workflow.leads-shop', [
+                'lead' => $lead->getKey(),
+            ]);
+        }
+
         return back();
     }
 
@@ -477,12 +515,10 @@ class LeadsShopController extends Controller
         $project = DB::transaction(function () use ($request, $lead): Project {
             $project = Project::query()->firstOrNew(['lead_id' => $lead->id]);
 
-            if (! $project->exists) {
-                $project->project_number = app(ProjectNumberAllocator::class)->allocate($lead);
-            }
-
             $project->fill([
                 'amount' => $request->validated('amount'),
+                'status' => 'new',
+                'project_number' => null,
                 'created_by' => $request->user()->getAuthIdentifier(),
             ])->save();
 

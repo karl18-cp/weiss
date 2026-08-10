@@ -9,6 +9,7 @@ use App\Models\Manager;
 use App\Models\Product;
 use App\Models\Salesman;
 use App\Models\Team;
+use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('leads shop only loads and counts leads that remain in its statuses', function () {
@@ -51,6 +52,7 @@ test('leads shop only loads and counts leads that remain in its statuses', funct
 
     $makeLead('fresh', 'Fresh Shop Lead');
     $makeLead('raw', 'Raw Shop Lead');
+    $makeLead('verify', 'Verify Shop Lead');
     $confirmedLead = $makeLead('confirmed', 'Moved To Confirmation');
     $confirmedLead->update(['city' => 'Confirmation Only City']);
     $dispatchedLead = $makeLead('dispatched', 'Moved To Dispatch');
@@ -62,9 +64,12 @@ test('leads shop only loads and counts leads that remain in its statuses', funct
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/leads-shop')
-            ->has('leads', 2)
-            ->where('leads.0.customer_name', fn (string $name): bool => in_array($name, ['Fresh Shop Lead', 'Raw Shop Lead'], true))
-            ->where('leads.1.customer_name', fn (string $name): bool => in_array($name, ['Fresh Shop Lead', 'Raw Shop Lead'], true))
+            ->has('leads', 3)
+            ->where('leads', fn ($leads): bool => collect($leads)
+                ->pluck('customer_name')
+                ->sort()
+                ->values()
+                ->all() === ['Fresh Shop Lead', 'Raw Shop Lead', 'Verify Shop Lead'])
             ->where('cities', ['Test City'])
         );
 
@@ -81,6 +86,129 @@ test('leads shop only loads and counts leads that remain in its statuses', funct
             ->component('lead-workflow/dispatch-leads')
             ->where('cities', ['Dispatch Only City'])
         );
+});
+
+test('a verify lead creation date can be corrected and updates its initial movement', function () {
+    $account = Account::query()->create([
+        'username' => 'verify-date-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $company = Company::query()->create([
+        'com_id' => 91001,
+        'company' => 'Verify Date Company',
+        'address' => '',
+        'prefix' => 'VD',
+        'project_code' => 'VD-001',
+    ]);
+    $product = Product::query()->create(['product_name' => 'Verify Date Product']);
+    $agent = Agent::query()->create(['agent_name' => 'Verify Date Agent']);
+    $lead = Lead::query()->create([
+        'customer_name' => 'Transferred Verify Lead',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000000',
+        'address' => '1 Archive Street',
+        'zip_code' => '00000',
+        'city' => 'Archive City',
+        'county' => '',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'product_id' => $product->prod_id,
+        'appointment_at' => '2026-08-20 13:00:00',
+        'telemarketer_notes' => 'Transferred note',
+        'company_id' => $company->com_id,
+        'source' => 'CallTools',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'verify',
+    ]);
+
+    $this->actingAs($account)
+        ->put(route('lead-workflow.leads-shop.update', $lead), [
+            'lead_created_at' => '2026-06-15T09:30',
+            'customer_name' => $lead->customer_name,
+            'marital_status' => $lead->marital_status,
+            'primary_number' => $lead->primary_number,
+            'address' => $lead->address,
+            'zip_code' => $lead->zip_code,
+            'city' => $lead->city,
+            'state' => $lead->state,
+            'years_in_house' => $lead->years_in_house,
+            'product_id' => $product->prod_id,
+            'appointment_at' => $lead->appointment_at->format('Y-m-d H:i:s'),
+            'company_id' => $company->com_id,
+            'source' => 'CallTools',
+            'agent_id' => $agent->agent_id,
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect($lead->fresh()->getRawOriginal('created_at'))
+        ->toBe('2026-06-15 16:30:00')
+        ->and($lead->movements()->reorder()->oldest('created_at')->firstOrFail()->getRawOriginal('created_at'))
+        ->toBe('2026-06-15 16:30:00');
+});
+
+test('verify queue is not constrained by the selected lead created date', function () {
+    $account = Account::query()->create([
+        'username' => 'verify-queue-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $company = Company::query()->create([
+        'company' => 'Verify Queue Company',
+        'address' => '',
+        'prefix' => 'VQ',
+        'project_code' => 'VQ-001',
+    ]);
+    $product = Product::query()->create(['product_name' => 'Verify Queue Product']);
+    $agent = Agent::query()->create(['agent_name' => 'Verify Queue Agent']);
+
+    foreach ([
+        ['Old Verify Lead', 'verify', '2026-07-01 12:00:00'],
+        ['New Verify Lead', 'verify', '2026-08-05 12:00:00'],
+        ['Same Day Fresh Lead', 'fresh', '2026-08-05 13:00:00'],
+    ] as [$name, $status, $createdAt]) {
+        $lead = Lead::query()->create([
+            'customer_name' => $name,
+            'marital_status' => 'Unknown',
+            'primary_number' => '+15550000000',
+            'address' => '1 Verify Street',
+            'zip_code' => '00000',
+            'city' => 'Verify City',
+            'county' => 'Verify County',
+            'state' => 'CA',
+            'years_in_house' => 0,
+            'product_id' => $product->prod_id,
+            'appointment_at' => '2026-08-05 14:00:00',
+            'telemarketer_notes' => 'Verify note',
+            'company_id' => $company->com_id,
+            'source' => 'CallTools',
+            'agent_id' => $agent->agent_id,
+            'created_by' => $account->acc_id,
+            'status' => $status,
+        ]);
+        $lead->timestamps = false;
+        $lead->forceFill(['created_at' => $createdAt, 'updated_at' => $createdAt])->save();
+    }
+
+    $this->actingAs($account)
+        ->get(route('lead-workflow.leads-shop', [
+            'date' => '2026-08-05',
+            'date_field' => 'created_at',
+            'queue_status' => 'verify',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/leads-shop')
+            ->where('activeShopStatus', 'verify')
+            ->where('verifyCount', 2)
+            ->has('leads', 2)
+            ->where('leads', fn ($leads): bool => collect($leads)
+                ->pluck('customer_name')
+                ->sort()
+                ->values()
+                ->all() === ['New Verify Lead', 'Old Verify Lead']));
 });
 
 test('a requested dispatched booking is loaded and selected in the leads shop', function () {
@@ -166,7 +294,7 @@ test('leads shop defaults to today and counts current destinations for leads cre
     ]);
     $lead->update(['status' => 'confirmed']);
 
-    $californiaToday = \Carbon\CarbonImmutable::today('America/Los_Angeles');
+    $californiaToday = CarbonImmutable::today('America/Los_Angeles');
     $afterUtcMidnight = $californiaToday->setTime(17, 45)->utc();
     $utcNextDateLead = Lead::query()->create([
         'customer_name' => 'UTC Next Date California Today',

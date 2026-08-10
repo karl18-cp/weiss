@@ -389,7 +389,6 @@ export default function BookingBoard({
     setSelectedId(null);
     router.reload({
       only: ["leads", "salesmen"],
-      preserveScroll: true,
       onFinish: () => setRefreshing(false),
     });
   };

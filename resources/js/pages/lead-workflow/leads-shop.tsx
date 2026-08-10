@@ -2,6 +2,7 @@ import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     Archive,
     Ban,
+    BadgeCheck,
     Building2,
     CalendarClock,
     CheckCircle2,
@@ -293,6 +294,8 @@ export type LeadsShopProps = {
     canViewAllQueueManagers?: boolean;
     selectedDate: string | null;
     selectedCity?: string;
+    activeShopStatus?: string | null;
+    verifyCount?: number;
     dateField: DateField;
     dateGranularity?: 'day' | 'month';
     timezoneOffset: number;
@@ -312,6 +315,7 @@ export type LeadsShopProps = {
 };
 
 const emptyLeadForm = {
+    lead_created_at: '',
     customer_name: '',
     marital_status: '',
     primary_number: '',
@@ -338,6 +342,7 @@ const emptyLeadForm = {
 };
 
 const leadFormData = (lead: Lead) => ({
+    lead_created_at: createdAtInputValue(lead.created_at),
     customer_name: lead.customer_name,
     marital_status: lead.marital_status ?? '',
     primary_number: lead.primary_number,
@@ -365,6 +370,25 @@ const leadFormData = (lead: Lead) => ({
     salesman_2_id: String(lead.salesman_two?.salesman_id ?? ''),
 });
 
+const createdAtInputValue = (value: string) => {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: CRM_TIMEZONE,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        })
+            .formatToParts(new Date(value))
+            .filter((part) => part.type !== 'literal')
+            .map((part) => [part.type, part.value]),
+    );
+
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+};
+
 const formatDate = (value: string) =>
     new Intl.DateTimeFormat('en-US', {
         timeZone: CRM_TIMEZONE,
@@ -378,6 +402,7 @@ const formatDate = (value: string) =>
 const workflowLocation = (status: string | null) => {
     const locations: Record<string, string> = {
         fresh: 'Leads Shop / Freshly In',
+        verify: 'Leads Shop / Verify',
         raw: 'Leads Shop / Raw',
         cb: 'Leads Shop / Call Back',
         naov: 'Leads Shop / NAOV',
@@ -417,6 +442,34 @@ const historyNoteLabel = (type: string) => {
     };
 
     return labels[type] ?? 'Lead note';
+};
+
+const salesmanHistoryTypes = new Set([
+    'salesman_sent',
+    'salesman_assignment',
+]);
+
+const belongsToNoteHistory = (
+    note: LeadNote,
+    historyType: EditableNoteType | 'all' | null,
+) => {
+    if (historyType === 'all') {
+        return true;
+    }
+
+    if (!historyType) {
+        return false;
+    }
+
+    if (
+        (historyType === 'dispatch' ||
+            historyType === 'appointment_result') &&
+        salesmanHistoryTypes.has(note.note_type)
+    ) {
+        return true;
+    }
+
+    return note.note_type === historyType;
 };
 
 const calendarDateKey = (value: string | null | undefined) => {
@@ -569,7 +622,15 @@ function GoogleMapsIcon() {
 function BlankLeadDetail({ queueStatus }: { queueStatus?: string }) {
     const showsDispatchNotes =
         Boolean(queueStatus) &&
-        !['fresh', 'raw', 'cb', 'naov'].includes(queueStatus ?? '');
+        ![
+            'fresh',
+            'raw',
+            'cb',
+            'naov',
+            'verify',
+            'confirmed',
+            'rehash',
+        ].includes(queueStatus ?? '');
     const detailGridClass =
         queueStatus === 'dispatched'
             ? 'lead-detail__grid--dispatch'
@@ -729,6 +790,8 @@ export default function LeadsShop({
     canViewAllQueueManagers = false,
     selectedDate,
     selectedCity = 'all',
+    activeShopStatus = null,
+    verifyCount = 0,
     dateField: serverDateField,
     dateGranularity = 'day',
     timezoneOffset,
@@ -760,6 +823,9 @@ export default function LeadsShop({
     );
     const requestedLeadId =
         Number(new URLSearchParams(window.location.search).get('lead')) || null;
+    const isSearchFocus =
+        new URLSearchParams(window.location.search).get('focus') === 'search';
+    const focusedLeadRowRef = useRef<HTMLButtonElement | null>(null);
     const requestedLead =
         leads.find((lead) => lead.id === requestedLeadId) ?? null;
     const requestedTelemarketerNote = latestNoteBody(
@@ -799,17 +865,30 @@ export default function LeadsShop({
                     ? {
                       search: nextSearch,
                       date_field: serverDateField,
+                      ...(activeShopStatus === 'verify'
+                          ? { queue_status: 'verify' }
+                          : {}),
                       ...managerQuery,
                   }
                 : {
                       date_field: serverDateField,
+                      ...(activeShopStatus === 'verify'
+                          ? { queue_status: 'verify' }
+                          : {}),
                       ...managerQuery,
                   },
                 {
                     preserveState: true,
                     preserveScroll: true,
                     replace: true,
-                    only: ['leads', 'dateRows', 'selectedDate', 'dateField'],
+                    only: [
+                        'leads',
+                        'dateRows',
+                        'selectedDate',
+                        'dateField',
+                        'activeShopStatus',
+                        'verifyCount',
+                    ],
                 },
             );
         }, 350);
@@ -819,7 +898,7 @@ export default function LeadsShop({
 
     const [dateField, setDateField] = useState<DateField>(serverDateField);
     const [selectedStatus, setSelectedStatus] = useState(
-        requestedLead?.status ?? queue?.status ?? 'fresh',
+        requestedLead?.status ?? activeShopStatus ?? queue?.status ?? 'fresh',
     );
     const [companyFilter, setCompanyFilter] = useState('all');
     const [sourceFilter, setSourceFilter] = useState('all');
@@ -963,21 +1042,21 @@ export default function LeadsShop({
     );
     const confirmationNoteForm = useForm({
         note_type: 'confirmation',
-        body: requestedConfirmationNote,
+        body: '',
     });
     const [loadedConfirmationNote, setLoadedConfirmationNote] = useState(
         requestedConfirmationNote,
     );
     const dispatchNoteForm = useForm({
         note_type: 'dispatch',
-        body: requestedDispatchNote,
+        body: '',
     });
     const [loadedDispatchNote, setLoadedDispatchNote] = useState(
         requestedDispatchNote,
     );
     const appointmentResultNoteForm = useForm({
         note_type: 'appointment_result',
-        body: requestedAppointmentResultNote,
+        body: '',
     });
     const [loadedAppointmentResultNote, setLoadedAppointmentResultNote] =
         useState(requestedAppointmentResultNote);
@@ -1086,6 +1165,7 @@ export default function LeadsShop({
         nextDateField: DateField = effectiveDateField,
     ) => {
         setCityFilter('all');
+        if (activeShopStatus === 'verify') setSelectedStatus('fresh');
         router.get(
             window.location.pathname,
             {
@@ -1105,6 +1185,9 @@ export default function LeadsShop({
             window.location.pathname,
             {
                 date_field: effectiveDateField,
+                ...(activeShopStatus === 'verify'
+                    ? { queue_status: 'verify' }
+                    : {}),
                 ...managerQuery,
                 ...(city !== 'all' ? { city } : {}),
             },
@@ -1112,7 +1195,12 @@ export default function LeadsShop({
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
-                only: ['leads', 'selectedCity'],
+                only: [
+                    'leads',
+                    'selectedCity',
+                    'activeShopStatus',
+                    'verifyCount',
+                ],
             },
         );
     };
@@ -1177,6 +1265,7 @@ export default function LeadsShop({
                         ['fresh', 'Freshly In'],
                         ['raw', 'Raw'],
                         ['cb', 'CB'],
+                        ['verify', 'Verify'],
                     ] as const),
         [queue],
     );
@@ -1186,12 +1275,45 @@ export default function LeadsShop({
             Object.fromEntries(
                 statusFilters.map(([status]) => [
                     status,
-                    leads.filter((lead) => (lead.status || 'fresh') === status)
-                        .length,
+                    status === 'verify'
+                        ? verifyCount
+                        : leads.filter(
+                              (lead) => (lead.status || 'fresh') === status,
+                          ).length,
                 ]),
             ),
-        [leads, statusFilters],
+        [leads, statusFilters, verifyCount],
     );
+
+    const selectStatus = (status: string) => {
+        if (queue || status === selectedStatus) return;
+
+        setSelectedId(null);
+        setSelectedStatus(status);
+
+        if (status === 'verify' || activeShopStatus === 'verify') {
+            router.get(
+                window.location.pathname,
+                {
+                    ...(status === 'verify'
+                        ? { queue_status: 'verify' }
+                        : { date: selectedDate }),
+                    date_field: effectiveDateField,
+                },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    replace: true,
+                    only: [
+                        'leads',
+                        'activeShopStatus',
+                        'verifyCount',
+                        'selectedCity',
+                    ],
+                },
+            );
+        }
+    };
 
     const filteredLeads = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -1301,6 +1423,20 @@ export default function LeadsShop({
         isKeepInTouchQueue,
         queue?.sortDirection,
     ]);
+
+    useEffect(() => {
+        if (!isSearchFocus || !requestedLeadId) return;
+
+        const frame = window.requestAnimationFrame(() => {
+            focusedLeadRowRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+                inline: 'nearest',
+            });
+        });
+
+        return () => window.cancelAnimationFrame(frame);
+    }, [filteredLeads.length, isSearchFocus, requestedLeadId]);
 
     const clearListFilters = () => {
         setSearch('');
@@ -1492,13 +1628,13 @@ export default function LeadsShop({
         telemarketerNoteForm.setData('body', latestTelemarketerNote);
         setLoadedTelemarketerNote(latestTelemarketerNote);
         telemarketerNoteForm.clearErrors();
-        confirmationNoteForm.setData('body', latestConfirmationNote);
+        confirmationNoteForm.setData('body', '');
         setLoadedConfirmationNote(latestConfirmationNote);
         confirmationNoteForm.clearErrors();
-        dispatchNoteForm.setData('body', latestDispatchNote);
+        dispatchNoteForm.setData('body', '');
         setLoadedDispatchNote(latestDispatchNote);
         dispatchNoteForm.clearErrors();
-        appointmentResultNoteForm.setData('body', latestAppointmentResultNote);
+        appointmentResultNoteForm.setData('body', '');
         setLoadedAppointmentResultNote(latestAppointmentResultNote);
         appointmentResultNoteForm.clearErrors();
         form.setData(leadFormData(lead));
@@ -1608,7 +1744,7 @@ export default function LeadsShop({
 
     const saveConfirmationNote = () => {
         const body = confirmationNoteForm.data.body.trim();
-        if (!selected || !body || body === loadedConfirmationNote.trim()) {
+        if (!selected || !body) {
             return;
         }
 
@@ -1617,7 +1753,7 @@ export default function LeadsShop({
             {
                 preserveScroll: true,
                 onSuccess: () => {
-                    confirmationNoteForm.setData('body', body);
+                    confirmationNoteForm.setData('body', '');
                     setLoadedConfirmationNote(body);
                     setExpandedNoteType(null);
                 },
@@ -1627,7 +1763,7 @@ export default function LeadsShop({
 
     const saveDispatchNote = () => {
         const body = dispatchNoteForm.data.body.trim();
-        if (!selected || !body || body === loadedDispatchNote.trim()) {
+        if (!selected || !body) {
             return;
         }
 
@@ -1636,7 +1772,7 @@ export default function LeadsShop({
             {
                 preserveScroll: true,
                 onSuccess: () => {
-                    dispatchNoteForm.setData('body', body);
+                    dispatchNoteForm.setData('body', '');
                     setLoadedDispatchNote(body);
                     setExpandedNoteType(null);
                 },
@@ -1646,7 +1782,7 @@ export default function LeadsShop({
 
     const saveAppointmentResultNote = () => {
         const body = appointmentResultNoteForm.data.body.trim();
-        if (!selected || !body || body === loadedAppointmentResultNote.trim()) {
+        if (!selected || !body) {
             return;
         }
 
@@ -1655,7 +1791,7 @@ export default function LeadsShop({
             {
                 preserveScroll: true,
                 onSuccess: () => {
-                    appointmentResultNoteForm.setData('body', body);
+                    appointmentResultNoteForm.setData('body', '');
                     setLoadedAppointmentResultNote(body);
                     setExpandedNoteType(null);
                 },
@@ -1673,10 +1809,7 @@ export default function LeadsShop({
             {
                 status,
                 appointment_result_note:
-                    appointmentResultNoteForm.data.body.trim() !==
-                    loadedAppointmentResultNote.trim()
-                        ? appointmentResultNoteForm.data.body.trim()
-                        : null,
+                    appointmentResultNoteForm.data.body.trim() || null,
             },
             {
                 preserveScroll: true,
@@ -1813,10 +1946,12 @@ export default function LeadsShop({
         selected?.notes.filter((note) => note.note_type === 'confirmation') ??
         [];
     const dispatchHistory =
-        selected?.notes.filter((note) => note.note_type === 'dispatch') ?? [];
+        selected?.notes.filter((note) =>
+            belongsToNoteHistory(note, 'dispatch'),
+        ) ?? [];
     const appointmentResultHistory =
         selected?.notes.filter(
-            (note) => note.note_type === 'appointment_result',
+            (note) => belongsToNoteHistory(note, 'appointment_result'),
         ) ?? [];
     const isDispatchNoteLocked = (noteType: EditableNoteType) =>
         noteType === 'telemarketer' ||
@@ -1845,9 +1980,7 @@ export default function LeadsShop({
                       confirmationNoteForm.setData('body', value),
                   save: saveConfirmationNote,
                   processing: confirmationNoteForm.processing,
-                  unchanged:
-                      confirmationNoteForm.data.body.trim() ===
-                      loadedConfirmationNote.trim(),
+                  unchanged: !confirmationNoteForm.data.body.trim(),
                   error: confirmationNoteForm.errors.body,
               },
               dispatch: {
@@ -1857,9 +1990,7 @@ export default function LeadsShop({
                       dispatchNoteForm.setData('body', value),
                   save: saveDispatchNote,
                   processing: dispatchNoteForm.processing,
-                  unchanged:
-                      dispatchNoteForm.data.body.trim() ===
-                      loadedDispatchNote.trim(),
+                  unchanged: !dispatchNoteForm.data.body.trim(),
                   error: dispatchNoteForm.errors.body,
               },
               appointment_result: {
@@ -1869,21 +2000,27 @@ export default function LeadsShop({
                       appointmentResultNoteForm.setData('body', value),
                   save: saveAppointmentResultNote,
                   processing: appointmentResultNoteForm.processing,
-                  unchanged:
-                      appointmentResultNoteForm.data.body.trim() ===
-                      loadedAppointmentResultNote.trim(),
+                  unchanged: !appointmentResultNoteForm.data.body.trim(),
                   error: appointmentResultNoteForm.errors.body,
               },
           }[expandedNoteType]
         : null;
-    const expandedLatestNote = expandedNoteType
-        ? latestLeadNote(selected, expandedNoteType)
-        : null;
+    const expandedNoteHistory = expandedNoteType
+        ? [...(selected?.notes ?? [])]
+              .filter((note) =>
+                  belongsToNoteHistory(note, expandedNoteType),
+              )
+              .sort(
+                  (left, right) =>
+                      new Date(right.created_at).getTime() -
+                      new Date(left.created_at).getTime(),
+              )
+        : [];
     const displayedHistory =
         historyType === 'all'
             ? (selected?.notes ?? [])
             : (selected?.notes.filter(
-                  (note) => note.note_type === historyType,
+                  (note) => belongsToNoteHistory(note, historyType),
               ) ?? []);
     const displayedTimeline = useMemo(() => {
         if (historyType !== 'all' || !selected) {
@@ -1918,11 +2055,11 @@ export default function LeadsShop({
     const defaultWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
-        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
         ['555', '555', Phone, '555'],
         ['kit', 'KIT', MessageCircle, 'kit'],
         ['raw', 'Raw', Archive, 'raw'],
         ['cb', 'Call Back', PhoneCall, 'callback'],
+        ['verify', 'Verify', BadgeCheck, 'confirm'],
         ['history', 'History', History, 'history'],
     ] as const;
     const confirmWorkflowActions = [
@@ -1971,6 +2108,7 @@ export default function LeadsShop({
         ['raw', 'Raw', Archive, 'raw'],
         ['cb', 'Call Back', PhoneCall, 'callback'],
         ['naov', 'NAOV', Ban, 'naov'],
+        ['verify', 'Verify', BadgeCheck, 'confirm'],
         ['toss', 'TOSS', Trash2, 'toss'],
         ['history', 'History', History, 'history'],
     ] as const;
@@ -2178,7 +2316,9 @@ export default function LeadsShop({
                                     {filteredLeads.length}{' '}
                                     {cityFilter !== 'all'
                                         ? `shown in ${formatCity(cityFilter)}`
-                                        : `shown for the selected ${dateGranularity === 'month' ? 'month' : 'date'}`}
+                                        : activeShopStatus === 'verify'
+                                          ? 'shown across all creation dates'
+                                          : `shown for the selected ${dateGranularity === 'month' ? 'month' : 'date'}`}
                                 </p>
                             </div>
                             <span>Newest first</span>
@@ -2255,7 +2395,7 @@ export default function LeadsShop({
                                                     : 'lead-status-filter'
                                             }
                                             onClick={() =>
-                                                setSelectedStatus(status)
+                                                selectStatus(status)
                                             }
                                         >
                                             {label}
@@ -2392,6 +2532,13 @@ export default function LeadsShop({
                                 <button
                                     type="button"
                                     key={lead.id}
+                                    ref={
+                                        isSearchFocus &&
+                                        requestedLeadId === lead.id
+                                            ? focusedLeadRowRef
+                                            : undefined
+                                    }
+                                    data-lead-id={lead.id}
                                     className={[
                                         'lead-browser-row',
                                         queue?.status === 'dispatched'
@@ -2399,6 +2546,10 @@ export default function LeadsShop({
                                             : '',
                                         selectedId === lead.id
                                             ? 'lead-browser-row--active'
+                                            : '',
+                                        isSearchFocus &&
+                                        requestedLeadId === lead.id
+                                            ? 'lead-browser-row--search-target'
                                             : '',
                                         isInstantAppointment(lead)
                                             ? 'lead-browser-row--instant'
@@ -2613,6 +2764,24 @@ export default function LeadsShop({
 
                                 {isEditing ? (
                                     <div className="lead-edit-grid">
+                                        {selected.status === 'verify' && (
+                                            <label>
+                                                <span>Lead created (Pacific time)</span>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={form.data.lead_created_at}
+                                                    onChange={(event) =>
+                                                        form.setData(
+                                                            'lead_created_at',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                {form.errors.lead_created_at && (
+                                                    <em>{form.errors.lead_created_at}</em>
+                                                )}
+                                            </label>
+                                        )}
                                         <label>
                                             <span>Customer name</span>
                                             <input
@@ -3142,7 +3311,7 @@ export default function LeadsShop({
                                     </div>
                                 ) : (
                                     <div
-                                        className={`lead-detail__grid ${queue?.status === 'dispatched' ? 'lead-detail__grid--dispatch' : queue?.status && !['fresh', 'raw', 'cb', 'naov'].includes(queue.status) ? 'lead-detail__grid--three-notes' : ''}`}
+                                        className={`lead-detail__grid ${queue?.status === 'dispatched' ? 'lead-detail__grid--dispatch' : queue?.status && !['fresh', 'raw', 'cb', 'naov', 'verify', 'confirmed'].includes(queue.status) ? 'lead-detail__grid--three-notes' : ''}`}
                                         ref={detailGridRef}
                                         style={leadCardLayoutStyle}
                                     >
@@ -3716,8 +3885,9 @@ export default function LeadsShop({
                                                         'raw',
                                                         'cb',
                                                         'naov',
+                                                        'verify',
                                                     ].includes(
-                                                        queue.status,
+                                                        queue!.status,
                                                     ) && (
                                                         <>
                                                             {[
@@ -3787,7 +3957,7 @@ export default function LeadsShop({
                                                                                     savingAssignment !==
                                                                                         null ||
                                                                                     appointmentResultDraft ===
-                                                                                        (selected.appointment_result ??
+                                                                                        (selected!.appointment_result ??
                                                                                             '')
                                                                                 }
                                                                                 aria-label="Save appointment result"
@@ -3863,7 +4033,7 @@ export default function LeadsShop({
                                                                                     null ||
                                                                                 salesmanOneDraft ===
                                                                                     String(
-                                                                                        selected
+                                                                                        selected!
                                                                                             .salesman_one
                                                                                             ?.salesman_id ??
                                                                                             '',
@@ -3952,7 +4122,7 @@ export default function LeadsShop({
                                                                                     null ||
                                                                                 salesmanTwoDraft ===
                                                                                     String(
-                                                                                        selected
+                                                                                        selected!
                                                                                             .salesman_two
                                                                                             ?.salesman_id ??
                                                                                             '',
@@ -4111,52 +4281,10 @@ export default function LeadsShop({
                                                 </button>
                                             </div>
                                             <textarea
-                                                readOnly={isDispatchNoteLocked(
-                                                    'confirmation',
-                                                )}
-                                                value={
-                                                    confirmationNoteForm.data
-                                                        .body
-                                                }
-                                                onChange={(event) =>
-                                                    confirmationNoteForm.setData(
-                                                        'body',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                placeholder="Type a new confirmation note…"
+                                                readOnly
+                                                value={loadedConfirmationNote}
+                                                placeholder="Expand to add a confirmation note…"
                                             />
-                                            <div className="lead-note-actions">
-                                                {confirmationNoteForm.errors
-                                                    .body && (
-                                                    <em>
-                                                        {
-                                                            confirmationNoteForm
-                                                                .errors.body
-                                                        }
-                                                    </em>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    disabled={
-                                                        isDispatchNoteLocked(
-                                                            'confirmation',
-                                                        ) ||
-                                                        confirmationNoteForm.processing ||
-                                                        !confirmationNoteForm.data.body.trim() ||
-                                                        confirmationNoteForm.data.body.trim() ===
-                                                            loadedConfirmationNote.trim()
-                                                    }
-                                                    onClick={
-                                                        saveConfirmationNote
-                                                    }
-                                                >
-                                                    <Save />
-                                                    {confirmationNoteForm.processing
-                                                        ? 'Saving…'
-                                                        : 'Save note'}
-                                                </button>
-                                            </div>
                                         </article>
                                         {queue?.status &&
                                             ![
@@ -4164,6 +4292,9 @@ export default function LeadsShop({
                                                 'raw',
                                                 'cb',
                                                 'naov',
+                                                'verify',
+                                                'confirmed',
+                                                'rehash',
                                             ].includes(queue.status) && (
                                                 <>
                                                     <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--dispatch">
@@ -4201,36 +4332,10 @@ export default function LeadsShop({
                                                             </button>
                                                         </div>
                                                         <textarea
-                                                            value={
-                                                                dispatchNoteForm
-                                                                    .data.body
-                                                            }
-                                                            onChange={(event) =>
-                                                                dispatchNoteForm.setData(
-                                                                    'body',
-                                                                    event.target
-                                                                        .value,
-                                                                )
-                                                            }
-                                                            placeholder="Type a new dispatch note…"
+                                                            readOnly
+                                                            value={loadedDispatchNote}
+                                                            placeholder="Expand to add a dispatch note…"
                                                         />
-                                                        <div className="lead-note-actions">
-                                                            <button
-                                                                type="button"
-                                                                disabled={
-                                                                    dispatchNoteForm.processing ||
-                                                                    !dispatchNoteForm.data.body.trim() ||
-                                                                    dispatchNoteForm.data.body.trim() ===
-                                                                        loadedDispatchNote.trim()
-                                                                }
-                                                                onClick={
-                                                                    saveDispatchNote
-                                                                }
-                                                            >
-                                                                <Save /> Save
-                                                                note
-                                                            </button>
-                                                        </div>
                                                     </article>
                                                     {Boolean(queue) && (
                                                         <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result">
@@ -4269,46 +4374,10 @@ export default function LeadsShop({
                                                                 </button>
                                                             </div>
                                                             <textarea
-                                                                readOnly={isDispatchNoteLocked(
-                                                                    'appointment_result',
-                                                                )}
-                                                                value={
-                                                                    appointmentResultNoteForm
-                                                                        .data
-                                                                        .body
-                                                                }
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    appointmentResultNoteForm.setData(
-                                                                        'body',
-                                                                        event
-                                                                            .target
-                                                                            .value,
-                                                                    )
-                                                                }
-                                                                placeholder="Type a new appointment result note…"
+                                                                readOnly
+                                                                value={loadedAppointmentResultNote}
+                                                                placeholder="Expand to add an appointment result note…"
                                                             />
-                                                            <div className="lead-note-actions">
-                                                                <button
-                                                                    type="button"
-                                                                    disabled={
-                                                                        isDispatchNoteLocked(
-                                                                            'appointment_result',
-                                                                        ) ||
-                                                                        appointmentResultNoteForm.processing ||
-                                                                        !appointmentResultNoteForm.data.body.trim() ||
-                                                                        appointmentResultNoteForm.data.body.trim() ===
-                                                                            loadedAppointmentResultNote.trim()
-                                                                    }
-                                                                    onClick={
-                                                                        saveAppointmentResultNote
-                                                                    }
-                                                                >
-                                                                    <Save />{' '}
-                                                                    Save note
-                                                                </button>
-                                                            </div>
                                                         </article>
                                                     )}
                                                 </>
@@ -4417,48 +4486,92 @@ export default function LeadsShop({
                                     <X />
                                 </button>
                             </header>
-                            <div className="lead-expanded-note__latest">
-                                {expandedLatestNote ? (
-                                    <>
-                                        <UserRound aria-hidden="true" />
-                                        <span>
-                                            Latest note by{' '}
-                                            <strong>
-                                                {expandedLatestNote.creator
-                                                    ?.username ??
-                                                    'Unknown user'}
-                                            </strong>
-                                        </span>
-                                        <time
-                                            dateTime={
-                                                expandedLatestNote.created_at
-                                            }
-                                        >
-                                            <Clock3 aria-hidden="true" />
-                                            {formatDate(
-                                                expandedLatestNote.created_at,
+                            <div
+                                className={`lead-expanded-note__editor ${expandedNoteLocked ? 'lead-expanded-note__editor--locked' : ''}`}
+                            >
+                                <div className="lead-expanded-note__saved">
+                                    <div className="lead-expanded-note__history-heading">
+                                        <History aria-hidden="true" />
+                                        <strong>Note history</strong>
+                                        <span>{expandedNoteHistory.length}</span>
+                                    </div>
+                                    {expandedNoteHistory.length > 0 ? (
+                                        <div className="lead-expanded-note__history-list">
+                                            {expandedNoteHistory.map(
+                                                (note, index) => (
+                                                    <article
+                                                        className="lead-expanded-note__history-item"
+                                                        key={note.id}
+                                                    >
+                                                        <div className="lead-expanded-note__latest">
+                                                            <UserRound aria-hidden="true" />
+                                                            <span>
+                                                                {salesmanHistoryTypes.has(
+                                                                    note.note_type,
+                                                                )
+                                                                    ? `${historyNoteLabel(note.note_type)} by `
+                                                                    : index === 0
+                                                                      ? 'Latest note by '
+                                                                      : 'Note by '}
+                                                                <strong>
+                                                                    {expandedNoteType ===
+                                                                    'telemarketer'
+                                                                        ? (selected
+                                                                              .agent
+                                                                              ?.agent_name ??
+                                                                          note
+                                                                              .creator
+                                                                              ?.username ??
+                                                                          'Unknown agent')
+                                                                        : (note
+                                                                              .creator
+                                                                              ?.username ??
+                                                                          'Unknown user')}
+                                                                </strong>
+                                                            </span>
+                                                            <time
+                                                                dateTime={
+                                                                    note.created_at
+                                                                }
+                                                            >
+                                                                <Clock3 aria-hidden="true" />
+                                                                {formatDate(
+                                                                    note.created_at,
+                                                                )}
+                                                            </time>
+                                                        </div>
+                                                        <div className="lead-expanded-note__saved-body">
+                                                            {note.body}
+                                                        </div>
+                                                    </article>
+                                                ),
                                             )}
-                                        </time>
-                                    </>
-                                ) : (
-                                    <>
-                                        <MessageCircle aria-hidden="true" />
-                                        <span>No saved notes yet.</span>
-                                    </>
+                                        </div>
+                                    ) : (
+                                        <div className="lead-expanded-note__history-empty">
+                                            <MessageCircle aria-hidden="true" />
+                                            <span>No saved notes yet.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {!expandedNoteLocked && (
+                                    <div className="lead-expanded-note__new-note">
+                                        <label htmlFor="expanded-new-note">
+                                            Add a new note
+                                        </label>
+                                        <textarea
+                                            id="expanded-new-note"
+                                            autoFocus
+                                            value={expandedNote.value}
+                                            onChange={(event) =>
+                                                expandedNote.setValue(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder={`Write a new ${expandedNote.title.toLowerCase()}…`}
+                                        />
+                                    </div>
                                 )}
-                            </div>
-                            <div className="lead-expanded-note__editor">
-                                <textarea
-                                    autoFocus
-                                    readOnly={expandedNoteLocked}
-                                    value={expandedNote.value}
-                                    onChange={(event) =>
-                                        expandedNote.setValue(
-                                            event.target.value,
-                                        )
-                                    }
-                                    placeholder={`Write ${expandedNote.title.toLowerCase()}…`}
-                                />
                                 {expandedNote.error && (
                                     <em>{expandedNote.error}</em>
                                 )}
@@ -4814,9 +4927,16 @@ export default function LeadsShop({
                                         <article key={`note-${entry.id}`}>
                                             <div>
                                                 <strong>
-                                                    {entry.note.creator
-                                                        ?.username ??
-                                                        'Unknown user'}
+                                                    {entry.note.note_type ===
+                                                    'telemarketer'
+                                                        ? (selected.agent
+                                                              ?.agent_name ??
+                                                          entry.note.creator
+                                                              ?.username ??
+                                                          'Unknown agent')
+                                                        : (entry.note.creator
+                                                              ?.username ??
+                                                          'Unknown user')}
                                                 </strong>
                                                 <time>
                                                     {formatDate(

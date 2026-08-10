@@ -208,3 +208,46 @@ test('called leads can be filtered to conversations over twenty seconds and sort
             ->where('calls.data.0.account_id', $secondAccount->acc_id)
             ->where('calls.data.0.duration_seconds', 45));
 });
+
+test('call-only filters are cleared and do not affect lead history', function () {
+    ['firstAccount' => $firstAccount] = managerActivityFixtures();
+
+    $this->actingAs($firstAccount)
+        ->get(route('lead-workflow.call-logs', [
+            'view' => 'history',
+            'talked_to' => 1,
+            'call_sort' => 'duration',
+            'call_direction' => 'asc',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.view', 'history')
+            ->where('filters.talked_to', false)
+            ->where('activities.data', fn ($activities): bool => collect($activities)->isNotEmpty()));
+});
+
+test('manager activity header movement totals follow shared filters and ignore call-only filters', function () {
+    ['firstAccount' => $firstAccount, 'lead' => $lead] = managerActivityFixtures();
+
+    LeadMovement::query()->create([
+        'lead_id' => $lead->id,
+        'from_status' => 'fresh',
+        'to_status' => 'confirmed',
+        'moved_by' => $firstAccount->acc_id,
+    ]);
+    RingCentralCall::query()
+        ->where('account_id', $firstAccount->acc_id)
+        ->update(['duration_seconds' => 10]);
+
+    $this->actingAs($firstAccount)
+        ->get(route('lead-workflow.call-logs', [
+            'view' => 'calls',
+            'talked_to' => 1,
+            'search' => 'Combined Activity Customer',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('calls.total', 0)
+            ->where('movementTotals.confirmed', 1)
+            ->where('movementTotals.dispatched', 1));
+});

@@ -41,6 +41,7 @@ class TeamDashboardController extends Controller
 
         $soldLeads = Lead::query()
             ->select(['leads.id', 'agent_id', 'appointment_at'])
+            ->where('leads.status', 'project')
             ->whereHas('project')
             ->whereBetween('appointment_at', [
                 $start->startOfDay()->format('Y-m-d H:i:s'),

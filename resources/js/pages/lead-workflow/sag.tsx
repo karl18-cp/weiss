@@ -6,9 +6,9 @@ export default function Sag(props: LeadsShopProps) {
       {...props}
       queue={{
         title: "SAG",
-        description: "Review leads whose projects have been completed.",
+        description: "Review leads whose projects are completed or cancelled.",
         status: "project",
-        listTitle: "Completed projects",
+        listTitle: "Completed & cancelled projects",
         dateLabel: "Appointment dates",
         dateField: "appointment_at",
         sortDirection: "asc",

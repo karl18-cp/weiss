@@ -30,13 +30,15 @@ class ManagerActivityController extends Controller
             ? ($request->integer('manager') ?: null)
             : $ownAccountId;
         $search = trim((string) $request->query('search', ''));
-        $talkedTo = $request->boolean('talked_to');
+        $view = $request->query('view') === 'history' ? 'history' : 'calls';
+        // Call-only filters must never alter the lead-history dataset or remain
+        // active after switching to the history tab.
+        $talkedTo = $view === 'calls' && $request->boolean('talked_to');
         $callSort = (string) $request->query('call_sort', 'date');
         $callDirection = $request->query('call_direction') === 'asc' ? 'asc' : 'desc';
         $callSort = in_array($callSort, ['date', 'manager', 'lead', 'result', 'duration'], true)
             ? $callSort
             : 'date';
-        $view = $request->query('view') === 'history' ? 'history' : 'calls';
         $californiaTimezone = 'America/Los_Angeles';
         $today = CarbonImmutable::now($californiaTimezone)->toDateString();
         $fromValue = (string) $request->query('from', $today);
@@ -145,7 +147,29 @@ class ManagerActivityController extends Controller
                         ? route('lead-workflow.leads-shop.ringcentral-calls.recording', [$call->lead_id, $call->id])
                         : null,
                 ];
-            });
+             });
+
+        $movementTotals = DB::table('lead_movements')
+            ->join('leads', 'leads.id', '=', 'lead_movements.lead_id')
+            ->join('accounts', 'accounts.acc_id', '=', 'lead_movements.moved_by')
+            ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
+            ->whereNotNull('lead_movements.moved_by')
+            ->whereIn('lead_movements.to_status', ['confirmed', 'dispatched'])
+            ->when($managerAccountId, fn (Builder $query) => $query->where('lead_movements.moved_by', $managerAccountId))
+            ->when($from, fn (Builder $query) => $query->where('lead_movements.created_at', '>=', $from))
+            ->when($to, fn (Builder $query) => $query->where('lead_movements.created_at', '<=', $to))
+            ->when($search !== '', function (Builder $query) use ($search): void {
+                $like = '%'.$search.'%';
+                $query->where(function (Builder $query) use ($like): void {
+                    $query->where('leads.customer_name', 'like', $like)
+                        ->orWhere('leads.address', 'like', $like)
+                        ->orWhere('leads.city', 'like', $like)
+                        ->orWhere('managers.manager_name', 'like', $like);
+                });
+            })
+            ->selectRaw('lead_movements.to_status, COUNT(DISTINCT lead_movements.lead_id) as lead_count')
+            ->groupBy('lead_movements.to_status')
+            ->pluck('lead_count', 'to_status');
 
         return Inertia::render('lead-workflow/manager-activity', [
             'activities' => $activities,
@@ -171,6 +195,10 @@ class ManagerActivityController extends Controller
                 'call_direction' => $callDirection,
             ],
             'canViewAll' => $canViewAll,
+            'movementTotals' => [
+                'confirmed' => (int) ($movementTotals['confirmed'] ?? 0),
+                'dispatched' => (int) ($movementTotals['dispatched'] ?? 0),
+            ],
         ]);
     }
 

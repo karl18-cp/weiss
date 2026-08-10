@@ -184,8 +184,39 @@ test('salesmen can add appointment result notes only to assigned leads', functio
     expect(LeadNote::query()
         ->where('lead_id', $assigned->id)
         ->where('note_type', 'appointment_result')
-        ->where('body', 'On My Way')
+        ->where('body', 'Salesman update: On My Way')
         ->exists())->toBeTrue();
+
+    expect(LeadNote::query()
+        ->where('lead_id', $assigned->id)
+        ->where('note_type', 'dispatch')
+        ->where('body', 'Salesman update: On My Way')
+        ->exists())->toBeTrue();
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $assigned), [
+            'action' => 'sold',
+        ])
+        ->assertSessionHasErrors('sale_amount');
+
+    $push = Mockery::mock(WebPushService::class);
+    $push->shouldReceive('sendToAccount')->twice()->andReturn(1);
+    app()->instance(WebPushService::class, $push);
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $assigned), [
+            'action' => 'sold',
+            'sale_amount' => 12500,
+        ])
+        ->assertRedirect();
+
+    foreach (['appointment_result', 'dispatch'] as $noteType) {
+        expect(LeadNote::query()
+            ->where('lead_id', $assigned->id)
+            ->where('note_type', $noteType)
+            ->where('body', 'Salesman update: Sold — Sale amount: $12,500.00')
+            ->exists())->toBeTrue();
+    }
 
     $this->actingAs($account)
         ->post(route('salesman.leads.appointment-result-notes.store', $notAssigned), [
