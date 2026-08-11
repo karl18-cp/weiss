@@ -8,6 +8,7 @@ import {
     Minimize2,
     Trophy,
     UserRound,
+    UserCheck,
     Users,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -28,6 +29,7 @@ type AgentScore = {
     total: number;
     confirmed: number;
     sold: number;
+    worked: boolean;
 };
 
 type TeamScore = {
@@ -59,6 +61,7 @@ type TeamDashboardProps = {
         teamCount: number;
         activeTeams: number;
         unassignedLeads: number;
+        workedAgents: number;
         topTeam: string | null;
         topScore: number;
     };
@@ -266,6 +269,16 @@ export default function TeamDashboard({
                             <p>Leads from unassigned Agents</p>
                         </div>
                     </article>
+                    <article>
+                        <span className="is-teal">
+                            <UserCheck />
+                        </span>
+                        <div>
+                            <small>Agents worked</small>
+                            <strong>{summary.workedAgents}</strong>
+                            <p>Tele Report logins</p>
+                        </div>
+                    </article>
                 </section>
 
                 <section className="team-scoreboard">
@@ -310,7 +323,14 @@ export default function TeamDashboard({
                                             <h4>Agent contribution</h4>
                                             <div>
                                                 {team.agents.map((agent) => (
-                                                    <article key={agent.id}>
+                                                    <article
+                                                        key={agent.id}
+                                                        className={
+                                                            agent.worked
+                                                                ? 'is-present'
+                                                                : 'is-absent'
+                                                        }
+                                                    >
                                                         <span className="team-agent-avatar">
                                                             {agent.name
                                                                 .charAt(0)
@@ -319,6 +339,11 @@ export default function TeamDashboard({
                                                         <strong>
                                                             {agent.name}
                                                         </strong>
+                                                        <small className="team-agent-attendance">
+                                                            {agent.worked
+                                                                ? 'Worked'
+                                                                : 'No login'}
+                                                        </small>
                                                         <span className="team-agent-score-metrics">
                                                             <span>
                                                                 <small>Total</small>

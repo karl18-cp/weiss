@@ -140,3 +140,63 @@ test('matched calls are checked again when RingCentral publishes recording metad
         ->and($call->recording_path)->not->toBeNull();
     Storage::disk('local')->assertExists($call->recording_path);
 });
+
+test('account call logs missing from the crm are imported once and their recordings are recovered', function () {
+    Storage::fake('local');
+    config()->set('services.ringcentral.import_call_logs', true);
+
+    $account = Account::query()->create([
+        'username' => 'account-import@example.com',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => 'Account Import Agent']);
+    $lead = Lead::query()->create([
+        'customer_name' => 'Account Import Lead',
+        'marital_status' => 'Unknown',
+        'primary_number' => '5552223333',
+        'address' => '3 Recording Street',
+        'zip_code' => '90001',
+        'city' => 'Los Angeles',
+        'county' => 'Los Angeles',
+        'state' => 'CA',
+        'years_in_house' => 1,
+        'appointment_at' => now(),
+        'telemarketer_notes' => '',
+        'source' => 'Test',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $account->acc_id,
+        'status' => 'fresh',
+    ]);
+    $record = [
+        'id' => 'account-call-log-1',
+        'direction' => 'Outbound',
+        'startTime' => now()->subMinutes(5)->utc()->toIso8601String(),
+        'duration' => 75,
+        'result' => 'Accepted',
+        'to' => ['phoneNumber' => '+15552223333'],
+        'recording' => ['id' => 'account-recording-1'],
+    ];
+
+    $ringCentral = Mockery::mock(RingCentralService::class);
+    $ringCentral->shouldReceive('callLog')->twice()->andReturn([$record]);
+    $ringCentral->shouldReceive('normalizePhoneNumber')
+        ->andReturnUsing(fn (string $number): string => '+1'.substr(preg_replace('/\D+/', '', $number), -10));
+    $ringCentral->shouldReceive('recording')
+        ->once()
+        ->with('account-recording-1')
+        ->andReturn(['body' => 'imported audio bytes', 'content_type' => 'audio/mpeg']);
+
+    $sync = new RingCentralRecordingSync($ringCentral);
+    $firstPass = $sync->sync(now()->subDay(), now());
+
+    expect($firstPass)->imported->toBe(1)->recordings->toBe(1)
+        ->and(RingCentralCall::query()->where('ringcentral_call_log_id', 'account-call-log-1')->count())->toBe(1);
+    $call = RingCentralCall::query()->where('ringcentral_call_log_id', 'account-call-log-1')->firstOrFail();
+    expect($call->lead_id)->toBe($lead->id)->and($call->recording_path)->not->toBeNull();
+    Storage::disk('local')->assertExists($call->recording_path);
+
+    $secondPass = $sync->sync(now()->subDay(), now());
+    expect($secondPass)->imported->toBe(0)
+        ->and(RingCentralCall::query()->where('ringcentral_call_log_id', 'account-call-log-1')->count())->toBe(1);
+});

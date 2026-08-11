@@ -31,6 +31,10 @@ class ManagerActivityController extends Controller
             : $ownAccountId;
         $search = trim((string) $request->query('search', ''));
         $view = $request->query('view') === 'history' ? 'history' : 'calls';
+        $destination = $canViewAll && $view === 'history'
+            && in_array($request->query('destination'), ['confirmed', 'dispatched'], true)
+                ? (string) $request->query('destination')
+                : null;
         // Call-only filters must never alter the lead-history dataset or remain
         // active after switching to the history tab.
         $talkedTo = $view === 'calls' && $request->boolean('talked_to');
@@ -54,6 +58,9 @@ class ManagerActivityController extends Controller
                 ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
                 ->leftJoin('agents', 'agents.agent_id', '=', 'activity.target_id')
                 ->when($managerAccountId, fn (Builder $query) => $query->where('activity.actor_id', $managerAccountId))
+                ->when($destination, fn (Builder $query) => $query
+                    ->where('activity.activity_type', 'movement')
+                    ->where('activity.to_status', $destination))
                 ->when($from, fn (Builder $query) => $query->where('activity.created_at', '>=', $from))
                 ->when($to, fn (Builder $query) => $query->where('activity.created_at', '<=', $to))
                 ->when($search !== '', function (Builder $query) use ($search): void {
@@ -179,17 +186,18 @@ class ManagerActivityController extends Controller
                     ->whereNotNull('account_id')
                     ->whereHas('account', fn ($account) => $account->whereNull('suspended_at'))
                     ->orderBy('manager_name')
-                    ->get(['manager_id', 'account_id', 'manager_name'])
+                    ->get(['manager_id', 'account_id', 'manager_name', 'manager_types'])
                 : Manager::query()
                     ->where('account_id', $ownAccountId)
                     ->whereHas('account', fn ($account) => $account->whereNull('suspended_at'))
-                    ->get(['manager_id', 'account_id', 'manager_name']),
+                    ->get(['manager_id', 'account_id', 'manager_name', 'manager_types']),
             'filters' => [
                 'manager' => $managerAccountId,
                 'search' => $search,
                 'from' => $fromValue,
                 'to' => $toValue,
                 'view' => $view,
+                'destination' => $destination,
                 'talked_to' => $talkedTo,
                 'call_sort' => $callSort,
                 'call_direction' => $callDirection,

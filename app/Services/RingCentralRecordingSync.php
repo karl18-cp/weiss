@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\Account;
+use App\Models\Lead;
 use App\Models\RingCentralCall;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -11,13 +14,25 @@ class RingCentralRecordingSync
 {
     public function __construct(private readonly RingCentralService $ringCentral) {}
 
-    /** @return array{matched: int, recordings: int, checked: int} */
-    public function sync(): array
+    /** @return array{imported: int, matched: int, recordings: int, checked: int} */
+    public function sync(?CarbonInterface $from = null, ?CarbonInterface $to = null, int $downloadLimit = 20): array
     {
-        $downloadLimit = 4;
+        $imported = 0;
         $recordings = 0;
         $matched = 0;
         $checked = 0;
+
+        if ((bool) config('services.ringcentral.import_call_logs', true)) {
+            $importResult = $this->importCallLogs(
+                $from ?? now()->utc()->subHours((int) config('services.ringcentral.import_window_hours', 48)),
+                $to ?? now()->utc(),
+                $recordings,
+                $downloadLimit,
+            );
+            $imported = $importResult['imported'];
+            $matched += $importResult['matched'];
+            $checked += $importResult['checked'];
+        }
 
         $pendingQuery = RingCentralCall::query()
             // Call timestamps are persisted in UTC even though the CRM's
@@ -48,8 +63,8 @@ class RingCentralRecordingSync
                 $downloadLimit,
                 'unmatched-calls',
             );
-            $matched = $result['matched'];
-            $checked = $result['checked'];
+            $matched += $result['matched'];
+            $checked += $result['checked'];
         }
 
         // RingCentral commonly publishes a completed call-log row before its
@@ -62,7 +77,7 @@ class RingCentralRecordingSync
             ->whereNotNull('matched_at')
             ->whereNotNull('ringcentral_call_log_id')
             ->whereNull('recording_id')
-            ->where('initiated_at', '>=', now()->utc()->subDays(45))
+            ->where('initiated_at', '>=', $from?->copy()->utc() ?? now()->utc()->subDays(90))
             ->where(function ($query): void {
                 $query->whereNull('sync_checked_at')
                     ->orWhere('sync_checked_at', '<=', now()->utc()->subMinutes(5));
@@ -103,10 +118,118 @@ class RingCentralRecordingSync
         }
 
         return [
+            'imported' => $imported,
             'matched' => $matched,
             'recordings' => $recordings,
             'checked' => $checked,
         ];
+    }
+
+    /** @return array{imported: int, matched: int, checked: int} */
+    private function importCallLogs(CarbonInterface $from, CarbonInterface $to, int &$recordings, int $downloadLimit): array
+    {
+        try {
+            $records = collect($this->ringCentral->callLog($from, $to))
+                ->filter(fn (array $record): bool => strcasecmp((string) ($record['direction'] ?? ''), 'Outbound') === 0)
+                ->filter(fn (array $record): bool => filled($record['id'] ?? null));
+        } catch (\Throwable $exception) {
+            Log::warning('RingCentral account call-log import failed.', [
+                'from' => $from->toIso8601String(),
+                'to' => $to->toIso8601String(),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return ['imported' => 0, 'matched' => 0, 'checked' => 0];
+        }
+
+        if ($records->isEmpty()) {
+            return ['imported' => 0, 'matched' => 0, 'checked' => 0];
+        }
+
+        $phoneMap = [];
+        Lead::query()->select(['id', 'created_by', 'primary_number', 'secondary_number', 'mobile_number'])
+            ->chunkById(500, function ($leads) use (&$phoneMap): void {
+                foreach ($leads as $lead) {
+                    foreach (['primary_number', 'secondary_number', 'mobile_number'] as $field) {
+                        if (! filled($lead->{$field})) {
+                            continue;
+                        }
+                        try {
+                            $phoneMap[$this->ringCentral->normalizePhoneNumber((string) $lead->{$field})] = $lead;
+                        } catch (\Throwable) {
+                            // Ignore malformed legacy phone values.
+                        }
+                    }
+                }
+            });
+
+        $fallbackAccountId = Account::query()->where('role', 'admin')->value('acc_id')
+            ?? Account::query()->value('acc_id');
+        if (! $fallbackAccountId) {
+            return ['imported' => 0, 'matched' => 0, 'checked' => $records->count()];
+        }
+
+        $imported = 0;
+        $matched = 0;
+        foreach ($records as $record) {
+            $phone = data_get($record, 'to.phoneNumber') ?? data_get($record, 'to.phoneNumberInfo.phoneNumber');
+            if (! is_string($phone)) {
+                continue;
+            }
+            try {
+                $normalized = $this->ringCentral->normalizePhoneNumber($phone);
+            } catch (\Throwable) {
+                continue;
+            }
+            $lead = $phoneMap[$normalized] ?? null;
+            if (! $lead) {
+                continue;
+            }
+
+            $logId = (string) $record['id'];
+            $startedAt = isset($record['startTime']) ? CarbonImmutable::parse($record['startTime'])->utc() : now()->utc();
+            $duration = max(0, (int) ($record['duration'] ?? 0));
+            $recording = $this->recordingMetadata($record);
+            $call = RingCentralCall::query()->where('ringcentral_call_log_id', $logId)->first();
+            if (! $call) {
+                $call = RingCentralCall::query()
+                    ->where('lead_id', $lead->id)
+                    ->whereNull('ringcentral_call_log_id')
+                    ->whereBetween('initiated_at', [$startedAt->subMinutes(15), $startedAt->addMinutes(15)])
+                    ->get()
+                    ->sortBy(fn (RingCentralCall $candidate): int => abs(
+                        ($candidate->initiated_at?->getTimestamp() ?? 0) - $startedAt->getTimestamp()
+                    ))
+                    ->first();
+            }
+            $call ??= new RingCentralCall();
+            $wasNew = ! $call->exists;
+            $call->fill([
+                'ringcentral_call_log_id' => $logId,
+                'lead_id' => $lead->id,
+                'account_id' => $call->account_id ?: ($lead->created_by ?: $fallbackAccountId),
+                'phone_number' => $phone,
+                'normalized_phone' => $normalized,
+                'direction' => 'Outbound',
+                'telephony_session_id' => $record['telephonySessionId'] ?? $record['sessionId'] ?? $call->telephony_session_id,
+                'result' => $record['result'] ?? $record['action'] ?? 'Completed',
+                'duration_seconds' => $duration,
+                'recording_id' => $recording['id'] ?? $call->recording_id,
+                'initiated_at' => $call->initiated_at ?: $startedAt,
+                'started_at' => $startedAt,
+                'ended_at' => $startedAt->addSeconds($duration),
+                'matched_at' => now()->utc(),
+                'sync_checked_at' => now()->utc(),
+            ])->save();
+            $imported += $wasNew ? 1 : 0;
+            $matched++;
+
+            if ($call->recording_id && ! $call->recording_path && $recordings < $downloadLimit && $this->downloadRecording($call)) {
+                $recordings++;
+            }
+        }
+
+        return ['imported' => $imported, 'matched' => $matched, 'checked' => $records->count()];
     }
 
     /** @return array{matched: int, checked: int} */

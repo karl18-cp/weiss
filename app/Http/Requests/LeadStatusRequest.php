@@ -16,9 +16,10 @@ class LeadStatusRequest extends FormRequest
         return [
             'status' => [
                 'required',
-                'in:confirmed,dispatched,reschedule,555,kit,raw,cb,naov,verify,toss,rehash,ng,la,his,rehash_ng,rehash_toss,rehash_cb,kit_ng,kit_toss,kit_cb',
+                'in:fresh,confirmed,dispatched,reschedule,555,kit,raw,cb,naov,verify,toss,rehash,ng,la,his,rehash_ng,rehash_toss,rehash_cb,kit_ng,kit_toss,kit_cb',
             ],
             'appointment_result_note' => ['nullable', 'string', 'max:5000'],
+            'follow_up_at' => ['nullable', 'date', 'after:now'],
         ];
     }
 }

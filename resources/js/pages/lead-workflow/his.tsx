@@ -12,7 +12,7 @@ export default function HIS(props: LeadsShopProps) {
         listTitle: "Waiting for HIS",
         dateLabel: "HIS months",
         dateField: "appointment_at",
-        dateGranularity: "month",
+        dateGranularity: "hybrid",
       }}
     />
   );

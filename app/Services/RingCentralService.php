@@ -13,21 +13,32 @@ class RingCentralService
     public function callLog(CarbonInterface $from, ?CarbonInterface $to = null): array
     {
         $this->assertConfigured();
-        $response = $this->api()
-            ->withToken($this->accessToken())
-            ->retry(3, 750)
-            ->get('/restapi/v1.0/account/~/call-log', [
+        $records = [];
+        $page = 1;
+
+        do {
+            $response = $this->api()
+                ->withToken($this->accessToken())
+                ->retry(3, 750)
+                ->get('/restapi/v1.0/account/~/call-log', [
                 'view' => 'Detailed',
                 'dateFrom' => $from->utc()->toIso8601String(),
                 'dateTo' => ($to ?? now())->utc()->toIso8601String(),
                 'perPage' => 1000,
+                'page' => $page,
             ]);
 
-        if ($response->failed()) {
-            throw new RuntimeException($response->json('message') ?: 'RingCentral could not read the call log.');
-        }
+            if ($response->failed()) {
+                throw new RuntimeException($response->json('message') ?: 'RingCentral could not read the call log.');
+            }
 
-        return $response->json('records') ?? [];
+            $pageRecords = $response->json('records') ?? [];
+            $records = array_merge($records, is_array($pageRecords) ? $pageRecords : []);
+            $totalPages = max(1, (int) $response->json('paging.totalPages', 1));
+            $page++;
+        } while ($page <= $totalPages && $page <= 100);
+
+        return $records;
     }
 
     /** @return array{body: string, content_type: string} */

@@ -77,6 +77,8 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('leads-shop', [LeadsShopController::class, 'index'])->name('leads-shop');
         Route::put('leads-shop/{lead}', [LeadsShopController::class, 'update'])->name('leads-shop.update');
         Route::delete('leads-shop/{lead}', [LeadsShopController::class, 'destroy'])->name('leads-shop.destroy');
+        Route::post('leads-shop/{lead}/duplicate/merge', [LeadsShopController::class, 'mergeDuplicate'])->name('leads-shop.duplicate.merge');
+        Route::delete('leads-shop/{lead}/duplicate', [LeadsShopController::class, 'deleteDuplicate'])->name('leads-shop.duplicate.destroy');
         Route::post('leads-shop/{lead}/notes', [LeadsShopController::class, 'storeNote'])->name('leads-shop.notes.store');
         Route::post('leads-shop/{lead}/ringcentral-calls', RingCentralCallIntentController::class)->name('leads-shop.ringcentral-calls.store');
         Route::get('leads-shop/{lead}/ringcentral-calls/{ringCentralCall}/recording', RingCentralRecordingController::class)->name('leads-shop.ringcentral-calls.recording');

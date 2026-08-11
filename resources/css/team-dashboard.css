@@ -217,7 +217,7 @@
 
 .team-dashboard-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: .8rem;
 }
 
@@ -264,6 +264,11 @@
 .team-dashboard-summary .is-orange {
     color: #cf6717;
     background: #fff0e2;
+}
+
+.team-dashboard-summary .is-teal {
+    color: #087d73;
+    background: #ddf7f3;
 }
 
 .team-dashboard-summary article > div {
@@ -505,12 +510,38 @@
 
 .team-agent-scores article {
     display: grid;
-    grid-template-columns: 1.8rem minmax(0, 1fr) minmax(8.5rem, auto);
+    grid-template-columns: 1.8rem minmax(0, 1fr) auto minmax(8.5rem, auto);
     align-items: center;
     gap: .55rem;
     padding: .42rem .5rem;
     border-radius: .5rem;
     background: #f6f8fc;
+}
+
+.team-agent-scores article.is-present {
+    border: 1px solid #b9e8cd;
+    background: #eaf8ef;
+}
+
+.team-agent-scores article.is-absent {
+    border: 1px solid #f1dfa0;
+    background: #fff8dc;
+}
+
+.team-agent-attendance {
+    padding: .18rem .38rem;
+    border-radius: 999px;
+    color: #8a6512;
+    background: #ffedac;
+    font-size: .48rem;
+    font-weight: 850;
+    white-space: nowrap;
+    text-transform: uppercase;
+}
+
+.is-present > .team-agent-attendance {
+    color: #14733e;
+    background: #c9eed8;
 }
 
 .team-agent-scores .team-agent-avatar {

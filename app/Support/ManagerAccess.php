@@ -20,6 +20,8 @@ class ManagerAccess
         'manager_history' => 'View All Manager Activity',
         'contacts_users' => 'Contacts & Users',
         'view_all_kit_managers' => "View All Managers' Keep in Touch Leads",
+        'view_all_callbacks' => "View All Managers' Callbacks",
+        'queue_action_buttons' => 'Use Workflow Action Buttons',
         'toss_action' => 'Move Leads to TOSS',
         'dial_raw_only' => 'Leads Shop Dialing: Raw & Verify Only',
         'full_phone_numbers' => 'View Full Phone Numbers',

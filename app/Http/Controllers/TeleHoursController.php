@@ -38,7 +38,10 @@ class TeleHoursController extends Controller
             ->groupBy('agent_id')
             ->pluck('total', 'agent_id');
 
-        $agents = Agent::query()->orderBy('agent_name')->get(['agent_id', 'agent_name', 'account_id', 'calltools_user_id']);
+        $agents = Agent::query()
+            ->whereNull('inactive_at')
+            ->orderBy('agent_name')
+            ->get(['agent_id', 'agent_name', 'account_id', 'calltools_user_id']);
         $appUserIds = $agents->pluck('calltools_user_id')->filter();
         $lunchSeconds = $this->lunchSeconds($appUserIds, $from, $to);
 

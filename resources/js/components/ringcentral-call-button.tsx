@@ -4,7 +4,12 @@ import { useSystemModal } from '@/components/system-modal-provider';
 
 type RingCentralCallButtonProps = {
     phone: string;
-    phoneSlot: 'primary' | 'secondary' | 'mobile';
+    phoneSlot:
+        | 'primary'
+        | 'secondary'
+        | 'mobile'
+        | 'salesman_1'
+        | 'salesman_2';
     leadId?: number;
     children: ReactNode;
     className?: string;

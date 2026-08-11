@@ -15,12 +15,13 @@ class RingCentralCallIntentController extends Controller
     public function __invoke(Request $request, Lead $lead, RingCentralService $ringCentral): JsonResponse
     {
         $validated = $request->validate([
-            'phone_slot' => ['required', 'string', 'in:primary,secondary,mobile'],
+            'phone_slot' => ['required', 'string', 'in:primary,secondary,mobile,salesman_1,salesman_2'],
         ]);
         $user = $request->user();
 
         if (
             ManagerAccess::hasEnabledFlag($user, 'dial_raw_only')
+            && ! in_array($validated['phone_slot'], ['salesman_1', 'salesman_2'], true)
             && ! in_array($lead->status, ['raw', 'verify'], true)
         ) {
             throw ValidationException::withMessages([
@@ -43,8 +44,13 @@ class RingCentralCallIntentController extends Controller
             'primary' => 'primary_number',
             'secondary' => 'secondary_number',
             'mobile' => 'mobile_number',
+            default => null,
         };
-        $phone = $lead->getRawOriginal($field) ?: $lead->{$field};
+        $phone = match ($validated['phone_slot']) {
+            'salesman_1' => $lead->salesmanOne?->phone,
+            'salesman_2' => $lead->salesmanTwo?->phone,
+            default => $lead->getRawOriginal($field) ?: $lead->{$field},
+        };
 
         if (! is_string($phone) || blank($phone)) {
             throw ValidationException::withMessages([

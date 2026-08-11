@@ -4,6 +4,7 @@ use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Lead;
 use App\Models\RingCentralCall;
+use App\Models\Salesman;
 use App\Services\RingCentralService;
 
 function secureRingCentralLead(Account $creator, array $overrides = []): Lead
@@ -96,6 +97,43 @@ test('authorized users keep using the browser widget without starting ringout', 
         ])
         ->assertCreated()
         ->assertJson(['dial_mode' => 'browser_widget']);
+});
+
+test('dispatch users can call an assigned salesman through the browser widget', function () {
+    $admin = Account::query()->create([
+        'username' => 'dispatch-salesman-call-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $salesman = Salesman::query()->create([
+        'salesman_name' => 'Dispatch Salesman',
+        'phone' => '(555) 444-1212',
+    ]);
+    $lead = secureRingCentralLead($admin, [
+        'status' => 'dispatched',
+        'salesman_1_id' => $salesman->salesman_id,
+    ]);
+
+    $ringCentral = Mockery::mock(RingCentralService::class);
+    $ringCentral->shouldReceive('normalizePhoneNumber')
+        ->once()
+        ->with('(555) 444-1212')
+        ->andReturn('+15554441212');
+    $ringCentral->shouldNotReceive('ringOut');
+    $this->app->instance(RingCentralService::class, $ringCentral);
+
+    $this->actingAs($admin)
+        ->postJson("/lead-workflow/leads-shop/{$lead->id}/ringcentral-calls", [
+            'phone_slot' => 'salesman_1',
+        ])
+        ->assertCreated()
+        ->assertJson([
+            'dial_mode' => 'browser_widget',
+            'phone' => '(555) 444-1212',
+        ]);
+
+    expect(RingCentralCall::query()->first())
+        ->phone_number->toBe('(555) 444-1212');
 });
 
 test('salesmen cannot dial leads that are not assigned to them', function () {

@@ -49,6 +49,19 @@ class TeamDashboardController extends Controller
             ])
             ->get();
 
+        $workedAgentIds = collect();
+        if (Schema::hasTable('calltools_user_login_shifts')) {
+            $workedAgentIds = DB::table('calltools_user_login_shifts as shift')
+                ->join('agents as agent', 'agent.calltools_user_id', '=', 'shift.app_user_id')
+                ->whereBetween('shift.started_at', [
+                    $start->startOfDay()->utc(),
+                    $end->endOfDay()->utc(),
+                ])
+                ->distinct()
+                ->pluck('agent.agent_id')
+                ->map(fn ($id): int => (int) $id);
+        }
+
         $scores = $leads
             ->groupBy(fn (Lead $lead): int => (int) $lead->agent_id)
             ->map(fn ($agentLeads) => $agentLeads
@@ -63,9 +76,9 @@ class TeamDashboardController extends Controller
             ])
             ->orderBy('team_name')
             ->get()
-            ->map(function (Team $team) use ($dates, $leads, $scores, $soldLeads): array {
+            ->map(function (Team $team) use ($dates, $leads, $scores, $soldLeads, $workedAgentIds): array {
                 $agentScores = $team->agents
-                    ->map(function ($agent) use ($dates, $leads, $scores, $soldLeads): array {
+                    ->map(function ($agent) use ($dates, $leads, $scores, $soldLeads, $workedAgentIds): array {
                         $agentId = (int) $agent->agent_id;
                         $daily = $scores->get($agentId, collect());
                         $agentLeads = $leads->where('agent_id', $agentId);
@@ -76,6 +89,7 @@ class TeamDashboardController extends Controller
                             'total' => $dates->sum(fn (string $date): int => $daily->get($date, collect())->count()),
                             'confirmed' => $agentLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
                             'sold' => $soldLeads->where('agent_id', $agentId)->count(),
+                            'worked' => $workedAgentIds->contains($agentId),
                         ];
                     })
                     ->sortByDesc('total')
@@ -144,6 +158,7 @@ class TeamDashboardController extends Controller
                 'teamCount' => $teams->count(),
                 'activeTeams' => $teams->where('total', '>', 0)->count(),
                 'unassignedLeads' => $unassignedLeadCount,
+                'workedAgents' => $workedAgentIds->unique()->count(),
                 'topTeam' => $teams->first()['name'] ?? null,
                 'topScore' => $teams->first()['total'] ?? 0,
             ],

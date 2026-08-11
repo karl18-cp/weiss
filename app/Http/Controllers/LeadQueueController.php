@@ -59,8 +59,8 @@ class LeadQueueController extends Controller
                     'agent:agent_id,agent_name',
                     'secondAgent:agent_id,agent_name',
                     'secondManager:manager_id,manager_name',
-                    'salesmanOne:salesman_id,salesman_name',
-                    'salesmanTwo:salesman_id,salesman_name',
+                    'salesmanOne:salesman_id,salesman_name,phone',
+                    'salesmanTwo:salesman_id,salesman_name,phone',
                     'notes:id,lead_id,note_type,body,created_at',
                     ...(Schema::hasTable('ringcentral_calls')
                         ? [
@@ -132,7 +132,7 @@ class LeadQueueController extends Controller
 
     public function his(): Response
     {
-        return $this->renderQueue('lead-workflow/his', 'his', null, 'month');
+        return $this->renderQueue('lead-workflow/his', 'his', null, 'hybrid', 25);
     }
 
     public function toss(): Response
@@ -150,6 +150,7 @@ class LeadQueueController extends Controller
         string|array|null $status,
         string|array|null $projectStatus = null,
         string $dateGranularity = 'day',
+        ?int $perPage = null,
     ): Response {
         $search = trim((string) request()->query('search', ''));
         $selectedCity = trim((string) request()->query('city', ''));
@@ -164,7 +165,7 @@ class LeadQueueController extends Controller
         if ($offsetDate === 'unscheduled') {
             $offsetDate = 'now';
         }
-        if ($dateGranularity === 'month' && preg_match('/^\d{4}-\d{2}$/', $offsetDate)) {
+        if (in_array($dateGranularity, ['month', 'hybrid'], true) && preg_match('/^\d{4}-\d{2}$/', $offsetDate)) {
             $offsetDate .= '-01';
         }
         $timezoneOffset = (int) (CarbonImmutable::parse($offsetDate, $crmTimezone)->utcOffset() / 60);
@@ -172,7 +173,7 @@ class LeadQueueController extends Controller
             ? 'COALESCE((SELECT MIN(lm.created_at) FROM lead_movements lm WHERE lm.lead_id = leads.id), leads.created_at)'
             : 'leads.'.$dateField;
         $usesDateFallback = request()->routeIs('lead-workflow.la')
-            || ($dateGranularity === 'month' && request()->routeIs('lead-workflow.his'));
+            || request()->routeIs('lead-workflow.his');
         if ($usesDateFallback) {
             $dateExpression = 'COALESCE(leads.appointment_at, leads.created_at)';
         }
@@ -181,10 +182,11 @@ class LeadQueueController extends Controller
                 ? sprintf("datetime(%s, '%+d minutes')", $dateExpression, $timezoneOffset)
                 : "DATE_ADD({$dateExpression}, INTERVAL {$timezoneOffset} MINUTE)";
         }
+        $monthExpression = Schema::getConnection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', {$dateExpression})"
+            : "DATE_FORMAT({$dateExpression}, '%Y-%m')";
         $periodExpression = $dateGranularity === 'month'
-            ? (Schema::getConnection()->getDriverName() === 'sqlite'
-                ? "strftime('%Y-%m', {$dateExpression})"
-                : "DATE_FORMAT({$dateExpression}, '%Y-%m')")
+            ? $monthExpression
             : "DATE({$dateExpression})";
 
         $queueQuery = Lead::query()
@@ -273,6 +275,7 @@ class LeadQueueController extends Controller
             })->values();
         }
 
+        $currentMonth = now($crmTimezone)->format('Y-m');
         $dateRows = (clone $queueQuery)
             ->when(
                 $usesDateFallback,
@@ -283,7 +286,19 @@ class LeadQueueController extends Controller
             ->get()
             ->pluck('date_value')
             ->filter()
-            ->map(fn ($value): string => substr((string) $value, 0, $dateGranularity === 'month' ? 7 : 10))
+            ->map(function ($value) use ($dateGranularity, $currentMonth): string {
+                $date = substr((string) $value, 0, 10);
+
+                if ($dateGranularity === 'month') {
+                    return substr($date, 0, 7);
+                }
+
+                if ($dateGranularity === 'hybrid' && ! str_starts_with($date, $currentMonth)) {
+                    return substr($date, 0, 7);
+                }
+
+                return $date;
+            })
             ->countBy()
             ->sortKeysDesc()
             ->map(fn (int $count, string $date): array => ['key' => $date, 'count' => $count])
@@ -302,9 +317,14 @@ class LeadQueueController extends Controller
                 ->selectRaw("{$dateExpression} as date_value")
                 ->first()?->date_value
             : null;
-        $requestedDateKey = $requestedLeadDate
-            ? substr((string) $requestedLeadDate, 0, $dateGranularity === 'month' ? 7 : 10)
-            : null;
+        $requestedDateKey = null;
+        if ($requestedLeadDate) {
+            $requestedDate = substr((string) $requestedLeadDate, 0, 10);
+            $requestedDateKey = $dateGranularity === 'month'
+                || ($dateGranularity === 'hybrid' && ! str_starts_with($requestedDate, $currentMonth))
+                    ? substr($requestedDate, 0, 7)
+                    : $requestedDate;
+        }
         $todayDateKey = $dateGranularity === 'month'
             ? now($crmTimezone)->format('Y-m')
             : now($crmTimezone)->toDateString();
@@ -335,18 +355,26 @@ class LeadQueueController extends Controller
                             $selectedDate,
                             $includesUnscheduledBucket,
                             $periodExpression,
+                            $monthExpression,
+                            $dateGranularity,
                             $requestedLeadId,
                         ): void {
                             $query->where(function ($dateQuery) use (
                                 $selectedDate,
                                 $includesUnscheduledBucket,
                                 $periodExpression,
+                                $monthExpression,
+                                $dateGranularity,
                                 $requestedLeadId,
                             ): void {
                                 if ($selectedDate === 'unscheduled' && $includesUnscheduledBucket) {
                                     $dateQuery->whereNull('appointment_at');
                                 } else {
-                                    $dateQuery->whereRaw("{$periodExpression} = ?", [$selectedDate]);
+                                    $selectedExpression = $dateGranularity === 'hybrid'
+                                        && preg_match('/^\d{4}-\d{2}$/', $selectedDate)
+                                            ? $monthExpression
+                                            : $periodExpression;
+                                    $dateQuery->whereRaw("{$selectedExpression} = ?", [$selectedDate]);
                                 }
 
                                 // A sidebar/global-search selection must remain
@@ -371,8 +399,8 @@ class LeadQueueController extends Controller
                     'agent:agent_id,agent_name',
                     'secondAgent:agent_id,agent_name',
                     'secondManager:manager_id,manager_name',
-                    'salesmanOne:salesman_id,salesman_name',
-                    'salesmanTwo:salesman_id,salesman_name',
+                    'salesmanOne:salesman_id,salesman_name,phone',
+                    'salesmanTwo:salesman_id,salesman_name,phone',
                     // Expanded notes must show the complete saved history, not
                     // only the newest subset. The frontend groups these records
                     // by note type and keeps the list independently scrollable.
@@ -400,7 +428,11 @@ class LeadQueueController extends Controller
                 ])
                 ->when($requestedLeadId, fn ($query) => $query->orderByRaw('id = ? DESC', [$requestedLeadId]))
                 ->latest()
-                ->get(),
+                ->when(
+                    $perPage,
+                    fn ($query) => $query->paginate($perPage)->withQueryString(),
+                    fn ($query) => $query->get(),
+                ),
             'dateRows' => $dateRows,
             'selectedDate' => $selectedDate,
             'selectedCity' => $selectedCity !== '' ? $selectedCity : 'all',

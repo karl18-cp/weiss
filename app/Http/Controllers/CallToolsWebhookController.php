@@ -200,6 +200,20 @@ class CallToolsWebhookController extends Controller
             ],
         );
 
+        if ($lead->wasRecentlyCreated && $lead->primary_phone_normalized) {
+            $canonical = Lead::query()
+                ->where('primary_phone_normalized', $lead->primary_phone_normalized)
+                ->whereKeyNot($lead->id)
+                ->oldest('id')
+                ->first(['id', 'duplicate_of_id']);
+
+            if ($canonical) {
+                $lead->update([
+                    'duplicate_of_id' => $canonical->duplicate_of_id ?: $canonical->id,
+                ]);
+            }
+        }
+
         if ($existingLead && (int) $relationships['agent_id'] !== (int) $lead->agent_id) {
             $hasAssignmentHistory = class_exists(LeadAgentAssignment::class)
                 && Schema::hasTable('lead_agent_assignments');

@@ -20,10 +20,12 @@ function secondManagerFixture(string $status): array
         'phone' => '',
         'manager_types' => [],
     ]);
-    $manager->permissions()->create([
-        'module' => 'leads_shop',
-        'access_level' => 'edit',
-    ]);
+    foreach (['leads_shop', 'confirm_leads', 'dispatch_leads', 'keep_in_touch', 'queue_action_buttons'] as $module) {
+        $manager->permissions()->create([
+            'module' => $module,
+            'access_level' => 'edit',
+        ]);
+    }
     $company = Company::query()->create([
         'company' => "Second Manager Company {$status}",
         'address' => '',
@@ -109,4 +111,89 @@ test('later moves do not overwrite the manager already assigned as second manage
         ->assertRedirect();
 
     expect($lead->fresh()->manager_2_id)->toBe($originalManager->manager_id);
+});
+
+test('manager returning a lead to leads shop becomes its second manager', function () {
+    ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('his');
+    $lead->forceFill(['created_at' => now()->subDays(5)])->saveQuietly();
+
+    $this->actingAs($account)
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'fresh'])
+        ->assertRedirect();
+
+    expect($lead->fresh())
+        ->status->toBe('fresh')
+        ->manager_2_id->toBe($manager->manager_id)
+        ->rehash_at->not->toBeNull();
+
+    $this->get(route('lead-workflow.leads-shop', [
+        'date_field' => 'created_at',
+        'date' => now('America/Los_Angeles')->toDateString(),
+    ]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('dateField', 'created_at')
+            ->where('leads.0.id', $lead->id));
+});
+
+test('manager cannot move a lead to a tab without edit permission', function () {
+    ['account' => $account, 'lead' => $lead] = secondManagerFixture('his');
+
+    $account->manager->permissions()->where('module', 'dispatch_leads')->delete();
+
+    $this->actingAs($account)
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'dispatched'])
+        ->assertRedirect();
+
+    expect($lead->fresh()->status)->toBe('his');
+});
+
+test('manager without workflow action permission can only return a restricted queue lead to leads shop', function () {
+    ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('his');
+
+    $manager->permissions()->updateOrCreate(
+        ['module' => 'his'],
+        ['access_level' => 'edit'],
+    );
+    $manager->permissions()->where('module', 'leads_shop')->delete();
+    $manager->permissions()->updateOrCreate(
+        ['module' => 'queue_action_buttons'],
+        ['access_level' => 'none'],
+    );
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.his'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'dispatched'])
+        ->assertRedirect();
+
+    expect($lead->fresh()->status)->toBe('his');
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.his'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'fresh'])
+        ->assertRedirect();
+
+    expect($lead->fresh())
+        ->status->toBe('fresh')
+        ->manager_2_id->toBe($manager->manager_id);
+});
+
+test('manager with workflow action permission can use other restricted queue actions', function () {
+    ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('his');
+
+    $manager->permissions()->updateOrCreate(
+        ['module' => 'his'],
+        ['access_level' => 'edit'],
+    );
+    $manager->permissions()->updateOrCreate(
+        ['module' => 'queue_action_buttons'],
+        ['access_level' => 'edit'],
+    );
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.his'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'dispatched'])
+        ->assertRedirect();
+
+    expect($lead->fresh()->status)->toBe('dispatched');
 });

@@ -25,6 +25,7 @@ type ManagerOption = {
     manager_id: number;
     account_id: number;
     manager_name: string;
+    manager_types: string[];
 };
 
 type Activity = {
@@ -66,6 +67,7 @@ type Filters = {
     from: string | null;
     to: string | null;
     view: 'calls' | 'history';
+    destination: 'confirmed' | 'dispatched' | null;
     talked_to: boolean;
     call_sort: 'date' | 'manager' | 'lead' | 'result' | 'duration';
     call_direction: 'asc' | 'desc';
@@ -144,6 +146,7 @@ export default function ManagerActivity({
     const [manager, setManager] = useState(
         filters.manager ? String(filters.manager) : '',
     );
+    const [destination, setDestination] = useState(filters.destination ?? '');
     const [from, setFrom] = useState(filters.from ?? '');
     const [to, setTo] = useState(filters.to ?? '');
     const [talkedTo, setTalkedTo] = useState(Boolean(filters.talked_to));
@@ -158,11 +161,32 @@ export default function ManagerActivity({
             from: from || undefined,
             to: to || undefined,
             talked_to: requestedView === 'calls' && talkedTo ? true : undefined,
+            destination:
+                canViewAll && requestedView === 'history' && destination
+                    ? destination
+                    : undefined,
             call_sort: requestedView === 'calls' ? filters.call_sort : undefined,
             call_direction: requestedView === 'calls' ? filters.call_direction : undefined,
             ...overrides,
         };
     };
+
+    const leadsManagers = managers.filter((option) =>
+        option.manager_types.includes('Leads Manager'),
+    );
+    const otherManagers = managers.filter(
+        (option) => !option.manager_types.includes('Leads Manager'),
+    );
+    const selectedLeadsManager = leadsManagers.some(
+        (option) => String(option.account_id) === manager,
+    )
+        ? manager
+        : '';
+    const selectedOtherManager = otherManagers.some(
+        (option) => String(option.account_id) === manager,
+    )
+        ? manager
+        : '';
 
     const switchView = (nextView: 'calls' | 'history') => {
         setView(nextView);
@@ -255,15 +279,36 @@ export default function ManagerActivity({
                     </label>
                     {canViewAll && (
                         <label>
-                            <span>Manager</span>
+                            <span>Leads Manager</span>
                             <select
-                                value={manager}
+                                value={selectedLeadsManager}
                                 onChange={(event) =>
                                     setManager(event.target.value)
                                 }
                             >
-                                <option value="">All managers</option>
-                                {managers.map((option) => (
+                                <option value="">Select leads manager</option>
+                                {leadsManagers.map((option) => (
+                                    <option
+                                        key={option.manager_id}
+                                        value={option.account_id}
+                                    >
+                                        {option.manager_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
+                    {canViewAll && (
+                        <label>
+                            <span>Other Manager</span>
+                            <select
+                                value={selectedOtherManager}
+                                onChange={(event) =>
+                                    setManager(event.target.value)
+                                }
+                            >
+                                <option value="">Select other manager</option>
+                                {otherManagers.map((option) => (
                                     <option
                                         key={option.manager_id}
                                         value={option.account_id}
@@ -299,6 +344,21 @@ export default function ManagerActivity({
                             >
                                 <option value="all">All calls</option>
                                 <option value="talked">Talked to (over 20 sec)</option>
+                            </select>
+                        </label>
+                    )}
+                    {canViewAll && view === 'history' && (
+                        <label>
+                            <span>Moved to</span>
+                            <select
+                                value={destination}
+                                onChange={(event) =>
+                                    setDestination(event.target.value)
+                                }
+                            >
+                                <option value="">All lead activity</option>
+                                <option value="confirmed">Confirm</option>
+                                <option value="dispatched">Dispatch</option>
                             </select>
                         </label>
                     )}

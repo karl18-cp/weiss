@@ -20,8 +20,8 @@ use Illuminate\Support\Facades\Schema;
     'crm_qualification_completed_at', 'product_id', 'appointment_at', 'appointment_duration_minutes',
     'appointment_result', 'telemarketer_notes',
     'company_id', 'source', 'agent_id', 'agent_2_id', 'manager_2_id', 'rep', 'salesman_1_id', 'salesman_2_id',
-    'created_by', 'status', 'confirmation_notes',
-    'calltools_contact_id', 'calltools_campaign_name',
+    'created_by', 'status', 'confirmation_notes', 'rehash_at',
+    'calltools_contact_id', 'calltools_campaign_name', 'primary_phone_normalized', 'duplicate_of_id',
 ])]
 class Lead extends Model
 {
@@ -68,6 +68,11 @@ class Lead extends Model
     public function secondManager(): BelongsTo
     {
         return $this->belongsTo(Manager::class, 'manager_2_id', 'manager_id');
+    }
+
+    public function duplicateOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'duplicate_of_id');
     }
 
     public function salesmanOne(): BelongsTo
@@ -123,6 +128,7 @@ class Lead extends Model
     {
         return [
             'appointment_at' => 'datetime',
+            'rehash_at' => 'datetime',
             'needs_financing' => 'boolean',
             'house_value' => 'decimal:2',
             'crm_qualification_completed_at' => 'datetime',
@@ -135,6 +141,14 @@ class Lead extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (Lead $lead): void {
+            $digits = preg_replace('/\D+/', '', (string) $lead->primary_number) ?: null;
+            if ($digits && strlen($digits) === 11 && str_starts_with($digits, '1')) {
+                $digits = substr($digits, 1);
+            }
+            $lead->primary_phone_normalized = $digits;
+        });
+
         static::created(function (Lead $lead): void {
             if (Schema::hasTable('lead_movements')) {
                 $lead->movements()->create([

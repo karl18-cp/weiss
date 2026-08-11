@@ -436,7 +436,8 @@ export default function Managers({
                                                             </option>
                                                         </>
                                                     ) : module === 'toss_action' ||
-                                                    module === 'view_all_kit_managers' ? (
+                                                    module === 'view_all_kit_managers' ||
+                                                    module === 'view_all_callbacks' ? (
                                                         <>
                                                             <option value="none">
                                                                 Not allowed

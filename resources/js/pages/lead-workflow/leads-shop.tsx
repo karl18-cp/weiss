@@ -117,14 +117,31 @@ export type Lead = {
     status: string;
     confirmation_notes: string | null;
     created_at: string;
+    rehash_at: string | null;
     company: { com_id: number; company: string; prefix: string } | null;
     product: { prod_id: number; product_name: string } | null;
     agent: { agent_id: number; agent_name: string } | null;
     second_agent: { agent_id: number; agent_name: string } | null;
     second_manager: { manager_id: number; manager_name: string } | null;
+    duplicate_of: {
+        id: number;
+        customer_name: string;
+        primary_number: string;
+        created_at: string;
+        status: string;
+        project?: { id: number } | null;
+    } | null;
     agent_assignments?: LeadAgentAssignment[];
-    salesman_one: { salesman_id: number; salesman_name: string } | null;
-    salesman_two: { salesman_id: number; salesman_name: string } | null;
+    salesman_one: {
+        salesman_id: number;
+        salesman_name: string;
+        phone: string | null;
+    } | null;
+    salesman_two: {
+        salesman_id: number;
+        salesman_name: string;
+        phone: string | null;
+    } | null;
     notes: LeadNote[];
     appointment_result_notes?: LeadNote[];
     movements?: LeadMovement[];
@@ -261,6 +278,18 @@ const latestLeadNote = (
 const formatCity = (city?: string | null) =>
     (city ?? '').replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
 
+const requiredEditFieldClass = (
+    value: string | number | null | undefined,
+    extraClass = '',
+) =>
+    [
+        extraClass,
+        'lead-edit-field--required',
+        String(value ?? '').trim() === '' ? 'lead-edit-field--missing' : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
 export type CompanyOption = { com_id: number; company: string };
 export type ProductOption = { prod_id: number; product_name: string };
 export type AgentOption = { agent_id: number; agent_name: string };
@@ -297,10 +326,13 @@ export type LeadsShopProps = {
     activeShopStatus?: string | null;
     verifyCount?: number;
     dateField: DateField;
-    dateGranularity?: 'day' | 'month';
+    dateGranularity?: 'day' | 'month' | 'hybrid';
     timezoneOffset: number;
     movementDestinations?: MovementDestination[];
     createdDayTotal?: number;
+    agentDayTotal?: number;
+    overallDayTotal?: number;
+    managerReturns?: { leads: number; managers: number };
     queue?: {
         title: string;
         description: string;
@@ -308,7 +340,7 @@ export type LeadsShopProps = {
         listTitle: string;
         dateLabel: string;
         dateField: 'created_at' | 'appointment_at';
-        dateGranularity?: 'day' | 'month';
+        dateGranularity?: 'day' | 'month' | 'hybrid';
         sortDirection?: 'asc' | 'desc';
         statusFilters?: [string, string][];
     };
@@ -427,6 +459,51 @@ const workflowLocation = (status: string | null) => {
     return status
         ? (locations[status] ?? status.replaceAll('_', ' '))
         : 'New lead';
+};
+
+const duplicateOriginalDestination = (lead: Lead['duplicate_of']) => {
+    if (!lead) return null;
+
+    const [label, path] = (() => {
+        switch (lead.status) {
+            case 'confirmed':
+                return ['Confirm Leads', '/lead-workflow/confirm-leads'];
+            case 'dispatched':
+                return ['Dispatch Leads', '/lead-workflow/dispatch-leads'];
+            case 'reschedule':
+                return ['Reschedule', '/lead-workflow/reschedule'];
+            case 'rehash':
+            case 'rehash_ng':
+            case 'rehash_toss':
+            case 'rehash_cb':
+                return ['Rehash', '/lead-workflow/rehash'];
+            case '555':
+                return ['555', '/lead-workflow/555'];
+            case 'la':
+                return ['LA', '/lead-workflow/la'];
+            case 'his':
+                return ['HIS', '/lead-workflow/his'];
+            case 'toss':
+                return ['TOSS Leads', '/lead-workflow/toss-leads'];
+            case 'kit':
+            case 'kit_ng':
+            case 'kit_toss':
+            case 'kit_cb':
+                return ['Keep in Touch', '/lead-workflow/keep-in-touch'];
+            case 'project':
+            case 'sold':
+            case 'sale':
+                return ['Projects', '/management/projects'];
+            default:
+                return ['Leads Shop', '/lead-workflow/leads-shop'];
+        }
+    })();
+    const url =
+        path === '/management/projects' && lead.project
+            ? `${path}?project=${lead.project.id}&focus=search`
+            : `${path}?lead=${lead.id}&focus=search`;
+
+    return { label, url };
 };
 
 const historyNoteLabel = (type: string) => {
@@ -797,6 +874,9 @@ export default function LeadsShop({
     timezoneOffset,
     movementDestinations = [],
     createdDayTotal = 0,
+    agentDayTotal = 0,
+    overallDayTotal = 0,
+    managerReturns = { leads: 0, managers: 0 },
     queue,
 }: LeadsShopProps) {
     const pagination: PaginatedLeads = Array.isArray(leadsPage)
@@ -844,6 +924,10 @@ export default function LeadsShop({
     const { auth } = usePage().props;
     const { confirm, notify } = useSystemModal();
     const isKeepInTouchQueue = queue?.status === 'kit';
+    const isProjectQueue = queue?.status === 'project';
+    const isDispatchQueue =
+        queue?.status === 'dispatched' ||
+        window.location.pathname === '/lead-workflow/dispatch-leads';
     const managerQuery =
         isKeepInTouchQueue && selectedQueueManager !== 'all'
             ? { manager: selectedQueueManager }
@@ -918,10 +1002,55 @@ export default function LeadsShop({
     const currentPermissionModule = permissionModuleForPath(
         window.location.pathname,
     );
+    const hasRestrictedQueueActions = [
+        '/lead-workflow/555',
+        '/lead-workflow/reschedule',
+        '/lead-workflow/rehash',
+        '/lead-workflow/la',
+        '/lead-workflow/his',
+        '/lead-workflow/sag',
+    ].includes(window.location.pathname);
+    const canUseRestrictedQueueActions =
+        auth.user.role === 'admin' ||
+        auth.permissions?.queue_action_buttons === 'edit';
     const canEditCurrentTab =
         auth.user.role === 'admin' ||
         (currentPermissionModule !== null &&
             auth.permissions?.[currentPermissionModule] === 'edit');
+    const permissionModuleForStatus = (status: string): string | null => {
+        if (status === 'confirmed') return 'confirm_leads';
+        if (status === 'dispatched') return 'dispatch_leads';
+        if (status === 'reschedule') return 'reschedule';
+        if (['toss', 'rehash_toss', 'kit_toss'].includes(status))
+            return 'toss_action';
+        if (['rehash', 'rehash_ng', 'rehash_cb'].includes(status))
+            return 'rehash';
+        if (status === '555') return '555';
+        if (status === 'la') return 'la';
+        if (status === 'his') return 'his';
+        if (['kit', 'kit_ng', 'kit_cb'].includes(status))
+            return 'keep_in_touch';
+        if (['raw', 'cb', 'naov', 'verify'].includes(status))
+            return 'leads_shop';
+
+        return null;
+    };
+    const canMoveToStatus = (status: string): boolean => {
+        if (
+            hasRestrictedQueueActions &&
+            !canUseRestrictedQueueActions &&
+            status !== 'fresh'
+        ) {
+            return false;
+        }
+        if (status === 'fresh' || status === 'history') return true;
+        if (status === 'sale') return canEditCurrentTab;
+        if (auth.user.role === 'admin') return true;
+
+        const module = permissionModuleForStatus(status);
+
+        return module !== null && auth.permissions?.[module] === 'edit';
+    };
     const [appointmentResultDraft, setAppointmentResultDraft] = useState('');
     const [salesmanOneDraft, setSalesmanOneDraft] = useState('');
     const [salesmanTwoDraft, setSalesmanTwoDraft] = useState('');
@@ -930,6 +1059,20 @@ export default function LeadsShop({
     >(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
+    const [followUpDestination, setFollowUpDestination] = useState<
+        'kit' | 'rehash' | 'reschedule' | null
+    >(null);
+    const [followUpAt, setFollowUpAt] = useState('');
+    const [followUpError, setFollowUpError] = useState('');
+    const [followUpProcessing, setFollowUpProcessing] = useState(false);
+    const [duplicateResolving, setDuplicateResolving] = useState(false);
+    const [dismissedDuplicateId, setDismissedDuplicateId] = useState<
+        number | null
+    >(null);
+
+    useEffect(() => {
+        setDismissedDuplicateId(null);
+    }, [selectedId]);
     const [smsTemplateOpen, setSmsTemplateOpen] = useState(false);
     const [smsTemplateFields, setSmsTemplateFields] = useState<
         SmsTemplateField[]
@@ -1074,6 +1217,7 @@ export default function LeadsShop({
                 document.hidden ||
                 isEditing ||
                 saleModalOpen ||
+                followUpDestination !== null ||
                 form.processing ||
                 telemarketerNoteForm.processing ||
                 confirmationNoteForm.processing ||
@@ -1115,6 +1259,7 @@ export default function LeadsShop({
         confirmationNoteForm.processing,
         dispatchNoteForm.processing,
         form.processing,
+        followUpDestination,
         isEditing,
         saleForm.processing,
         saleModalOpen,
@@ -1133,7 +1278,9 @@ export default function LeadsShop({
                     };
                 }
 
-                const isMonth = dateGranularity === 'month';
+                const isMonth =
+                    dateGranularity === 'month' ||
+                    (dateGranularity === 'hybrid' && key.length === 7);
                 const date = new Date(
                     `${isMonth ? `${key}-01` : key}T12:00:00`,
                 );
@@ -1275,14 +1422,16 @@ export default function LeadsShop({
             Object.fromEntries(
                 statusFilters.map(([status]) => [
                     status,
-                    status === 'verify'
+                    isProjectQueue
+                        ? leads.length
+                        : status === 'verify'
                         ? verifyCount
                         : leads.filter(
                               (lead) => (lead.status || 'fresh') === status,
                           ).length,
                 ]),
             ),
-        [leads, statusFilters, verifyCount],
+        [isProjectQueue, leads, statusFilters, verifyCount],
     );
 
     const selectStatus = (status: string) => {
@@ -1339,6 +1488,7 @@ export default function LeadsShop({
 
                 const matchesStatus =
                     isKeepInTouchQueue ||
+                    isProjectQueue ||
                     (lead.status || 'fresh') === selectedStatus;
                 const matchesCompany =
                     companyFilter === 'all' ||
@@ -1421,6 +1571,7 @@ export default function LeadsShop({
         agentFilter,
         effectiveDateField,
         isKeepInTouchQueue,
+        isProjectQueue,
         queue?.sortDirection,
     ]);
 
@@ -1466,6 +1617,9 @@ export default function LeadsShop({
     };
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
+    const duplicateOriginal = duplicateOriginalDestination(
+        selected?.duplicate_of ?? null,
+    );
 
     const smsTemplateSections = useMemo(() => {
         if (!selected) return [];
@@ -1799,7 +1953,7 @@ export default function LeadsShop({
         );
     };
 
-    const updateLeadStatus = (status: string) => {
+    const updateLeadStatus = (status: string, followUp: string | null = null) => {
         if (!selected) {
             return;
         }
@@ -1810,11 +1964,30 @@ export default function LeadsShop({
                 status,
                 appointment_result_note:
                     appointmentResultNoteForm.data.body.trim() || null,
+                follow_up_at: followUp,
             },
             {
                 preserveScroll: true,
-                onSuccess: () => router.flushAll(),
+                onStart: () => setFollowUpProcessing(true),
+                onSuccess: () => {
+                    setFollowUpDestination(null);
+                    setFollowUpAt('');
+                    setFollowUpError('');
+                    router.flushAll();
+                },
                 onError: (errors) => {
+                    if (errors.follow_up_at) {
+                        if (
+                            ['kit', 'rehash', 'reschedule'].includes(status)
+                        ) {
+                            setFollowUpDestination(
+                                status as 'kit' | 'rehash' | 'reschedule',
+                            );
+                        }
+                        setFollowUpError(String(errors.follow_up_at));
+
+                        return;
+                    }
                     const message =
                         String(errors.status ?? errors.permission ?? '') ||
                         'The lead could not be moved. Please try again.';
@@ -1830,8 +2003,46 @@ export default function LeadsShop({
                         tone: 'warning',
                     });
                 },
+                onFinish: () => setFollowUpProcessing(false),
             },
         );
+    };
+
+    const requestStatusUpdate = (status: string) => {
+        if (
+            isDispatchQueue &&
+            ['kit', 'rehash', 'reschedule'].includes(status)
+        ) {
+            setFollowUpDestination(status as 'kit' | 'rehash' | 'reschedule');
+            setFollowUpAt('');
+            setFollowUpError('');
+
+            return;
+        }
+
+        updateLeadStatus(status);
+    };
+
+    const resolveDuplicate = (action: 'merge' | 'delete') => {
+        if (!selected?.duplicate_of || duplicateResolving) return;
+
+        setDuplicateResolving(true);
+        const url = `/lead-workflow/leads-shop/${selected.id}/duplicate${action === 'merge' ? '/merge' : ''}`;
+        const options = {
+            preserveScroll: true,
+            onSuccess: () => {
+                setSelectedId(null);
+                setDismissedDuplicateId(null);
+                router.flushAll();
+            },
+            onFinish: () => setDuplicateResolving(false),
+        };
+
+        if (action === 'merge') {
+            router.post(url, {}, options);
+        } else {
+            router.delete(url, options);
+        }
     };
 
     const openSaleModal = () => {
@@ -2082,20 +2293,25 @@ export default function LeadsShop({
     const rescheduleWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['verify', 'Verify', BadgeCheck, 'confirm'],
+        ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
     const rehashWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['verify', 'Verify', BadgeCheck, 'confirm'],
         ['rehash_ng', 'NG', Ban, 'raw'],
         ['rehash_toss', 'TOSS', Trash2, 'toss'],
         ['rehash_cb', 'Call Back', PhoneCall, 'callback'],
+        ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
     const fiveFiveFiveWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
         ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
     const hisWorkflowActions = [
@@ -2110,11 +2326,17 @@ export default function LeadsShop({
         ['naov', 'NAOV', Ban, 'naov'],
         ['verify', 'Verify', BadgeCheck, 'confirm'],
         ['toss', 'TOSS', Trash2, 'toss'],
+        ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const projectWorkflowActions = [
+        ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
     const keepInTouchWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['verify', 'Verify', BadgeCheck, 'confirm'],
     ] as const;
     const workflowActions =
         queue?.status === 'confirmed'
@@ -2131,7 +2353,9 @@ export default function LeadsShop({
                       ? hisWorkflowActions
                       : queue?.status === 'kit'
                         ? keepInTouchWorkflowActions
-                        : defaultWorkflowActions;
+                        : queue?.status === 'project'
+                          ? projectWorkflowActions
+                          : defaultWorkflowActions;
     const headerIcon =
         queue?.status === 'confirmed' ? (
             <CheckCircle2 />
@@ -2170,7 +2394,7 @@ export default function LeadsShop({
                             <div className="leads-shop-header__title">
                                 <h1>{queue?.title ?? 'Leads Shop'}</h1>
                                 <strong>
-                                    {queue ? queueTotal : createdDayTotal}
+                                    {queue ? queueTotal : overallDayTotal}
                                 </strong>
                             </div>
                             <p>
@@ -2182,8 +2406,16 @@ export default function LeadsShop({
                     {!queue && (
                         <div className="leads-shop-header__day-counts">
                             <span>
-                                <small>Total for day</small>
+                                <small>Overall today</small>
+                                <strong>{overallDayTotal}</strong>
+                            </span>
+                            <span>
+                                <small>Agent leads</small>
                                 <strong>{createdDayTotal}</strong>
+                                <em>
+                                    {agentDayTotal}{' '}
+                                    {agentDayTotal === 1 ? 'agent' : 'agents'}
+                                </em>
                             </span>
                             <span>
                                 <small>Confirm</small>
@@ -2196,6 +2428,16 @@ export default function LeadsShop({
                             <span>
                                 <small>Other</small>
                                 <strong>{otherDayTotal}</strong>
+                            </span>
+                            <span>
+                                <small>Manager leads</small>
+                                <strong>{managerReturns.leads}</strong>
+                                <em>
+                                    {managerReturns.managers}{' '}
+                                    {managerReturns.managers === 1
+                                        ? 'manager'
+                                        : 'managers'}
+                                </em>
                             </span>
                         </div>
                     )}
@@ -2227,7 +2469,7 @@ export default function LeadsShop({
                                     Filter by{' '}
                                     {effectiveDateField === 'appointment_at'
                                         ? 'appointment date'
-                                        : 'created date'}
+                                        : 'created or rehash date'}
                                 </p>
                             </div>
                             <CalendarClock />
@@ -2267,9 +2509,13 @@ export default function LeadsShop({
                             className={`lead-dates__columns${dateGranularity === 'month' ? ' lead-dates__columns--months' : ''}`}
                         >
                             <span>
-                                {dateGranularity === 'month' ? 'Month' : 'Date'}
+                                {dateGranularity === 'month'
+                                    ? 'Month'
+                                    : dateGranularity === 'hybrid'
+                                      ? 'Date / Month'
+                                      : 'Date'}
                             </span>
-                            {dateGranularity === 'day' && <span>Day</span>}
+                            {dateGranularity !== 'month' && <span>Day</span>}
                             <span>Count</span>
                         </div>
                         <div className="lead-dates__list">
@@ -2285,7 +2531,7 @@ export default function LeadsShop({
                                     onClick={() => openDate(day.key)}
                                 >
                                     <span>{day.date}</span>
-                                    {dateGranularity === 'day' && (
+                                    {dateGranularity !== 'month' && (
                                         <span>{day.day}</span>
                                     )}
                                     <strong>{day.count}</strong>
@@ -2318,7 +2564,7 @@ export default function LeadsShop({
                                         ? `shown in ${formatCity(cityFilter)}`
                                         : activeShopStatus === 'verify'
                                           ? 'shown across all creation dates'
-                                          : `shown for the selected ${dateGranularity === 'month' ? 'month' : 'date'}`}
+                                          : `shown for the selected ${selectedDate?.length === 7 ? 'month' : 'date'}`}
                                 </p>
                             </div>
                             <span>Newest first</span>
@@ -2628,6 +2874,47 @@ export default function LeadsShop({
                                 </div>
                             )}
                         </div>
+                        {pagination.last_page > 1 && (
+                            <nav
+                                className="lead-browser-pagination"
+                                aria-label="Lead pages"
+                            >
+                                <button
+                                    type="button"
+                                    disabled={!pagination.prev_page_url}
+                                    onClick={() =>
+                                        pagination.prev_page_url &&
+                                        router.visit(
+                                            pagination.prev_page_url,
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    Previous
+                                </button>
+                                <span>
+                                    Page {pagination.current_page} of{' '}
+                                    {pagination.last_page}
+                                    <small>
+                                        {pagination.total.toLocaleString()}{' '}
+                                        leads
+                                    </small>
+                                </span>
+                                <button
+                                    type="button"
+                                    disabled={!pagination.next_page_url}
+                                    onClick={() =>
+                                        pagination.next_page_url &&
+                                        router.visit(
+                                            pagination.next_page_url,
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    Next
+                                </button>
+                            </nav>
+                        )}
                     </section>
 
                     <section className="lead-detail">
@@ -2711,6 +2998,14 @@ export default function LeadsShop({
                                                     selected.created_at,
                                                 )}
                                             </small>
+                                            {selected.rehash_at && (
+                                                <small className="lead-created">
+                                                    Rehash{' '}
+                                                    {formatDate(
+                                                        selected.rehash_at,
+                                                    )}
+                                                </small>
+                                            )}
                                         </div>
                                         <button
                                             type="button"
@@ -2782,9 +3077,14 @@ export default function LeadsShop({
                                                 )}
                                             </label>
                                         )}
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.customer_name,
+                                            )}
+                                        >
                                             <span>Customer name</span>
                                             <input
+                                                required
                                                 value={form.data.customer_name}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -2825,10 +3125,15 @@ export default function LeadsShop({
                                                 </em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.primary_number,
+                                            )}
+                                        >
                                             <span>Primary phone</span>
                                             <div className="lead-edit-phone">
                                                 <input
+                                                    required
                                                     value={
                                                         form.data.primary_number
                                                     }
@@ -2934,9 +3239,15 @@ export default function LeadsShop({
                                                 <em>{form.errors.email}</em>
                                             )}
                                         </label>
-                                        <label className="lead-edit-field--wide">
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.address,
+                                                'lead-edit-field--wide',
+                                            )}
+                                        >
                                             <span>Address</span>
                                             <input
+                                                required
                                                 value={form.data.address}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -2949,9 +3260,14 @@ export default function LeadsShop({
                                                 <em>{form.errors.address}</em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.city,
+                                            )}
+                                        >
                                             <span>City</span>
                                             <input
+                                                required
                                                 value={form.data.city}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -2964,9 +3280,14 @@ export default function LeadsShop({
                                                 <em>{form.errors.city}</em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.state,
+                                            )}
+                                        >
                                             <span>State</span>
                                             <input
+                                                required
                                                 value={form.data.state}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -2979,9 +3300,14 @@ export default function LeadsShop({
                                                 <em>{form.errors.state}</em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.zip_code,
+                                            )}
+                                        >
                                             <span>ZIP code</span>
                                             <input
+                                                required
                                                 value={form.data.zip_code}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -3078,9 +3404,14 @@ export default function LeadsShop({
                                                 </em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.product_id,
+                                            )}
+                                        >
                                             <span>Product</span>
                                             <select
+                                                required
                                                 value={form.data.product_id}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -3107,9 +3438,14 @@ export default function LeadsShop({
                                                 </em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.appointment_at,
+                                            )}
+                                        >
                                             <span>Appointment</span>
                                             <input
+                                                required
                                                 type="datetime-local"
                                                 value={form.data.appointment_at}
                                                 onChange={(event) =>
@@ -3170,9 +3506,14 @@ export default function LeadsShop({
                                                 )}
                                             </label>
                                         )}
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.company_id,
+                                            )}
+                                        >
                                             <span>Company</span>
                                             <select
+                                                required
                                                 value={form.data.company_id}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -3199,11 +3540,16 @@ export default function LeadsShop({
                                                 </em>
                                             )}
                                         </label>
-                                        <label>
+                                        <label
+                                            className={requiredEditFieldClass(
+                                                form.data.agent_id,
+                                            )}
+                                        >
                                             <span>
                                                 Original agent / reassign
                                             </span>
                                             <select
+                                                required
                                                 value={form.data.agent_id}
                                                 onChange={(event) =>
                                                     form.setData(
@@ -4044,6 +4390,21 @@ export default function LeadsShop({
                                                                         >
                                                                             <Save />
                                                                         </button>
+                                                                        {queue?.status ===
+                                                                            'dispatched' &&
+                                                                            selected
+                                                                                .salesman_one
+                                                                                ?.phone && (
+                                                                                <RingCentralCallButton
+                                                                                    className="lead-inline-save lead-inline-sms"
+                                                                                    leadId={selected.id}
+                                                                                    phone={selected.salesman_one.phone}
+                                                                                    phoneSlot="salesman_1"
+                                                                                    title={`Call ${selected.salesman_one.salesman_name}`}
+                                                                                >
+                                                                                    <PhoneCall />
+                                                                                </RingCentralCallButton>
+                                                                            )}
                                                                         <button
                                                                             type="button"
                                                                             className="lead-inline-save lead-inline-sms"
@@ -4133,6 +4494,21 @@ export default function LeadsShop({
                                                                         >
                                                                             <Save />
                                                                         </button>
+                                                                        {queue?.status ===
+                                                                            'dispatched' &&
+                                                                            selected
+                                                                                .salesman_two
+                                                                                ?.phone && (
+                                                                                <RingCentralCallButton
+                                                                                    className="lead-inline-save lead-inline-sms"
+                                                                                    leadId={selected.id}
+                                                                                    phone={selected.salesman_two.phone}
+                                                                                    phoneSlot="salesman_2"
+                                                                                    title={`Call ${selected.salesman_two.salesman_name}`}
+                                                                                >
+                                                                                    <PhoneCall />
+                                                                                </RingCentralCallButton>
+                                                                            )}
                                                                     </div>
                                                                 </span>
                                                             </div>
@@ -4422,15 +4798,21 @@ export default function LeadsShop({
                                         disabled={
                                             !selected ||
                                             isEditing ||
+                                            !canMoveToStatus(status) ||
                                             (status !== 'history' &&
                                                 selected?.status === status)
+                                        }
+                                        title={
+                                            !canMoveToStatus(status)
+                                                ? 'You do not have permission to move leads to this tab.'
+                                                : undefined
                                         }
                                         onClick={() =>
                                             status === 'history'
                                                 ? setHistoryType('all')
                                                 : status === 'sale'
                                                   ? openSaleModal()
-                                                  : updateLeadStatus(status)
+                                                  : requestStatusUpdate(status)
                                         }
                                     >
                                         <Icon /> {label}
@@ -4599,6 +4981,226 @@ export default function LeadsShop({
                                         : 'Save note'}
                                 </button>
                             </footer>
+                        </section>
+                    </div>
+                )}
+
+                {selected?.duplicate_of &&
+                    dismissedDuplicateId !== selected.id && (
+                        <div
+                            className="lead-note-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="lead-duplicate-title"
+                        >
+                            <section className="lead-note-modal__card lead-sale-modal__card lead-duplicate-modal__card">
+                                <header>
+                                    <div>
+                                        <span>
+                                            <RotateCcw />
+                                        </span>
+                                        <div>
+                                            <h2 id="lead-duplicate-title">
+                                                Duplicate lead detected
+                                            </h2>
+                                            <p>
+                                                This newer CallTools lead matches
+                                                an older lead by phone number.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        disabled={duplicateResolving}
+                                        onClick={() =>
+                                            setDismissedDuplicateId(selected.id)
+                                        }
+                                        aria-label="Decide later"
+                                        title="Decide later"
+                                    >
+                                        <X />
+                                    </button>
+                                </header>
+                                <div className="lead-duplicate-modal__body">
+                                    <div>
+                                        <small>New duplicate</small>
+                                        <strong>{selected.customer_name}</strong>
+                                        <span>
+                                            {formatPhoneNumber(
+                                                selected.primary_number,
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <small>Original lead to keep</small>
+                                        <strong>
+                                            {selected.duplicate_of.customer_name}
+                                        </strong>
+                                        <span>
+                                            {formatPhoneNumber(
+                                                selected.duplicate_of
+                                                    .primary_number,
+                                            )}
+                                        </span>
+                                        {duplicateOriginal && (
+                                            <span className="lead-duplicate-modal__location">
+                                                Current tab:{' '}
+                                                <strong>
+                                                    {duplicateOriginal.label}
+                                                </strong>
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p>
+                                        Merge keeps the original lead and moves
+                                        the new lead’s notes and available extra
+                                        information into it. Delete removes only
+                                        the newer duplicate.
+                                    </p>
+                                    <div className="lead-duplicate-modal__actions">
+                                        {duplicateOriginal && (
+                                            <button
+                                                type="button"
+                                                className="lead-duplicate-modal__view"
+                                                disabled={duplicateResolving}
+                                                onClick={() =>
+                                                    router.visit(
+                                                        duplicateOriginal.url,
+                                                    )
+                                                }
+                                            >
+                                                <Search /> View original lead
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            disabled={duplicateResolving}
+                                            onClick={() =>
+                                                resolveDuplicate('delete')
+                                            }
+                                        >
+                                            <Trash2 /> Delete newest duplicate
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={duplicateResolving}
+                                            onClick={() =>
+                                                resolveDuplicate('merge')
+                                            }
+                                        >
+                                            <RotateCcw />
+                                            {duplicateResolving
+                                                ? 'Resolving…'
+                                                : 'Merge into original'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    )}
+
+                {followUpDestination && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-follow-up-title"
+                        onMouseDown={(event) => {
+                            if (
+                                event.target === event.currentTarget &&
+                                !followUpProcessing
+                            ) {
+                                setFollowUpDestination(null);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-sale-modal__card">
+                            <header>
+                                <div>
+                                    <span>
+                                        <CalendarClock />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-follow-up-title">
+                                            Schedule follow-up call
+                                        </h2>
+                                        <p>
+                                            Required before moving{' '}
+                                            {selected.customer_name} to{' '}
+                                            {workflowLocation(
+                                                followUpDestination,
+                                            )}.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    disabled={followUpProcessing}
+                                    onClick={() =>
+                                        setFollowUpDestination(null)
+                                    }
+                                    aria-label="Close follow-up modal"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+
+                            <form
+                                className="lead-sale-modal__form lead-follow-up-modal__form"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    if (!followUpAt) {
+                                        setFollowUpError(
+                                            'Choose the follow-up date and time.',
+                                        );
+
+                                        return;
+                                    }
+                                    updateLeadStatus(
+                                        followUpDestination,
+                                        followUpAt,
+                                    );
+                                }}
+                            >
+                                <label>
+                                    <span>When is the follow-up call?</span>
+                                    <input
+                                        type="datetime-local"
+                                        required
+                                        autoFocus
+                                        value={followUpAt}
+                                        onChange={(event) => {
+                                            setFollowUpAt(event.target.value);
+                                            setFollowUpError('');
+                                        }}
+                                    />
+                                    {followUpError && (
+                                        <small>{followUpError}</small>
+                                    )}
+                                </label>
+                                <div className="lead-sale-modal__actions">
+                                    <button
+                                        type="button"
+                                        disabled={followUpProcessing}
+                                        onClick={() =>
+                                            setFollowUpDestination(null)
+                                        }
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={
+                                            followUpProcessing || !followUpAt
+                                        }
+                                    >
+                                        <CalendarClock />
+                                        {followUpProcessing
+                                            ? 'Moving lead…'
+                                            : `Move to ${workflowLocation(followUpDestination)}`}
+                                    </button>
+                                </div>
+                            </form>
                         </section>
                     </div>
                 )}

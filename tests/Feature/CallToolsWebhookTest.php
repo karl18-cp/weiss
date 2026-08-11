@@ -161,6 +161,27 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->and(LeadNote::query()->where('lead_id', $lead->id)->count())->toBe(1);
 });
 
+test('calltools marks a new contact with the same normalized phone as a duplicate of the older lead', function () {
+    configureCallToolsWebhook();
+
+    $this->withToken('test-webhook-secret')->postJson(route('webhooks.calltools'), [
+        'contact_id' => 'older-phone-contact',
+        'phone_number' => '+1 (555) 777-8899',
+        'first_name' => 'Older',
+    ])->assertCreated();
+
+    $this->withToken('test-webhook-secret')->postJson(route('webhooks.calltools'), [
+        'contact_id' => 'newer-phone-contact',
+        'phone_number' => '555-777-8899',
+        'first_name' => 'Newer',
+    ])->assertCreated();
+
+    $older = Lead::query()->where('calltools_contact_id', 'older-phone-contact')->firstOrFail();
+    $newer = Lead::query()->where('calltools_contact_id', 'newer-phone-contact')->firstOrFail();
+
+    expect($newer->duplicate_of_id)->toBe($older->id);
+});
+
 test('calltools note variants are saved as telemarketer notes', function () {
     configureCallToolsWebhook();
 

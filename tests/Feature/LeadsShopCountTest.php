@@ -6,11 +6,163 @@ use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadMovement;
 use App\Models\Manager;
+use App\Models\ManagerPermission;
 use App\Models\Product;
 use App\Models\Salesman;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
+
+function createCallbackManager(string $username, bool $canViewAll = false): Account
+{
+    $account = Account::query()->create([
+        'username' => $username,
+        'password' => 'password',
+        'role' => 'manager',
+    ]);
+    $manager = Manager::query()->create([
+        'account_id' => $account->acc_id,
+        'manager_name' => $username,
+        'phone' => '',
+        'manager_types' => ['Leads Manager'],
+    ]);
+    ManagerPermission::query()->create([
+        'manager_id' => $manager->manager_id,
+        'module' => 'leads_shop',
+        'access_level' => 'view',
+    ]);
+    ManagerPermission::query()->create([
+        'manager_id' => $manager->manager_id,
+        'module' => 'view_all_callbacks',
+        'access_level' => $canViewAll ? 'edit' : 'none',
+    ]);
+
+    return $account;
+}
+
+function createOwnedCallbackLead(Account $creator, Account $owner, Agent $agent, string $name): Lead
+{
+    $lead = Lead::query()->create([
+        'customer_name' => $name,
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000888',
+        'address' => '8 Callback Street',
+        'zip_code' => '90001',
+        'city' => 'Los Angeles',
+        'county' => '',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'telemarketer_notes' => '',
+        'source' => 'CallTools',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $creator->acc_id,
+        'status' => 'fresh',
+    ]);
+
+    Lead::query()->whereKey($lead->id)->update(['status' => 'cb']);
+    LeadMovement::query()->create([
+        'lead_id' => $lead->id,
+        'from_status' => 'fresh',
+        'to_status' => 'cb',
+        'moved_by' => $owner->acc_id,
+    ]);
+
+    return $lead->fresh();
+}
+
+test('leads shop keeps the last 30 dates visible when they have no leads', function () {
+    $account = Account::query()->create([
+        'username' => 'empty-date-navigator-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $today = now('America/Los_Angeles')->toDateString();
+    $oldestVisibleDate = now('America/Los_Angeles')->subDays(29)->toDateString();
+
+    $this->actingAs($account)
+        ->get(route('lead-workflow.leads-shop'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedDate', $today)
+            ->has('dateRows', 30)
+            ->where('dateRows.0.key', $today)
+            ->where('dateRows.0.count', 0)
+            ->where('dateRows.29.key', $oldestVisibleDate)
+            ->where('dateRows.29.count', 0));
+});
+
+test('leads shop header counts manager returns from restricted workflow tabs', function () {
+    $firstManager = createCallbackManager('Return Counter Manager One');
+    $secondManager = createCallbackManager('Return Counter Manager Two');
+    $admin = Account::query()->create([
+        'username' => 'return-counter-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => 'Return Counter Agent']);
+    $firstLead = createOwnedCallbackLead($admin, $firstManager, $agent, 'First Returned Lead');
+    $secondLead = createOwnedCallbackLead($admin, $secondManager, $agent, 'Second Returned Lead');
+
+    LeadMovement::query()->create([
+        'lead_id' => $firstLead->id,
+        'from_status' => 'his',
+        'to_status' => 'fresh',
+        'moved_by' => $firstManager->acc_id,
+    ]);
+    LeadMovement::query()->create([
+        'lead_id' => $secondLead->id,
+        'from_status' => 'reschedule',
+        'to_status' => 'fresh',
+        'moved_by' => $secondManager->acc_id,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('lead-workflow.leads-shop'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('agentDayTotal', 0)
+            ->where('overallDayTotal', 2)
+            ->where('managerReturns.leads', 2)
+            ->where('managerReturns.managers', 2));
+});
+
+test('managers only see callbacks they moved into the callback queue', function () {
+    $firstManager = createCallbackManager('Callback Manager One');
+    $secondManager = createCallbackManager('Callback Manager Two');
+    $admin = Account::query()->create(['username' => 'callback-owner-admin', 'password' => 'password', 'role' => 'admin']);
+    $agent = Agent::query()->create(['agent_name' => 'Callback Ownership Agent']);
+
+    createOwnedCallbackLead($admin, $firstManager, $agent, 'First Manager Callback');
+    createOwnedCallbackLead($admin, $secondManager, $agent, 'Second Manager Callback');
+
+    $this->actingAs($firstManager)
+        ->get(route('lead-workflow.leads-shop'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('leads', 1)
+            ->where('leads.0.customer_name', 'First Manager Callback'));
+});
+
+test('a manager with callback visibility permission sees every managers callbacks', function () {
+    $viewer = createCallbackManager('Callback Manager Viewer', true);
+    $otherManager = createCallbackManager('Callback Manager Other');
+    $admin = Account::query()->create(['username' => 'callback-view-admin', 'password' => 'password', 'role' => 'admin']);
+    $agent = Agent::query()->create(['agent_name' => 'Callback Visibility Agent']);
+
+    createOwnedCallbackLead($admin, $viewer, $agent, 'Viewer Callback');
+    createOwnedCallbackLead($admin, $otherManager, $agent, 'Other Manager Callback');
+
+    $this->actingAs($viewer)
+        ->get(route('lead-workflow.leads-shop'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('leads', 2)
+            ->where('leads', fn ($leads): bool => collect($leads)
+                ->pluck('customer_name')
+                ->sort()
+                ->values()
+                ->all() === ['Other Manager Callback', 'Viewer Callback']));
+});
 
 test('leads shop only loads and counts leads that remain in its statuses', function () {
     $account = Account::query()->create([
@@ -203,8 +355,10 @@ test('verify queue is not constrained by the selected lead created date', functi
             ->component('lead-workflow/leads-shop')
             ->where('activeShopStatus', 'verify')
             ->where('verifyCount', 2)
-            ->has('leads', 2)
-            ->where('leads', fn ($leads): bool => collect($leads)
+            ->where('leads.per_page', 25)
+            ->where('leads.total', 2)
+            ->has('leads.data', 2)
+            ->where('leads.data', fn ($leads): bool => collect($leads)
                 ->pluck('customer_name')
                 ->sort()
                 ->values()
@@ -389,7 +543,8 @@ test('leads shop defaults to today and counts current destinations for leads cre
             ->where('selectedDate', $confirmationDate));
 });
 
-test('his groups and filters leads by appointment month', function () {
+test('his expands the current month into dates and keeps past months grouped', function () {
+    $this->travelTo('2026-08-11 12:00:00');
     $account = Account::query()->create([
         'username' => 'his-month-admin',
         'password' => 'password',
@@ -401,6 +556,8 @@ test('his groups and filters leads by appointment month', function () {
         ['July One', '2026-07-02 09:00:00'],
         ['July Two', '2026-07-29 15:30:00'],
         ['June One', '2026-06-18 11:00:00'],
+        ['August One', '2026-08-03 11:00:00'],
+        ['August Two', '2026-08-10 09:00:00'],
     ] as [$name, $appointment]) {
         Lead::query()->create([
             'customer_name' => $name,
@@ -449,13 +606,24 @@ test('his groups and filters leads by appointment month', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/his')
-            ->where('dateGranularity', 'month')
+            ->where('dateGranularity', 'hybrid')
             ->where('selectedDate', '2026-07')
-            ->where('dateRows.0.key', '2026-07')
-            ->where('dateRows.0.count', 3)
-            ->where('dateRows.1.key', '2026-06')
+            ->where('dateRows.0.key', '2026-08-10')
+            ->where('dateRows.0.count', 1)
+            ->where('dateRows.1.key', '2026-08-03')
             ->where('dateRows.1.count', 1)
-            ->has('leads', 3));
+            ->where('dateRows.2.key', '2026-07')
+            ->where('dateRows.2.count', 3)
+            ->where('dateRows.3.key', '2026-06')
+            ->where('dateRows.3.count', 1)
+            ->has('leads.data', 3));
+
+    $this->get(route('lead-workflow.his', ['date' => '2026-08-10']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedDate', '2026-08-10')
+            ->has('leads.data', 1)
+            ->where('leads.data.0.customer_name', 'August Two'));
 });
 
 test('salesmen are redirected away from the full CRM leads shop', function () {
@@ -625,6 +793,44 @@ test('admins can permanently delete sample leads', function () {
         ->assertRedirect();
 
     $this->assertDatabaseMissing('leads', ['id' => $lead->id]);
+});
+
+test('admins can delete a lead and its linked project together', function () {
+    $admin = Account::query()->create([
+        'username' => 'project-delete-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => 'Project Delete Agent']);
+    $lead = Lead::query()->create([
+        'customer_name' => 'Project Linked Lead',
+        'marital_status' => 'Unknown',
+        'primary_number' => '+15550000015',
+        'address' => '15 Test Street',
+        'zip_code' => '00000',
+        'city' => 'Test City',
+        'county' => 'Test County',
+        'state' => 'CA',
+        'years_in_house' => 0,
+        'telemarketer_notes' => 'Sample',
+        'source' => 'Sample',
+        'agent_id' => $agent->agent_id,
+        'created_by' => $admin->acc_id,
+        'status' => 'fresh',
+    ]);
+    $project = \App\Models\Project::query()->create([
+        'lead_id' => $lead->id,
+        'amount' => 1000,
+        'created_by' => $admin->acc_id,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('lead-workflow.leads-shop'))
+        ->delete(route('lead-workflow.leads-shop.destroy', $lead))
+        ->assertRedirect(route('lead-workflow.leads-shop'));
+
+    $this->assertDatabaseMissing('leads', ['id' => $lead->id]);
+    $this->assertDatabaseMissing('projects', ['id' => $project->id]);
 });
 
 test('non-admin accounts cannot permanently delete leads', function () {

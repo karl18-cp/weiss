@@ -152,12 +152,30 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
         'project_code' => 'SCORE#001',
     ]);
     $product = Product::create(['product_name' => 'Scoreboard Product']);
-    $agent = Agent::create(['agent_name' => 'Scoreboard Agent']);
+    $agent = Agent::create([
+        'agent_name' => 'Scoreboard Agent',
+        'calltools_user_id' => 'scoreboard-calltools-user',
+    ]);
+    $absentAgent = Agent::create([
+        'agent_name' => 'Absent Scoreboard Agent',
+        'calltools_user_id' => 'absent-calltools-user',
+    ]);
     $team = Team::create([
         'team_name' => 'Scoreboard Team',
         'manager_id' => $manager->manager_id,
     ]);
     $team->agents()->attach($agent->agent_id);
+    $team->agents()->attach($absentAgent->agent_id);
+
+    DB::table('calltools_user_login_shifts')->insert([
+        'calltools_id' => 'scoreboard-shift',
+        'app_user_id' => 'scoreboard-calltools-user',
+        'started_at' => '2026-07-29 17:00:00',
+        'stopped_at' => '2026-07-30 01:00:00',
+        'duration_seconds' => 28800,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
 
     $makeLead = function (
         string $name,
@@ -251,6 +269,7 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
         ->assertInertia(fn (Assert $page) => $page
             ->component('team-dashboard')
             ->where('filters.timezone', 'America/Los_Angeles')
+            ->where('summary.workedAgents', 1)
             ->where('teams.0.name', 'Scoreboard Team')
             ->where('teams.0.total', 4)
             ->where('teams.0.confirmed', 2)
@@ -258,5 +277,8 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
             ->where('teams.0.agents.0.name', 'Scoreboard Agent')
             ->where('teams.0.agents.0.total', 4)
             ->where('teams.0.agents.0.confirmed', 2)
-            ->where('teams.0.agents.0.sold', 2));
+            ->where('teams.0.agents.0.sold', 2)
+            ->where('teams.0.agents.0.worked', true)
+            ->where('teams.0.agents.1.name', 'Absent Scoreboard Agent')
+            ->where('teams.0.agents.1.worked', false));
 });

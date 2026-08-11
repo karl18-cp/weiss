@@ -26,6 +26,7 @@ class DataTeleHoursController extends Controller
         $from = $selectedDate->startOfDay()->utc();
         $to = $selectedDate->endOfDay()->utc();
         $agents = Agent::query()
+            ->whereNull('inactive_at')
             ->orderBy('agent_name')
             ->get(['agent_id', 'agent_name', 'calltools_user_id']);
         $agentsByCallToolsId = $agents->whereNotNull('calltools_user_id')

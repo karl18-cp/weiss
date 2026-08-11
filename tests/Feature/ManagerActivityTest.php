@@ -24,7 +24,7 @@ function managerActivityFixtures(): array
         'account_id' => $firstAccount->acc_id,
         'manager_name' => 'Activity One',
         'phone' => '',
-        'manager_types' => [],
+        'manager_types' => ['Leads Manager'],
     ]);
     $secondManager = Manager::query()->create([
         'account_id' => $secondAccount->acc_id,
@@ -116,8 +116,49 @@ test('manager activity permission exposes every managers calls and lead history'
             ->component('lead-workflow/manager-activity')
             ->where('canViewAll', true)
             ->has('managers', 2)
+            ->where('managers.0.manager_types', ['Leads Manager'])
             ->has('calls.data', 2)
             ->has('activities.data', 0));
+});
+
+test('view all manager activity can filter history by confirm and dispatch movements', function () {
+    ['firstAccount' => $firstAccount, 'firstManager' => $firstManager, 'lead' => $lead] = managerActivityFixtures();
+    $firstManager->permissions()->create([
+        'module' => 'manager_history',
+        'access_level' => 'view',
+    ]);
+    LeadMovement::query()->create([
+        'lead_id' => $lead->id,
+        'from_status' => 'fresh',
+        'to_status' => 'confirmed',
+        'moved_by' => $firstAccount->acc_id,
+    ]);
+
+    $this->actingAs($firstAccount)
+        ->get(route('lead-workflow.call-logs', [
+            'view' => 'history',
+            'destination' => 'confirmed',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.destination', 'confirmed')
+            ->has('activities.data', 1)
+            ->where('activities.data.0.description', 'Moved lead from fresh to confirmed.'));
+});
+
+test('manager without view all access cannot apply a destination filter', function () {
+    ['firstAccount' => $firstAccount] = managerActivityFixtures();
+
+    $this->actingAs($firstAccount)
+        ->get(route('lead-workflow.call-logs', [
+            'view' => 'history',
+            'destination' => 'confirmed',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('canViewAll', false)
+            ->where('filters.destination', null)
+            ->where('activities.total', 3));
 });
 
 test('manager activity loads lead history only when the history view is selected', function () {

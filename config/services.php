@@ -46,6 +46,8 @@ return [
         'jwt' => env('RINGCENTRAL_JWT'),
         'from_number' => env('RINGCENTRAL_FROM_NUMBER'),
         'default_country_code' => env('RINGCENTRAL_DEFAULT_COUNTRY_CODE', '1'),
+        'import_call_logs' => env('RINGCENTRAL_IMPORT_CALL_LOGS', true),
+        'import_window_hours' => env('RINGCENTRAL_IMPORT_WINDOW_HOURS', 48),
     ],
 
     'calltools' => [

@@ -37,6 +37,7 @@ test('appointment result note is saved with a move and remains loaded in the des
     $this->actingAs($account)
         ->patch(route('lead-workflow.leads-shop.status.update', $lead), [
             'status' => 'reschedule',
+            'follow_up_at' => now()->addDay()->format('Y-m-d H:i:s'),
             'appointment_result_note' => 'Customer requested a new appointment date.',
         ])
         ->assertRedirect();
