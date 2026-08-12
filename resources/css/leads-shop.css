@@ -569,6 +569,28 @@
     cursor: pointer;
 }
 
+.lead-dropdown-filters .lead-city-search input {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 0.15rem;
+    color: #536177;
+    background: transparent;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.2;
+    outline: none;
+    text-align: center;
+}
+
+.lead-dropdown-filters .lead-city-search input::placeholder {
+    color: #536177;
+    opacity: 1;
+}
+
+.lead-dropdown-filters .lead-city-search::after {
+    display: none;
+}
+
 .lead-dropdown-filters select option {
     font-size: 0.76rem;
     font-weight: 800;

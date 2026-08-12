@@ -282,3 +282,44 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
             ->where('teams.0.agents.1.name', 'Absent Scoreboard Agent')
             ->where('teams.0.agents.1.worked', false));
 });
+
+test('team dashboard treats a live calltools login as worked before its shift is imported', function () {
+    $this->travelTo(CarbonImmutable::create(2026, 8, 11, 12, 0, 0, 'America/Los_Angeles'));
+    $account = Account::query()->create([
+        'username' => 'live-dashboard@example.com',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $manager = Manager::query()->create([
+        'account_id' => $account->acc_id,
+        'manager_name' => 'Live Dashboard Manager',
+        'phone' => '',
+        'manager_types' => ['manager'],
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Live Dashboard Agent',
+        'calltools_user_id' => 'live-dashboard-agent',
+    ]);
+    $team = Team::query()->create([
+        'team_name' => 'Live Dashboard Team',
+        'manager_id' => $manager->manager_id,
+    ]);
+    $team->agents()->attach($agent->agent_id);
+    DB::table('calltools_agent_daily_metrics')->insert([
+        'app_user_id' => 'live-dashboard-agent',
+        'metric_date' => now('UTC')->toDateString(),
+        'logged_in' => true,
+        'logged_in_since' => now('UTC')->subHour(),
+        'captured_at' => now('UTC'),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($account)
+        ->get(route('team-dashboard', ['period' => 'daily', 'date' => '2026-08-11']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('summary.workedAgents', 1)
+            ->where('teams.0.agents.0.name', 'Live Dashboard Agent')
+            ->where('teams.0.agents.0.worked', true));
+});

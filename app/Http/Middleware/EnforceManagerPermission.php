@@ -38,6 +38,8 @@ class EnforceManagerPermission
         ) {
             return $next($request);
         }
+        $isLeadsShopStatusAction = ! $request->isMethod('GET')
+            && preg_match('#^lead-workflow/leads-shop/\d+/status$#', $permissionPath) === 1;
         if (! $request->isMethod('GET') && str_starts_with($permissionPath, 'lead-workflow/leads-shop/')) {
             $previousPath = parse_url(url()->previous(), PHP_URL_PATH);
             if (is_string($previousPath)) {
@@ -57,7 +59,9 @@ class EnforceManagerPermission
             default => null,
         };
         $level = $profile?->permissions()->where('module', $module)->value('access_level') ?? 'none';
-        $allowed = $request->isMethod('GET') ? in_array($level, ['view', 'edit'], true) : $level === 'edit';
+        $allowed = $request->isMethod('GET') || ($isLeadsShopStatusAction && $module === 'leads_shop')
+            ? in_array($level, ['view', 'edit'], true)
+            : $level === 'edit';
         if (! $allowed && $request->isMethod('GET') && $module === 'dashboard') {
             $fallback = ManagerAccess::firstAllowedPath($user);
 

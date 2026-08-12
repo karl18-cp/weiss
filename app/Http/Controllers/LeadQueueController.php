@@ -122,7 +122,7 @@ class LeadQueueController extends Controller
 
     public function fiveFiveFive(): Response
     {
-        return $this->renderQueue('lead-workflow/five-five-five', '555');
+        return $this->renderQueue('lead-workflow/five-five-five', ['555', 'la', 'ng', 'toss']);
     }
 
     public function la(): Response

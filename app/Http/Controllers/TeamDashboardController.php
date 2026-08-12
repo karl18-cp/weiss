@@ -61,6 +61,24 @@ class TeamDashboardController extends Controller
                 ->pluck('agent.agent_id')
                 ->map(fn ($id): int => (int) $id);
         }
+        $today = CarbonImmutable::today($timezone);
+        if (
+            $today->betweenIncluded($start, $end)
+            && Schema::hasTable('calltools_agent_daily_metrics')
+        ) {
+            $liveAgentIds = DB::table('calltools_agent_daily_metrics as metric')
+                ->join('agents as agent', 'agent.calltools_user_id', '=', 'metric.app_user_id')
+                ->where('metric.logged_in', true)
+                ->whereDate('metric.metric_date', now('UTC')->toDateString())
+                ->whereBetween('metric.logged_in_since', [
+                    $start->startOfDay()->utc(),
+                    $end->endOfDay()->utc(),
+                ])
+                ->distinct()
+                ->pluck('agent.agent_id')
+                ->map(fn ($id): int => (int) $id);
+            $workedAgentIds = $workedAgentIds->merge($liveAgentIds)->unique()->values();
+        }
 
         $scores = $leads
             ->groupBy(fn (Lead $lead): int => (int) $lead->agent_id)

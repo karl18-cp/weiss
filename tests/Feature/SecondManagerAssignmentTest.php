@@ -71,6 +71,33 @@ test('manager moving a leads shop lead to confirm becomes its second manager', f
     expect($lead->fresh()->manager_2_id)->toBe($manager->manager_id);
 });
 
+test('manager with leads shop view access can use its workflow buttons without destination permissions', function () {
+    ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('fresh');
+
+    $manager->permissions()->where('module', 'leads_shop')->update(['access_level' => 'view']);
+    $manager->permissions()->whereIn('module', ['confirm_leads', 'dispatch_leads', 'keep_in_touch'])->delete();
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.leads-shop'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'confirmed'])
+        ->assertRedirect();
+
+    expect($lead->fresh())
+        ->status->toBe('confirmed')
+        ->manager_2_id->toBe($manager->manager_id);
+});
+
+test('leads shop NG action moves the lead into the NG filter', function () {
+    ['account' => $account, 'lead' => $lead] = secondManagerFixture('fresh');
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.leads-shop'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'ng'])
+        ->assertRedirect();
+
+    expect($lead->fresh()->status)->toBe('ng');
+});
+
 test('manager moving a lead from another queue to dispatch fills a missing second manager', function () {
     ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('rehash');
 

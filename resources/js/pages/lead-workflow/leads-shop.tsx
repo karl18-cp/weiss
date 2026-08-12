@@ -325,6 +325,7 @@ export type LeadsShopProps = {
     selectedCity?: string;
     activeShopStatus?: string | null;
     verifyCount?: number;
+    ngCount?: number;
     dateField: DateField;
     dateGranularity?: 'day' | 'month' | 'hybrid';
     timezoneOffset: number;
@@ -705,6 +706,7 @@ function BlankLeadDetail({ queueStatus }: { queueStatus?: string }) {
             'cb',
             'naov',
             'verify',
+            'ng',
             'confirmed',
             'rehash',
         ].includes(queueStatus ?? '');
@@ -869,6 +871,7 @@ export default function LeadsShop({
     selectedCity = 'all',
     activeShopStatus = null,
     verifyCount = 0,
+    ngCount = 0,
     dateField: serverDateField,
     dateGranularity = 'day',
     timezoneOffset,
@@ -949,15 +952,15 @@ export default function LeadsShop({
                     ? {
                       search: nextSearch,
                       date_field: serverDateField,
-                      ...(activeShopStatus === 'verify'
-                          ? { queue_status: 'verify' }
+                      ...(activeShopStatus
+                          ? { queue_status: activeShopStatus }
                           : {}),
                       ...managerQuery,
                   }
                 : {
                       date_field: serverDateField,
-                      ...(activeShopStatus === 'verify'
-                          ? { queue_status: 'verify' }
+                      ...(activeShopStatus
+                          ? { queue_status: activeShopStatus }
                           : {}),
                       ...managerQuery,
                   },
@@ -972,6 +975,7 @@ export default function LeadsShop({
                         'dateField',
                         'activeShopStatus',
                         'verifyCount',
+                        'ngCount',
                     ],
                 },
             );
@@ -987,6 +991,9 @@ export default function LeadsShop({
     const [companyFilter, setCompanyFilter] = useState('all');
     const [sourceFilter, setSourceFilter] = useState('all');
     const [cityFilter, setCityFilter] = useState(selectedCity);
+    const [citySearch, setCitySearch] = useState(
+        selectedCity === 'all' ? '' : formatCity(selectedCity),
+    );
     const [productFilter, setProductFilter] = useState('all');
     const [agentFilter, setAgentFilter] = useState('all');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1030,12 +1037,15 @@ export default function LeadsShop({
         if (status === 'his') return 'his';
         if (['kit', 'kit_ng', 'kit_cb'].includes(status))
             return 'keep_in_touch';
-        if (['raw', 'cb', 'naov', 'verify'].includes(status))
+        if (['raw', 'cb', 'naov', 'verify', 'ng'].includes(status))
             return 'leads_shop';
 
         return null;
     };
     const canMoveToStatus = (status: string): boolean => {
+        if (window.location.pathname === '/lead-workflow/leads-shop') {
+            return true;
+        }
         if (
             hasRestrictedQueueActions &&
             !canUseRestrictedQueueActions &&
@@ -1062,6 +1072,7 @@ export default function LeadsShop({
     const [followUpDestination, setFollowUpDestination] = useState<
         'kit' | 'rehash' | 'reschedule' | null
     >(null);
+    const [fiveFiveFiveModalOpen, setFiveFiveFiveModalOpen] = useState(false);
     const [followUpAt, setFollowUpAt] = useState('');
     const [followUpError, setFollowUpError] = useState('');
     const [followUpProcessing, setFollowUpProcessing] = useState(false);
@@ -1218,6 +1229,7 @@ export default function LeadsShop({
                 isEditing ||
                 saleModalOpen ||
                 followUpDestination !== null ||
+                fiveFiveFiveModalOpen ||
                 form.processing ||
                 telemarketerNoteForm.processing ||
                 confirmationNoteForm.processing ||
@@ -1260,6 +1272,7 @@ export default function LeadsShop({
         dispatchNoteForm.processing,
         form.processing,
         followUpDestination,
+        fiveFiveFiveModalOpen,
         isEditing,
         saleForm.processing,
         saleModalOpen,
@@ -1312,7 +1325,8 @@ export default function LeadsShop({
         nextDateField: DateField = effectiveDateField,
     ) => {
         setCityFilter('all');
-        if (activeShopStatus === 'verify') setSelectedStatus('fresh');
+        setCitySearch('');
+        if (activeShopStatus) setSelectedStatus('fresh');
         router.get(
             window.location.pathname,
             {
@@ -1332,8 +1346,8 @@ export default function LeadsShop({
             window.location.pathname,
             {
                 date_field: effectiveDateField,
-                ...(activeShopStatus === 'verify'
-                    ? { queue_status: 'verify' }
+                ...(activeShopStatus
+                    ? { queue_status: activeShopStatus }
                     : {}),
                 ...managerQuery,
                 ...(city !== 'all' ? { city } : {}),
@@ -1347,9 +1361,30 @@ export default function LeadsShop({
                     'selectedCity',
                     'activeShopStatus',
                     'verifyCount',
+                    'ngCount',
                 ],
             },
         );
+    };
+
+    const searchForCity = (value: string) => {
+        setCitySearch(value);
+        const normalized = value.trim().toLocaleLowerCase();
+
+        if (normalized === '') {
+            if (cityFilter !== 'all') filterByCity('all');
+            return;
+        }
+
+        const exactCity = filterOptions.cities.find(
+            (city) =>
+                city.toLocaleLowerCase() === normalized ||
+                formatCity(city).toLocaleLowerCase() === normalized,
+        );
+        if (exactCity && exactCity !== cityFilter) {
+            setCitySearch(formatCity(exactCity));
+            filterByCity(exactCity);
+        }
     };
 
     const filterOptions = useMemo(
@@ -1361,9 +1396,10 @@ export default function LeadsShop({
                         string,
                     ],
             ),
-            sources: Array.from(
-                new Set(leads.map((lead) => lead.source)),
-            ).sort(),
+            sources: [
+                ['managers', 'Managers'],
+                ['calltools', 'CallTools'],
+            ] as [string, string][],
             cities,
             products: products.map(
                 (product) =>
@@ -1413,6 +1449,7 @@ export default function LeadsShop({
                         ['raw', 'Raw'],
                         ['cb', 'CB'],
                         ['verify', 'Verify'],
+                        ['ng', 'NG'],
                     ] as const),
         [queue],
     );
@@ -1426,12 +1463,14 @@ export default function LeadsShop({
                         ? leads.length
                         : status === 'verify'
                         ? verifyCount
+                        : status === 'ng'
+                          ? ngCount
                         : leads.filter(
                               (lead) => (lead.status || 'fresh') === status,
                           ).length,
                 ]),
             ),
-        [isProjectQueue, leads, statusFilters, verifyCount],
+        [isProjectQueue, leads, ngCount, statusFilters, verifyCount],
     );
 
     const selectStatus = (status: string) => {
@@ -1440,12 +1479,12 @@ export default function LeadsShop({
         setSelectedId(null);
         setSelectedStatus(status);
 
-        if (status === 'verify' || activeShopStatus === 'verify') {
+        if (['verify', 'ng'].includes(status) || activeShopStatus) {
             router.get(
                 window.location.pathname,
                 {
-                    ...(status === 'verify'
-                        ? { queue_status: 'verify' }
+                    ...(['verify', 'ng'].includes(status)
+                        ? { queue_status: status }
                         : { date: selectedDate }),
                     date_field: effectiveDateField,
                 },
@@ -1457,6 +1496,7 @@ export default function LeadsShop({
                         'leads',
                         'activeShopStatus',
                         'verifyCount',
+                        'ngCount',
                         'selectedCity',
                     ],
                 },
@@ -1493,8 +1533,12 @@ export default function LeadsShop({
                 const matchesCompany =
                     companyFilter === 'all' ||
                     String(lead.company?.com_id) === companyFilter;
+                const leadSourceGroup = lead.rehash_at
+                    ? 'managers'
+                    : 'calltools';
                 const matchesSource =
-                    sourceFilter === 'all' || lead.source === sourceFilter;
+                    sourceFilter === 'all' ||
+                    leadSourceGroup === sourceFilter;
                 const matchesCity =
                     cityFilter === 'all' || lead.city === cityFilter;
                 const matchesProduct =
@@ -1595,6 +1639,7 @@ export default function LeadsShop({
         setCompanyFilter('all');
         setSourceFilter('all');
         setCityFilter('all');
+        setCitySearch('');
         setProductFilter('all');
         setAgentFilter('all');
         setIsRefreshing(true);
@@ -1971,6 +2016,7 @@ export default function LeadsShop({
                 onStart: () => setFollowUpProcessing(true),
                 onSuccess: () => {
                     setFollowUpDestination(null);
+                    setFiveFiveFiveModalOpen(false);
                     setFollowUpAt('');
                     setFollowUpError('');
                     router.flushAll();
@@ -2009,6 +2055,15 @@ export default function LeadsShop({
     };
 
     const requestStatusUpdate = (status: string) => {
+        if (
+            window.location.pathname === '/lead-workflow/leads-shop' &&
+            status === '555'
+        ) {
+            setFiveFiveFiveModalOpen(true);
+
+            return;
+        }
+
         if (
             isDispatchQueue &&
             ['kit', 'rehash', 'reschedule'].includes(status)
@@ -2271,6 +2326,7 @@ export default function LeadsShop({
         ['raw', 'Raw', Archive, 'raw'],
         ['cb', 'Call Back', PhoneCall, 'callback'],
         ['verify', 'Verify', BadgeCheck, 'confirm'],
+        ['ng', 'NG', Ban, 'naov'],
         ['history', 'History', History, 'history'],
     ] as const;
     const confirmWorkflowActions = [
@@ -2562,7 +2618,7 @@ export default function LeadsShop({
                                     {filteredLeads.length}{' '}
                                     {cityFilter !== 'all'
                                         ? `shown in ${formatCity(cityFilter)}`
-                                        : activeShopStatus === 'verify'
+                                        : activeShopStatus
                                           ? 'shown across all creation dates'
                                           : `shown for the selected ${selectedDate?.length === 7 ? 'month' : 'date'}`}
                                 </p>
@@ -2690,28 +2746,33 @@ export default function LeadsShop({
                                         }
                                     >
                                         <option value="all">All sources</option>
-                                        {filterOptions.sources.map((source) => (
-                                            <option key={source}>
-                                                {source}
+                                        {filterOptions.sources.map(([id, name]) => (
+                                            <option key={id} value={id}>
+                                                {name}
                                             </option>
                                         ))}
                                     </select>
                                 </label>
-                                <label>
+                                <label className="lead-city-search">
                                     <MapPin />
-                                    <select
-                                        value={cityFilter}
+                                    <input
+                                        type="search"
+                                        list="lead-city-options"
+                                        value={citySearch}
+                                        placeholder="Search cities"
+                                        aria-label="Search cities"
                                         onChange={(event) =>
-                                            filterByCity(event.target.value)
+                                            searchForCity(event.target.value)
                                         }
-                                    >
-                                        <option value="all">All cities</option>
+                                    />
+                                    <datalist id="lead-city-options">
                                         {filterOptions.cities.map((city) => (
-                                            <option key={city} value={city}>
-                                                {formatCity(city)}
-                                            </option>
+                                            <option
+                                                key={city}
+                                                value={formatCity(city)}
+                                            />
                                         ))}
-                                    </select>
+                                    </datalist>
                                 </label>
                                 <label>
                                     <Package />
@@ -3657,7 +3718,7 @@ export default function LeadsShop({
                                     </div>
                                 ) : (
                                     <div
-                                        className={`lead-detail__grid ${queue?.status === 'dispatched' ? 'lead-detail__grid--dispatch' : queue?.status && !['fresh', 'raw', 'cb', 'naov', 'verify', 'confirmed'].includes(queue.status) ? 'lead-detail__grid--three-notes' : ''}`}
+                                        className={`lead-detail__grid ${queue?.status === 'dispatched' ? 'lead-detail__grid--dispatch' : queue?.status && !['fresh', 'raw', 'cb', 'naov', 'verify', 'ng', 'confirmed'].includes(queue.status) ? 'lead-detail__grid--three-notes' : ''}`}
                                         ref={detailGridRef}
                                         style={leadCardLayoutStyle}
                                     >
@@ -4232,6 +4293,7 @@ export default function LeadsShop({
                                                         'cb',
                                                         'naov',
                                                         'verify',
+                                                        'ng',
                                                     ].includes(
                                                         queue!.status,
                                                     ) && (
@@ -4669,6 +4731,7 @@ export default function LeadsShop({
                                                 'cb',
                                                 'naov',
                                                 'verify',
+                                                'ng',
                                                 'confirmed',
                                                 'rehash',
                                             ].includes(queue.status) && (

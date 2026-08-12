@@ -54,8 +54,8 @@ class LeadsShopController extends Controller
         $requestedLeadId = $request->integer('lead') ?: null;
         $search = trim((string) $request->query('search', ''));
         $selectedCity = trim((string) $request->query('city', ''));
-        $activeShopStatus = $request->query('queue_status') === 'verify'
-            ? 'verify'
+        $activeShopStatus = in_array($request->query('queue_status'), ['verify', 'ng'], true)
+            ? (string) $request->query('queue_status')
             : null;
         $dateField = $request->query('date_field') === 'appointment_at'
             ? 'appointment_at'
@@ -114,6 +114,7 @@ class LeadsShopController extends Controller
         $this->scopeManagerCallbacks($queueQuery, $request);
 
         $verifyCount = (clone $queueQuery)->where('status', 'verify')->count();
+        $ngCount = (clone $queueQuery)->where('status', 'ng')->count();
 
         $dateCounts = $dateField === 'created_at'
             ? (clone $queueQuery)
@@ -254,14 +255,14 @@ class LeadsShopController extends Controller
         return Inertia::render('lead-workflow/leads-shop', [
             'leads' => (clone $queueQuery)
                 ->when(
-                    $activeShopStatus === 'verify',
-                    fn ($query) => $query->where('status', 'verify'),
+                    $activeShopStatus !== null,
+                    fn ($query) => $query->where('status', $activeShopStatus),
                 )
                 ->when(
                     $selectedCity !== '' && $selectedCity !== 'all',
                     fn ($query) => $query->where('city', $selectedCity),
                     fn ($query) => $query->when(
-                        $activeShopStatus !== 'verify',
+                        $activeShopStatus === null,
                         fn ($query) => $query->when(
                             $selectedDate,
                             fn ($query) => $dateField === 'created_at'
@@ -308,7 +309,7 @@ class LeadsShopController extends Controller
                 ->when($requestedLeadId, fn ($query) => $query->orderByRaw('id = ? DESC', [$requestedLeadId]))
                 ->latest()
                 ->when(
-                    $activeShopStatus === 'verify',
+                    $activeShopStatus !== null,
                     fn ($query) => $query->paginate(25)->withQueryString(),
                     fn ($query) => $query->get(),
                 ),
@@ -317,6 +318,7 @@ class LeadsShopController extends Controller
             'selectedCity' => $selectedCity !== '' ? $selectedCity : 'all',
             'activeShopStatus' => $activeShopStatus,
             'verifyCount' => $verifyCount,
+            'ngCount' => $ngCount,
             'dateField' => $dateField,
             'timezoneOffset' => (int) ($selectedCaliforniaDay->utcOffset() / 60),
             'movementDestinations' => $movementDestinations,
@@ -537,6 +539,8 @@ class LeadsShopController extends Controller
             (string) $request->headers->get('referer', ''),
             PHP_URL_PATH,
         );
+        $isLeadsShopAction = $sourcePath === '/lead-workflow/leads-shop'
+            || in_array($lead->status, ['fresh', 'raw', 'cb', 'naov', 'verify', 'ng'], true);
         $restrictedActionPaths = [
             '/lead-workflow/555',
             '/lead-workflow/reschedule',
@@ -585,13 +589,14 @@ class LeadsShopController extends Controller
             $status === 'la' => 'la',
             $status === 'his' => 'his',
             in_array($status, ['kit', 'kit_ng', 'kit_cb'], true) => 'keep_in_touch',
-            in_array($status, ['raw', 'cb', 'naov', 'verify'], true) => 'leads_shop',
+            in_array($status, ['raw', 'cb', 'naov', 'verify', 'ng'], true) => 'leads_shop',
             default => null,
         };
 
         if (
             $status !== 'fresh'
             && $destinationModule !== null
+            && ! $isLeadsShopAction
             && ! ManagerAccess::canEdit($request->user(), $destinationModule)
         ) {
             Inertia::flash('toast', [

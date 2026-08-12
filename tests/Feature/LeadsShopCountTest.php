@@ -320,6 +320,7 @@ test('verify queue is not constrained by the selected lead created date', functi
         ['Old Verify Lead', 'verify', '2026-07-01 12:00:00'],
         ['New Verify Lead', 'verify', '2026-08-05 12:00:00'],
         ['Same Day Fresh Lead', 'fresh', '2026-08-05 13:00:00'],
+        ['Old NG Lead', 'ng', '2026-07-02 13:00:00'],
     ] as [$name, $status, $createdAt]) {
         $lead = Lead::query()->create([
             'customer_name' => $name,
@@ -363,6 +364,17 @@ test('verify queue is not constrained by the selected lead created date', functi
                 ->sort()
                 ->values()
                 ->all() === ['New Verify Lead', 'Old Verify Lead']));
+
+    $this->get(route('lead-workflow.leads-shop', [
+        'queue_status' => 'ng',
+    ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('activeShopStatus', 'ng')
+            ->where('ngCount', 1)
+            ->where('leads.per_page', 25)
+            ->where('leads.total', 1)
+            ->where('leads.data.0.customer_name', 'Old NG Lead'));
 });
 
 test('a requested dispatched booking is loaded and selected in the leads shop', function () {
