@@ -1,6 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     Building2,
+    BarChart3,
     LockKeyhole,
     Save,
     Search,
@@ -15,6 +16,13 @@ import DirectoryNavigation from '@/components/directory-navigation';
 import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
 import type { PermissionAccess } from '@/components/module-permissions-editor';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type Agent = {
     agent_id: number;
@@ -26,6 +34,15 @@ type Agent = {
 };
 
 type Company = { com_id: number; company: string };
+type AgentReport = {
+    agent: { id: number; name: string };
+    summary: { appointments: number; confirmed: number; dispatched: number; sold: number; last_sale: string | null };
+    rows: Array<{
+        id: number; origin_at: string | null; appointment_at: string | null;
+        customer: string; result: string; confirmed: boolean; dispatched: boolean;
+        sold: boolean; city: string | null; notes: string;
+    }>;
+};
 
 export default function Agents({
     agents,
@@ -40,6 +57,9 @@ export default function Agents({
     const [selected, setSelected] = useState<Agent | null>(null);
     const [search, setSearch] = useState('');
     const [directoryStatus, setDirectoryStatus] = useState<'active' | 'inactive'>('active');
+    const [report, setReport] = useState<AgentReport | null>(null);
+    const [reportOpen, setReportOpen] = useState(false);
+    const [reportLoading, setReportLoading] = useState(false);
     const blankPermissions = Object.fromEntries(
         Object.keys(permissionModules).map((module) => [module, 'none']),
     ) as Record<string, PermissionAccess>;
@@ -136,6 +156,31 @@ export default function Agents({
         });
     };
 
+    const openReport = async () => {
+        if (!selected) return;
+        setReportOpen(true);
+        setReportLoading(true);
+        setReport(null);
+        try {
+            const response = await fetch(`/management/agents/${selected.agent_id}/report`, {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            });
+            if (!response.ok) throw new Error('Unable to load report');
+            setReport((await response.json()) as AgentReport);
+        } finally {
+            setReportLoading(false);
+        }
+    };
+
+    const reportDate = (value: string | null) =>
+        value
+            ? new Intl.DateTimeFormat('en-US', {
+                  month: '2-digit', day: '2-digit', year: '2-digit',
+                  hour: '2-digit', minute: '2-digit',
+              }).format(new Date(value))
+            : '—';
+
     return (
         <>
             <Head title="Agents" />
@@ -231,7 +276,14 @@ export default function Agents({
 
                     <section className="agents-form-panel">
                         <div className="agents-form-title">
-                            <h2>{selected ? 'Edit agent' : 'Create agent'}</h2>
+                            <div>
+                                <h2>{selected ? 'Edit agent' : 'Create agent'}</h2>
+                                {selected && (
+                                    <button type="button" className="agents-report-button" onClick={openReport}>
+                                        <BarChart3 /> Agent report
+                                    </button>
+                                )}
+                            </div>
                             <p>
                                 {selected
                                     ? `Updating agent #${selected.agent_id}`
@@ -378,6 +430,45 @@ export default function Agents({
                         </form>
                     </section>
                 </div>
+                <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+                    <DialogContent className="agent-report-modal">
+                        <DialogHeader>
+                            <DialogTitle>{selected?.agent_name} — Agent report</DialogTitle>
+                            <DialogDescription>
+                                Appointments, confirmations, dispatched leads, and sold projects assigned to this agent.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {reportLoading ? (
+                            <div className="agent-report-loading">Loading report…</div>
+                        ) : report ? (
+                            <>
+                                <div className="agent-report-summary">
+                                    <span><small>Appointments</small><strong>{report.summary.appointments}</strong></span>
+                                    <span><small>Confirmed</small><strong>{report.summary.confirmed}</strong></span>
+                                    <span><small>Dispatched</small><strong>{report.summary.dispatched}</strong></span>
+                                    <span><small>Sold</small><strong>{report.summary.sold}</strong></span>
+                                    <span><small>Last sale</small><strong>{reportDate(report.summary.last_sale)}</strong></span>
+                                </div>
+                                <div className="agent-report-table-wrap">
+                                    <table>
+                                        <thead><tr><th>Origin</th><th>Appointment</th><th>Customer</th><th>Result</th><th>Conf.</th><th>Dispatched</th><th>Sold</th><th>City</th><th>Notes</th></tr></thead>
+                                        <tbody>
+                                            {report.rows.map((row) => (
+                                                <tr key={row.id}>
+                                                    <td>{reportDate(row.origin_at)}</td><td>{reportDate(row.appointment_at)}</td>
+                                                    <td><strong>{row.customer}</strong></td><td>{row.result}</td>
+                                                    <td>{row.confirmed ? '✓' : '—'}</td><td>{row.dispatched ? '✓' : '—'}</td><td>{row.sold ? '✓' : '—'}</td>
+                                                    <td>{row.city || '—'}</td><td title={row.notes}>{row.notes || '—'}</td>
+                                                </tr>
+                                            ))}
+                                            {report.rows.length === 0 && <tr><td colSpan={9}>No appointment records found.</td></tr>}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        ) : <div className="agent-report-loading">The report could not be loaded.</div>}
+                    </DialogContent>
+                </Dialog>
             </main>
         </>
     );

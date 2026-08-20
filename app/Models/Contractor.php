@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'contractor',
+    'point_of_contact',
     'address',
     'zip',
     'city',
@@ -24,6 +25,11 @@ class Contractor extends Model
     protected $primaryKey = 'con_id';
 
     public $timestamps = false;
+
+    protected function casts(): array
+    {
+        return ['moved_to_vendor_at' => 'datetime'];
+    }
 
     public function projectInvoices(): HasMany
     {

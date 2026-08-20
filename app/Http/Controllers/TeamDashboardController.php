@@ -17,11 +17,18 @@ class TeamDashboardController extends Controller
     public function __invoke(Request $request): Response
     {
         $timezone = (string) config('app.timezone', 'America/Los_Angeles');
-        $period = in_array($request->string('period')->toString(), ['daily', 'weekly', 'monthly'], true)
+        $period = in_array($request->string('period')->toString(), ['daily', 'range', 'monthly'], true)
             ? $request->string('period')->toString()
             : 'daily';
         $anchor = $this->anchorDate($request->string('date')->toString(), $timezone);
-        [$start, $end] = $this->periodBounds($period, $anchor);
+        [$start, $end] = $period === 'range'
+            ? $this->customRange(
+                $request->string('from')->toString(),
+                $request->string('to')->toString(),
+                $anchor,
+                $timezone,
+            )
+            : $this->periodBounds($period, $anchor);
         $dates = collect(CarbonPeriod::create($start, '1 day', $end))
             ->map(fn ($date): string => $date->format('Y-m-d'));
 
@@ -50,6 +57,7 @@ class TeamDashboardController extends Controller
             ->get();
 
         $workedAgentIds = collect();
+        $attendanceLaunch = CarbonImmutable::parse('2026-08-16', $timezone)->startOfDay();
         if (Schema::hasTable('calltools_user_login_shifts')) {
             $workedAgentIds = DB::table('calltools_user_login_shifts as shift')
                 ->join('agents as agent', 'agent.calltools_user_id', '=', 'shift.app_user_id')
@@ -57,12 +65,20 @@ class TeamDashboardController extends Controller
                     $start->startOfDay()->utc(),
                     $end->endOfDay()->utc(),
                 ])
+                ->where('shift.started_at', '<', $attendanceLaunch->utc())
+                // CallTools can emit placeholder/open shift rows with a start
+                // timestamp but no recorded working time. Current live logins
+                // are added below from daily metrics; historical attendance
+                // must have a positive imported duration.
+                ->where('shift.duration_seconds', '>', 0)
                 ->distinct()
                 ->pluck('agent.agent_id')
                 ->map(fn ($id): int => (int) $id);
         }
         $today = CarbonImmutable::today($timezone);
         if (
+            $today->lessThan($attendanceLaunch)
+            &&
             $today->betweenIncluded($start, $end)
             && Schema::hasTable('calltools_agent_daily_metrics')
         ) {
@@ -78,6 +94,20 @@ class TeamDashboardController extends Controller
                 ->pluck('agent.agent_id')
                 ->map(fn ($id): int => (int) $id);
             $workedAgentIds = $workedAgentIds->merge($liveAgentIds)->unique()->values();
+        }
+
+        if (Schema::hasTable('agent_attendance_sessions') && $end->greaterThanOrEqualTo($attendanceLaunch)) {
+            $portalAgentIds = DB::table('agent_attendance_sessions')
+                ->whereBetween('work_date', [
+                    $start->max($attendanceLaunch)->toDateString(),
+                    $end->toDateString(),
+                ])
+                ->whereNotNull('clocked_in_at')
+                ->distinct()
+                ->pluck('agent_id')
+                ->map(fn ($id): int => (int) $id);
+
+            $workedAgentIds = $workedAgentIds->merge($portalAgentIds)->unique()->values();
         }
 
         $scores = $leads
@@ -106,6 +136,7 @@ class TeamDashboardController extends Controller
                             'name' => $agent->agent_name,
                             'total' => $dates->sum(fn (string $date): int => $daily->get($date, collect())->count()),
                             'confirmed' => $agentLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
+                            'dispatched' => $agentLeads->where('status', 'dispatched')->count(),
                             'sold' => $soldLeads->where('agent_id', $agentId)->count(),
                             'worked' => $workedAgentIds->contains($agentId),
                         ];
@@ -138,6 +169,7 @@ class TeamDashboardController extends Controller
                     'memberCount' => $team->agents->count(),
                     'total' => $dailyScores->sum('count'),
                     'confirmed' => $teamLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
+                    'dispatched' => $teamLeads->where('status', 'dispatched')->count(),
                     'sold' => $soldLeads->whereIn('agent_id', $teamAgentIds)->count(),
                     'dailyScores' => $dailyScores,
                     'agents' => $agentScores,
@@ -150,20 +182,12 @@ class TeamDashboardController extends Controller
                 'rank' => $index + 1,
             ]);
 
-        $assignedAgentIds = Team::query()
-            ->with('agents:agents.agent_id')
-            ->get()
-            ->flatMap->agents
-            ->pluck('agent_id')
-            ->unique();
-        $unassignedLeadCount = $leads
-            ->whereNotIn('agent_id', $assignedAgentIds)
-            ->count();
-
         return Inertia::render('team-dashboard', [
             'filters' => [
                 'period' => $period,
                 'date' => $anchor->format('Y-m-d'),
+                'from' => $start->format('Y-m-d'),
+                'to' => $end->format('Y-m-d'),
                 'timezone' => $timezone,
             ],
             'range' => [
@@ -173,12 +197,10 @@ class TeamDashboardController extends Controller
             ],
             'summary' => [
                 'totalLeads' => $teams->sum('total'),
-                'teamCount' => $teams->count(),
-                'activeTeams' => $teams->where('total', '>', 0)->count(),
-                'unassignedLeads' => $unassignedLeadCount,
+                'confirmed' => $teams->sum('confirmed'),
+                'dispatched' => $teams->sum('dispatched'),
+                'sold' => $teams->sum('sold'),
                 'workedAgents' => $workedAgentIds->unique()->count(),
-                'topTeam' => $teams->first()['name'] ?? null,
-                'topScore' => $teams->first()['total'] ?? 0,
             ],
             'teams' => $teams,
         ]);
@@ -198,16 +220,34 @@ class TeamDashboardController extends Controller
     private function periodBounds(string $period, CarbonImmutable $anchor): array
     {
         return match ($period) {
-            'weekly' => [$anchor->startOfWeek(), $anchor->endOfWeek()],
             'monthly' => [$anchor->startOfMonth(), $anchor->endOfMonth()],
             default => [$anchor->startOfDay(), $anchor->endOfDay()],
         };
     }
 
+    /** @return array{CarbonImmutable, CarbonImmutable} */
+    private function customRange(
+        string $from,
+        string $to,
+        CarbonImmutable $fallback,
+        string $timezone,
+    ): array {
+        $start = $from !== '' ? $this->anchorDate($from, $timezone) : $fallback;
+        $end = $to !== '' ? $this->anchorDate($to, $timezone) : $fallback;
+
+        return $start->lessThanOrEqualTo($end)
+            ? [$start->startOfDay(), $end->endOfDay()]
+            : [$end->startOfDay(), $start->endOfDay()];
+    }
+
     private function rangeLabel(string $period, CarbonImmutable $start, CarbonImmutable $end): string
     {
+        if ($period === 'range' && $start->isSameDay($end)) {
+            return $start->format('l, F j, Y');
+        }
+
         return match ($period) {
-            'weekly' => $start->isSameMonth($end)
+            'range' => $start->isSameMonth($end)
                 ? $start->format('M j').' – '.$end->format('j, Y')
                 : $start->format('M j').' – '.$end->format('M j, Y'),
             'monthly' => $start->format('F Y'),

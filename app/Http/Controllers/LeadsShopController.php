@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\LeadSearch;
+
+use App\Support\CaliforniaServiceAreas;
+
 use App\Http\Requests\LeadAppointmentResultRequest;
 use App\Http\Requests\LeadNoteRequest;
 use App\Http\Requests\LeadRequest;
@@ -46,6 +50,54 @@ class LeadsShopController extends Controller
                 'id' => $latestLead->id,
                 'created_at' => $latestLead->created_at?->toISOString(),
             ] : null,
+        ]);
+    }
+
+    public function sidebarAlerts(Request $request): JsonResponse
+    {
+        $queues = [
+            'leads_shop' => Lead::LEADS_SHOP_STATUSES,
+            'confirm_leads' => ['confirmed'],
+            'dispatch_leads' => ['dispatched'],
+            'reschedule' => ['reschedule'],
+            'rehash' => ['rehash', 'rehash_ng', 'rehash_toss', 'rehash_cb'],
+            '555' => ['555', 'ora', 'la', 'ng', 'toss'],
+            'his' => ['his'],
+            'keep_in_touch' => ['kit', 'kit_ng', 'kit_toss', 'kit_cb'],
+        ];
+
+        $markers = collect($queues)->mapWithKeys(function (array $statuses, string $key): array {
+            $latest = LeadMovement::query()
+                ->whereIn('to_status', $statuses)
+                ->whereHas('lead', fn ($query) => $query->whereIn('status', $statuses))
+                ->latest('created_at')
+                ->latest('id')
+                ->first(['id', 'created_at']);
+
+            return [$key => $latest ? [
+                'id' => $latest->id,
+                'created_at' => $latest->created_at?->toISOString(),
+            ] : null];
+        });
+
+        $urgentThrough = CarbonImmutable::now('America/Los_Angeles')->addHour();
+
+        return response()->json([
+            'markers' => $markers,
+            'urgent' => [
+                'confirm_leads' => Lead::query()
+                    ->where('status', 'confirmed')
+                    ->whereNotNull('appointment_at')
+                    ->where('appointment_at', '<=', $urgentThrough->format('Y-m-d H:i:s'))
+                    ->count(),
+                'dispatch_leads' => Lead::query()
+                    ->where('status', 'dispatched')
+                    ->whereNull('salesman_1_id')
+                    ->whereNull('salesman_2_id')
+                    ->whereNotNull('appointment_at')
+                    ->where('appointment_at', '<=', $urgentThrough->format('Y-m-d H:i:s'))
+                    ->count(),
+            ],
         ]);
     }
 
@@ -95,7 +147,7 @@ class LeadsShopController extends Controller
             })
             ->when($search !== '', function ($query) use ($search): void {
                 $like = '%'.$search.'%';
-                $query->where(function ($query) use ($like): void {
+                $query->where(function ($query) use ($like, $search): void {
                     $query->where('customer_name', 'like', $like)
                         ->orWhere('address', 'like', $like)
                         ->orWhere('city', 'like', $like)
@@ -108,6 +160,7 @@ class LeadsShopController extends Controller
                         ->orWhereHas('company', fn ($relation) => $relation->where('company', 'like', $like))
                         ->orWhereHas('product', fn ($relation) => $relation->where('product_name', 'like', $like))
                         ->orWhereHas('agent', fn ($relation) => $relation->where('agent_name', 'like', $like));
+                    LeadSearch::orWhereFullAddress($query, $search);
                 });
             });
 
@@ -260,7 +313,7 @@ class LeadsShopController extends Controller
                 )
                 ->when(
                     $selectedCity !== '' && $selectedCity !== 'all',
-                    fn ($query) => $query->where('city', $selectedCity),
+                    fn ($query) => CaliforniaServiceAreas::apply($query, $selectedCity),
                     fn ($query) => $query->when(
                         $activeShopStatus === null,
                         fn ($query) => $query->when(
@@ -328,21 +381,9 @@ class LeadsShopController extends Controller
             'managerReturns' => $managerReturns,
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
-            'cities' => tap(Lead::query(), fn ($query) => $this->scopeManagerCallbacks($query, $request))
-                ->where(function ($query) use ($requestedLeadId): void {
-                    $query->whereIn('status', Lead::LEADS_SHOP_STATUSES)
-                        ->when(
-                            $requestedLeadId,
-                            fn ($query) => $query->orWhere('id', $requestedLeadId),
-                        );
-                })
-                ->whereNotNull('city')
-                ->where('city', '!=', '')
-                ->distinct()
-                ->orderBy('city')
-                ->pluck('city'),
+            'cities' => CaliforniaServiceAreas::counties(),
             'agents' => Agent::query()->orderBy('agent_name')->get(['agent_id', 'agent_name']),
-            'salesmen' => Salesman::query()->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
+            'salesmen' => Salesman::query()->whereNull('inactive_at')->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
         ]);
     }
 
@@ -551,6 +592,7 @@ class LeadsShopController extends Controller
         ];
         $restrictedSourceStatuses = [
             '555',
+            'ora',
             'reschedule',
             'rehash',
             'rehash_ng',
@@ -585,7 +627,7 @@ class LeadsShopController extends Controller
             $status === 'reschedule' => 'reschedule',
             in_array($status, ['toss', 'rehash_toss', 'kit_toss'], true) => 'toss_action',
             in_array($status, ['rehash', 'rehash_ng', 'rehash_cb'], true) => 'rehash',
-            $status === '555' => '555',
+            in_array($status, ['555', 'ora'], true) => '555',
             $status === 'la' => 'la',
             $status === 'his' => 'his',
             in_array($status, ['kit', 'kit_ng', 'kit_cb'], true) => 'keep_in_touch',
@@ -609,7 +651,10 @@ class LeadsShopController extends Controller
         }
 
         $updates = ['status' => $status];
-        if ($status === 'fresh' && $isRestrictedActionSource) {
+        if (
+            $status === 'fresh'
+            && ($isRestrictedActionSource || $lead->status === 'verify')
+        ) {
             $updates['rehash_at'] = now();
         }
         if ($lead->status === 'dispatched' && in_array($status, ['kit', 'rehash', 'reschedule'], true)) {
@@ -725,6 +770,19 @@ class LeadsShopController extends Controller
         return back();
     }
 
+    public function updateProduct(Request $request, Lead $lead): RedirectResponse
+    {
+        $data = $request->validate([
+            'product_id' => ['required', 'integer', 'exists:products,prod_id'],
+        ]);
+
+        $lead->update(['product_id' => $data['product_id']]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Product saved.']);
+
+        return back();
+    }
+
     public function updateAppointmentResult(LeadAppointmentResultRequest $request, Lead $lead): RedirectResponse
     {
         $lead->update($request->validated());
@@ -734,7 +792,7 @@ class LeadsShopController extends Controller
         return back();
     }
 
-    public function sell(LeadSaleRequest $request, Lead $lead): RedirectResponse
+    public function sell(LeadSaleRequest $request, Lead $lead, \App\Services\ProjectNumberAllocator $projectNumbers): RedirectResponse
     {
         if (! $lead->salesman_1_id && ! $lead->salesman_2_id) {
             throw ValidationException::withMessages([
@@ -742,13 +800,15 @@ class LeadsShopController extends Controller
             ]);
         }
 
-        $project = DB::transaction(function () use ($request, $lead): Project {
+        $project = DB::transaction(function () use ($request, $lead, $projectNumbers): Project {
             $project = Project::query()->firstOrNew(['lead_id' => $lead->id]);
 
             $project->fill([
                 'amount' => $request->validated('amount'),
                 'status' => 'new',
-                'project_number' => null,
+                'project_number' => $project->exists
+                    ? $project->project_number
+                    : ($lead->company_id ? $projectNumbers->allocate($lead) : null),
                 'created_by' => $request->user()->getAuthIdentifier(),
             ])->save();
 

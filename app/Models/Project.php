@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'telemarketer_id', 'salesman_id', 'manager_id', 'runner',
     'primary_number', 'mobile_number', 'email', 'address', 'city', 'state',
     'zip_code', 'budget', 'manual_notes',
+    'contract_file_path', 'contract_file_name', 'contract_file_mime', 'contract_file_size',
 ])]
 class Project extends Model
 {
@@ -69,6 +71,23 @@ class Project extends Model
     public function accountingTransactions(): HasMany
     {
         return $this->hasMany(ProjectAccountingTransaction::class)->orderByDesc('transaction_date')->orderByDesc('id');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(ProjectDocument::class)->latest();
+    }
+
+    public function contractors(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Contractor::class,
+            'project_contractor_assignments',
+            'project_id',
+            'contractor_id',
+            'id',
+            'con_id',
+        )->withPivot('position')->withTimestamps()->orderByPivot('position');
     }
 
     protected function casts(): array

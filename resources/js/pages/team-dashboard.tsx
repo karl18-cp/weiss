@@ -1,20 +1,20 @@
 import { Head, router } from '@inertiajs/react';
 import {
     CalendarDays,
+    CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    CircleDollarSign,
     Maximize2,
-    Medal,
     Minimize2,
     Trophy,
-    UserRound,
     UserCheck,
-    Users,
+    Truck,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import '@/../css/team-dashboard.css';
 
-type Period = 'daily' | 'weekly' | 'monthly';
+type Period = 'daily' | 'range' | 'monthly';
 
 type DailyScore = {
     date: string;
@@ -28,6 +28,7 @@ type AgentScore = {
     name: string;
     total: number;
     confirmed: number;
+    dispatched: number;
     sold: number;
     worked: boolean;
 };
@@ -39,6 +40,7 @@ type TeamScore = {
     memberCount: number;
     total: number;
     confirmed: number;
+    dispatched: number;
     sold: number;
     rank: number;
     dailyScores: DailyScore[];
@@ -49,6 +51,8 @@ type TeamDashboardProps = {
     filters: {
         period: Period;
         date: string;
+        from: string;
+        to: string;
         timezone: string;
     };
     range: {
@@ -58,19 +62,17 @@ type TeamDashboardProps = {
     };
     summary: {
         totalLeads: number;
-        teamCount: number;
-        activeTeams: number;
-        unassignedLeads: number;
+        confirmed: number;
+        dispatched: number;
+        sold: number;
         workedAgents: number;
-        topTeam: string | null;
-        topScore: number;
     };
     teams: TeamScore[];
 };
 
 const periodLabels: Record<Period, string> = {
     daily: 'Daily',
-    weekly: 'Weekly',
+    range: 'Date Range',
     monthly: 'Monthly',
 };
 
@@ -82,6 +84,43 @@ export default function TeamDashboard({
 }: TeamDashboardProps) {
     const [isScoreFullscreen, setIsScoreFullscreen] = useState(false);
     const dashboardRef = useRef<HTMLElement>(null);
+    const scoreRefreshInProgress = useRef(false);
+
+    useEffect(() => {
+        const refreshScores = () => {
+            if (document.hidden || scoreRefreshInProgress.current) {
+                return;
+            }
+
+            scoreRefreshInProgress.current = true;
+            router.reload({
+                only: ['filters', 'range', 'summary', 'teams'],
+                preserveState: true,
+                preserveScroll: true,
+                onFinish: () => {
+                    scoreRefreshInProgress.current = false;
+                },
+            });
+        };
+
+        const intervalId = window.setInterval(refreshScores, 15_000);
+        const refreshWhenVisible = () => {
+            if (!document.hidden) {
+                refreshScores();
+            }
+        };
+
+        document.addEventListener('visibilitychange', refreshWhenVisible);
+
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener(
+                'visibilitychange',
+                refreshWhenVisible,
+            );
+        };
+    }, []);
+
     useEffect(() => {
         const syncFullscreenState = () =>
             setIsScoreFullscreen(
@@ -96,10 +135,15 @@ export default function TeamDashboard({
                 syncFullscreenState,
             );
     }, []);
-    const applyFilters = (period: Period, date = filters.date) => {
+    const applyFilters = (
+        period: Period,
+        date = filters.date,
+        from = filters.from,
+        to = filters.to,
+    ) => {
         router.get(
             '/team-dashboard',
-            { period, date },
+            { period, date, from, to },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -132,15 +176,33 @@ export default function TeamDashboard({
     };
 
     const movePeriod = (direction: -1 | 1) => {
+        if (filters.period === 'range') {
+            const start = new Date(`${filters.from}T12:00:00`);
+            const end = new Date(`${filters.to}T12:00:00`);
+            const span = Math.max(
+                1,
+                Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1,
+            );
+            start.setDate(start.getDate() + direction * span);
+            end.setDate(end.getDate() + direction * span);
+
+            const dateKey = (value: Date) =>
+                [
+                    value.getFullYear(),
+                    String(value.getMonth() + 1).padStart(2, '0'),
+                    String(value.getDate()).padStart(2, '0'),
+                ].join('-');
+
+            applyFilters('range', filters.date, dateKey(start), dateKey(end));
+            return;
+        }
+
         const date = new Date(`${filters.date}T12:00:00`);
 
         if (filters.period === 'monthly') {
             date.setMonth(date.getMonth() + direction);
         } else {
-            date.setDate(
-                date.getDate() +
-                    direction * (filters.period === 'weekly' ? 7 : 1),
-            );
+            date.setDate(date.getDate() + direction);
         }
 
         applyFilters(
@@ -201,14 +263,39 @@ export default function TeamDashboard({
                             <button type="button" onClick={() => movePeriod(-1)} aria-label="Previous period">
                                 <ChevronLeft />
                             </button>
-                            <label>
-                                <CalendarDays />
-                                <input
-                                    type="date"
-                                    value={filters.date}
-                                    onChange={(event) => applyFilters(filters.period, event.target.value)}
-                                />
-                            </label>
+                            {filters.period === 'range' ? (
+                                <div className="team-custom-range">
+                                    <label>
+                                        <span>From</span>
+                                        <input
+                                            type="date"
+                                            value={filters.from}
+                                            onChange={(event) =>
+                                                applyFilters('range', filters.date, event.target.value, filters.to)
+                                            }
+                                        />
+                                    </label>
+                                    <label>
+                                        <span>To</span>
+                                        <input
+                                            type="date"
+                                            value={filters.to}
+                                            onChange={(event) =>
+                                                applyFilters('range', filters.date, filters.from, event.target.value)
+                                            }
+                                        />
+                                    </label>
+                                </div>
+                            ) : (
+                                <label>
+                                    <CalendarDays />
+                                    <input
+                                        type="date"
+                                        value={filters.date}
+                                        onChange={(event) => applyFilters(filters.period, event.target.value)}
+                                    />
+                                </label>
+                            )}
                             <strong>{range.label}</strong>
                             <button type="button" onClick={() => movePeriod(1)} aria-label="Next period">
                                 <ChevronRight />
@@ -239,34 +326,32 @@ export default function TeamDashboard({
                     </article>
                     <article>
                         <span className="is-purple">
-                            <Medal />
+                            <CheckCircle2 />
                         </span>
                         <div>
-                            <small>Top team</small>
-                            <strong>{summary.topTeam ?? '—'}</strong>
-                            <p>{summary.topScore} leads</p>
+                            <small>Confirmed</small>
+                            <strong>{summary.confirmed}</strong>
+                            <p>Confirmed in selected period</p>
                         </div>
                     </article>
                     <article>
                         <span className="is-green">
-                            <Users />
+                            <Truck />
                         </span>
                         <div>
-                            <small>Active teams</small>
-                            <strong>
-                                {summary.activeTeams}/{summary.teamCount}
-                            </strong>
-                            <p>Teams with a score</p>
+                            <small>Dispatched</small>
+                            <strong>{summary.dispatched}</strong>
+                            <p>Dispatched in selected period</p>
                         </div>
                     </article>
                     <article>
                         <span className="is-orange">
-                            <UserRound />
+                            <CircleDollarSign />
                         </span>
                         <div>
-                            <small>Outside teams</small>
-                            <strong>{summary.unassignedLeads}</strong>
-                            <p>Leads from unassigned Agents</p>
+                            <small>Sold</small>
+                            <strong>{summary.sold}</strong>
+                            <p>Sold in selected period</p>
                         </div>
                     </article>
                     <article>

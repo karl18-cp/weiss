@@ -137,8 +137,10 @@ export default function ManagerActivity({
     filters: Filters;
     canViewAll: boolean;
     movementTotals: {
+        total: number;
         confirmed: number;
         dispatched: number;
+        sold: number;
     };
 }) {
     const [view, setView] = useState<'calls' | 'history'>(filters.view);
@@ -247,20 +249,20 @@ export default function ManagerActivity({
                     </div>
                     <div className="manager-activity-totals">
                         <span>
-                            <strong>{calls.total.toLocaleString()}</strong>
-                            calls
-                        </span>
-                        <span>
-                            <strong>{activities.total.toLocaleString()}</strong>
-                            lead actions
+                            <strong>{movementTotals.total.toLocaleString()}</strong>
+                            total
                         </span>
                         <span>
                             <strong>{movementTotals.confirmed.toLocaleString()}</strong>
-                            moved to confirm
+                            confirmed
                         </span>
                         <span>
                             <strong>{movementTotals.dispatched.toLocaleString()}</strong>
-                            moved to dispatch
+                            dispatched
+                        </span>
+                        <span>
+                            <strong>{movementTotals.sold.toLocaleString()}</strong>
+                            sold
                         </span>
                     </div>
                 </header>

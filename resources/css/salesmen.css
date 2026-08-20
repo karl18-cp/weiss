@@ -19,6 +19,48 @@
     grid-column: 1 / -1;
 }
 
+.salesman-commission-card { grid-column: 1 / -1; padding: 1rem; border: 1px solid #d9e2ef; border-radius: 0.9rem; background: linear-gradient(145deg, #f8f6ff, #f1edf8); }
+.salesman-commission-card > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.salesman-commission-card > header > div:first-child strong,
+.salesman-commission-card > header > div:first-child span { display: block; }
+.salesman-commission-card > header > div:first-child strong { color: #29354b; font-size: 0.9rem; }
+.salesman-commission-card > header > div:first-child span { margin-top: 0.2rem; color: #718096; font-size: 0.68rem; }
+.salesman-commission-totals { display: grid; grid-template-columns: repeat(3, minmax(7rem, 1fr)); gap: 0.45rem; }
+.salesman-commission-totals span { padding: 0.55rem 0.65rem; border: 1px solid #ddd5ec; border-radius: 0.65rem; background: rgb(255 255 255 / 72%); }
+.salesman-commission-totals small,
+.salesman-commission-totals strong { display: block; }
+.salesman-commission-totals small { color: #7b728a; font-size: 0.52rem; font-weight: 800; text-transform: uppercase; }
+.salesman-commission-totals strong { margin-top: 0.1rem; color: #68469a; font-size: 0.78rem; }
+.salesman-commission-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.85rem; }
+.salesman-commission-fields label > span { display: block; margin-bottom: 0.3rem; color: #58667a; font-size: 0.64rem; font-weight: 800; }
+.salesman-commission-fields label > div { display: flex; align-items: center; overflow: hidden; border: 1px solid #d5cbe7; border-radius: 0.65rem; background: #fff; }
+.salesman-commission-fields input { width: 100%; min-width: 0; padding: 0.65rem 0.75rem; outline: none; }
+.salesman-commission-fields b { padding-right: 0.75rem; color: #7353a3; }
+.salesman-commission-fields label > small { color: #c43d52; font-size: 0.58rem; }
+
+.salesman-report-modal { width: min(96vw, 86rem); max-width: 86rem; max-height: 90vh; overflow: hidden; }
+.salesman-report-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.6rem; }
+.salesman-report-summary span { padding: 0.75rem; border: 1px solid #dfe7f2; border-radius: 0.7rem; background: #f7f9fd; }
+.salesman-report-summary small,
+.salesman-report-summary strong { display: block; }
+.salesman-report-summary small { color: #7a899e; font-size: 0.6rem; font-weight: 850; text-transform: uppercase; }
+.salesman-report-summary strong { margin-top: 0.2rem; color: #245bd9; font-size: 0.95rem; font-weight: 900; }
+.salesman-report-table-wrap { max-height: 62vh; overflow: auto; border: 1px solid #dfe6f0; border-radius: 0.75rem; }
+.salesman-report-table-wrap table { width: 100%; min-width: 92rem; border-collapse: separate; border-spacing: 0; font-size: 0.7rem; }
+.salesman-report-table-wrap th { position: sticky; z-index: 1; top: 0; padding: 0.7rem; color: #5d6b80; background: #f3f6fb; font-size: 0.58rem; font-weight: 900; text-align: left; text-transform: uppercase; }
+.salesman-report-table-wrap td { max-width: 22rem; padding: 0.7rem; overflow: hidden; border-top: 1px solid #e8edf4; color: #536177; text-overflow: ellipsis; white-space: nowrap; }
+.salesman-report-table-wrap td:nth-child(5), .salesman-report-table-wrap td:nth-child(6), .salesman-report-table-wrap td:nth-child(7) { color: #168252; font-size: 0.85rem; font-weight: 900; text-align: center; }
+.salesman-report-table-wrap td a { color: #245bd9; font-weight: 850; text-decoration: none; }
+.salesman-report-rates { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.salesman-report-rates span { padding: 0.48rem 0.65rem; border: 1px solid #dfd8e9; border-radius: 0.6rem; color: #657187; background: #faf8fc; font-size: 0.68rem; }
+.salesman-report-rates b { margin-left: 0.3rem; color: #674693; }
+.salesman-report-rates button { margin-left: auto; padding: 0.58rem 0.85rem; border-radius: 0.62rem; color: #fff; background: #2c63df; font-size: 0.7rem; font-weight: 850; }
+.salesman-accounting-table { min-width: 112rem !important; }
+.salesman-accounting-table td:nth-child(n) { color: #536177; font-size: 0.7rem; font-weight: 500; text-align: left; }
+.salesman-accounting-table td:last-child { color: #68469a; font-weight: 900; }
+.salesman-accounting-table td small { display: block; margin-top: 0.16rem; color: #8793a5; }
+@media (max-width: 760px) { .salesman-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 @media (max-width: 760px) {
     .salesmen-form {
         grid-template-columns: 1fr;
@@ -31,4 +73,8 @@
     .salesmen-form > .module-permissions {
         grid-column: auto;
     }
+    .salesman-commission-card { grid-column: auto; }
+    .salesman-commission-card > header { align-items: stretch; flex-direction: column; }
+    .salesman-commission-totals,
+    .salesman-commission-fields { grid-template-columns: 1fr; }
 }

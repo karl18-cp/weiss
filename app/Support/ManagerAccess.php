@@ -19,12 +19,15 @@ class ManagerAccess
         'quality_control' => 'Quality Control', 'projects' => 'Projects',
         'manager_history' => 'View All Manager Activity',
         'contacts_users' => 'Contacts & Users',
+        'agent_schedules' => 'Adjust Agent Schedules',
+        'tasks' => 'Tasks',
         'view_all_kit_managers' => "View All Managers' Keep in Touch Leads",
         'view_all_callbacks' => "View All Managers' Callbacks",
         'queue_action_buttons' => 'Use Workflow Action Buttons',
         'toss_action' => 'Move Leads to TOSS',
         'dial_raw_only' => 'Leads Shop Dialing: Raw & Verify Only',
         'full_phone_numbers' => 'View Full Phone Numbers',
+        'generate_payment_codes' => 'Generate Cash Payment Codes',
     ];
 
     public const MODULE_PATHS = [
@@ -48,6 +51,8 @@ class ManagerAccess
         'quality_control' => '/management/quality-control',
         'projects' => '/management/projects',
         'contacts_users' => '/management/contacts-users',
+        'agent_schedules' => '/management/agent-schedules',
+        'tasks' => '/management/tasks',
     ];
 
     public static function canEdit(Account $user, string $module): bool

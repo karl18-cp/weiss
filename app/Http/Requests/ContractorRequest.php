@@ -16,12 +16,13 @@ class ContractorRequest extends FormRequest
     {
         return [
             'contractor' => ['required', 'string', 'max:255'],
+            'point_of_contact' => ['nullable', 'string', 'max:255'],
             'address' => ['required', 'string', 'max:255'],
             'zip' => ['required', 'integer', 'min:0'],
             'city' => ['required', 'string', 'max:255'],
             'state' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255'],
-            'phone' => ['required', 'integer', 'min:0'],
+            'phone' => ['required', 'string', 'max:50', 'regex:/^[0-9+().\-\s]+$/'],
             'license' => ['nullable', 'integer', 'min:0'],
             'lic_expire' => ['nullable', 'date'],
             'worker_comp' => ['nullable', 'date'],

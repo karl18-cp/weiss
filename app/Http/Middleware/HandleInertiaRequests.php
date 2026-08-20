@@ -77,7 +77,7 @@ class HandleInertiaRequests extends Middleware
                         ->count(),
                     'reschedule' => $sum(['reschedule']),
                     'rehash' => $sum(['rehash', 'rehash_ng', 'rehash_toss', 'rehash_cb']),
-                    '555' => $sum(['555']),
+                    '555' => $sum(['555', 'ora', 'la', 'ng', 'toss']),
                     'la' => $sum(['la']),
                     'his' => $sum(['his']),
                     'toss_leads' => $sum(['toss']),

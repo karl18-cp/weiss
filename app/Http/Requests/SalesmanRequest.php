@@ -30,6 +30,9 @@ class SalesmanRequest extends FormRequest
                 'nullable', 'string', 'min:8', 'max:255',
             ],
             'suspended' => ['sometimes', 'boolean'],
+            'initial_sale_cut_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'change_order_cut_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'sale_commission_percent' => ['required', 'numeric', 'min:0', 'max:100'],
             'permissions' => ['required', 'array'],
             'permissions.*' => ['required', Rule::in(['none', 'view', 'edit'])],
         ];

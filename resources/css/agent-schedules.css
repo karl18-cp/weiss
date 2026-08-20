@@ -1,0 +1,116 @@
+.schedule-page {
+    padding: 1.5rem;
+}
+.schedule-page > header {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+.schedule-page > header > span {
+    display: grid;
+    width: 3.3rem;
+    height: 3.3rem;
+    place-items: center;
+    border-radius: 1rem;
+    background: #eaf1ff;
+    color: #2865df;
+}
+.schedule-page h1 {
+    margin: 0.15rem 0;
+    font-size: 2rem;
+}
+.schedule-page p {
+    margin: 0;
+    color: #71809a;
+}
+.schedule-page small {
+    color: #2865df;
+    font-weight: 850;
+    letter-spacing: 0.12em;
+}
+.schedule-shell {
+    height: calc(100vh - 13rem);
+    min-height: 34rem;
+    border: 1px solid #dce4ef;
+    border-radius: 1rem;
+    background: #fff;
+    overflow: hidden;
+}
+.schedule-shell main {
+    min-height: 0;
+    padding: 1.25rem;
+    overflow-y: auto;
+}
+.schedule-shell h2 {
+    margin-top: 0;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+.schedule-shell h2 svg {
+    width: 1.2rem;
+    color: #2865df;
+}
+.schedule-shell h2 small {
+    margin-left: auto;
+    letter-spacing: 0;
+    color: #71809a;
+}
+.schedule-days {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+.schedule-days article {
+    padding: 1rem;
+    border: 1px solid #e1e7f0;
+    border-radius: 0.85rem;
+    background: #f7f9fc;
+}
+.schedule-days article.working {
+    background: #f6fff9;
+    border-color: #b9e7cd;
+}
+.schedule-days article > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.schedule-days article label {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.schedule-days section {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem;
+    margin-top: 0.9rem;
+}
+.schedule-days section input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.3rem;
+    padding: 0.55rem;
+    border: 1px solid #ccd7e6;
+    border-radius: 0.5rem;
+}
+.schedule-shell .save {
+    float: right;
+    margin-top: 1rem;
+    padding: 0.8rem 1.5rem;
+    border: 0;
+    border-radius: 0.7rem;
+    background: #2865df;
+    color: #fff;
+    font-weight: 850;
+}
+@media (max-width: 900px) {
+    .schedule-days {
+        grid-template-columns: 1fr;
+    }
+    .schedule-days section {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

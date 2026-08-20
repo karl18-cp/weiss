@@ -45,6 +45,11 @@ class Manager extends Model
         return $this->hasMany(Team::class, 'manager_id', 'manager_id');
     }
 
+    public function secondaryLeads(): HasMany
+    {
+        return $this->hasMany(Lead::class, 'manager_2_id', 'manager_id');
+    }
+
     protected function casts(): array
     {
         return ['manager_types' => 'array'];

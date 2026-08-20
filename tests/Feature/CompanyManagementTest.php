@@ -3,6 +3,8 @@
 use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Company;
+use App\Models\Contractor;
+use App\Models\Vendor;
 use Inertia\Testing\AssertableInertia as Assert;
 
 function companyAdmin(): Account
@@ -35,6 +37,55 @@ test('admins can view and create companies', function () {
         'address' => '',
         'project_code' => 'BH-001',
     ]);
+});
+
+test('admins can save and update a contractor point of contact', function () {
+    $admin = companyAdmin();
+    $payload = [
+        'contractor' => 'Reliable Builders',
+        'point_of_contact' => 'Jane Smith',
+        'address' => '100 Main Street',
+        'zip' => 90001,
+        'city' => 'Los Angeles',
+        'state' => 'CA',
+        'email' => 'jane@example.com',
+        'phone' => '555-0100',
+    ];
+
+    $this->actingAs($admin)
+        ->post(route('management.contractors.store'), $payload)
+        ->assertRedirect();
+
+    $contractor = Contractor::query()->where('contractor', 'Reliable Builders')->firstOrFail();
+    expect($contractor->point_of_contact)->toBe('Jane Smith');
+
+    $this->actingAs($admin)
+        ->put(route('management.contractors.update', $contractor), [
+            ...$payload,
+            'point_of_contact' => 'John Carter',
+        ])
+        ->assertRedirect();
+
+    expect($contractor->refresh()->point_of_contact)->toBe('John Carter');
+});
+
+test('admins can move contractors into the vendor directory without deleting contractors', function () {
+    $admin = companyAdmin();
+    $contractor = Contractor::query()->create([
+        'contractor' => 'Supply Partner', 'point_of_contact' => 'Pat Lee', 'address' => '10 Market St',
+        'zip' => 94105, 'city' => 'San Francisco', 'state' => 'CA', 'email' => 'pat@example.com',
+        'phone' => '555-0199',
+    ]);
+
+    $this->actingAs($admin)->post(route('management.vendors.import-contractors'), [
+        'contractor_ids' => [$contractor->con_id],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($contractor->refresh()->moved_to_vendor_at)->not->toBeNull();
+    $vendor = Vendor::query()->where('source_contractor_id', $contractor->con_id)->firstOrFail();
+    expect($vendor->vendor)->toBe('Supply Partner')
+        ->and($vendor->point_of_contact)->toBe('Pat Lee')
+        ->and(Contractor::query()->whereKey($contractor->con_id)->exists())->toBeTrue();
 });
 
 test('admins can update and delete companies', function () {

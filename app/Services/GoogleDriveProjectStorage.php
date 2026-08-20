@@ -13,6 +13,7 @@ use Throwable;
 class GoogleDriveProjectStorage
 {
     private const FOLDER_MIME = 'application/vnd.google-apps.folder';
+    private const ACCESS_TOKEN_CACHE_KEY = 'google-drive.access-token';
 
     public function configured(): bool
     {
@@ -37,6 +38,20 @@ class GoogleDriveProjectStorage
             throw new RuntimeException("The local project attachment does not exist: {$path}");
         }
 
+        try {
+            return $this->mirrorOnce($project, $path, $fileName, $mimeType);
+        } catch (Throwable $exception) {
+            // A revoked or prematurely expired cached token previously left the
+            // CRM copy saved while every Drive upload failed until cache expiry.
+            Cache::forget(self::ACCESS_TOKEN_CACHE_KEY);
+
+            return $this->mirrorOnce($project, $path, $fileName, $mimeType);
+        }
+    }
+
+    /** @return array{id: string, name: string, webViewLink?: string} */
+    private function mirrorOnce(Project $project, string $path, string $fileName, ?string $mimeType): array
+    {
         $folderId = $this->projectFolderId($project);
         $existingId = $this->findFileId($folderId, $fileName);
         $stream = Storage::disk('local')->readStream($path);
@@ -66,8 +81,8 @@ class GoogleDriveProjectStorage
                 );
 
             $url = $existingId === null
-                ? 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink'
-                : "https://www.googleapis.com/upload/drive/v3/files/{$existingId}?uploadType=multipart&fields=id,name,webViewLink";
+                ? 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink'
+                : "https://www.googleapis.com/upload/drive/v3/files/{$existingId}?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink";
 
             return $request
                 ->send($existingId === null ? 'POST' : 'PATCH', $url)
@@ -86,6 +101,7 @@ class GoogleDriveProjectStorage
         return $this->driveRequest()
             ->get("https://www.googleapis.com/drive/v3/files/{$folderId}", [
                 'fields' => 'id,name,mimeType',
+                'supportsAllDrives' => 'true',
             ])
             ->throw()
             ->json();
@@ -154,7 +170,7 @@ class GoogleDriveProjectStorage
     private function createFolder(string $parentId, string $folderName): string
     {
         return (string) $this->driveRequest()
-            ->post('https://www.googleapis.com/drive/v3/files', [
+            ->post('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', [
                 'name' => $folderName,
                 'mimeType' => self::FOLDER_MIME,
                 'parents' => [$parentId],
@@ -175,6 +191,8 @@ class GoogleDriveProjectStorage
                 'q' => $query,
                 'fields' => 'nextPageToken,files(name)',
                 'pageSize' => 1000,
+                'supportsAllDrives' => 'true',
+                'includeItemsFromAllDrives' => 'true',
             ];
 
             if ($pageToken !== null) {
@@ -212,6 +230,8 @@ class GoogleDriveProjectStorage
                 'q' => $query,
                 'fields' => 'files(id,name)',
                 'pageSize' => 1,
+                'supportsAllDrives' => 'true',
+                'includeItemsFromAllDrives' => 'true',
             ])
             ->throw()
             ->json('files', []);
@@ -229,7 +249,7 @@ class GoogleDriveProjectStorage
 
     private function accessToken(): string
     {
-        return Cache::remember('google-drive.access-token', now()->addMinutes(50), function (): string {
+        return Cache::remember(self::ACCESS_TOKEN_CACHE_KEY, now()->addMinutes(45), function (): string {
             $response = Http::asForm()
                 ->acceptJson()
                 ->timeout(20)

@@ -35,6 +35,11 @@ class Agent extends Model
         return $this->hasMany(AgentAttendanceSession::class, 'agent_id', 'agent_id');
     }
 
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(AgentSchedule::class, 'agent_id', 'agent_id');
+    }
+
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class, 'account_id', 'acc_id');

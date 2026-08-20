@@ -92,6 +92,8 @@ class EnforceManagerPermission
             'lead-workflow/keep-in-touch' => 'keep_in_touch', 'lead-workflow/data' => 'data',
             'lead-workflow/booking-board' => 'booking_board', 'lead-workflow/tele-hours' => 'tele_hours',
             'management/quality-control' => 'quality_control', 'management/projects' => 'projects',
+            'management/agent-schedules' => 'agent_schedules',
+            'management/tasks' => 'tasks',
             'management/' => 'contacts_users',
         ];
         foreach ($map as $prefix => $module) {

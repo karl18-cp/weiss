@@ -1,0 +1,9 @@
+@media (min-width: 768px) {
+    .tasks-page {
+        position: relative;
+        z-index: 11;
+        width: calc(100% + var(--sidebar-width));
+        min-width: calc(100% + var(--sidebar-width));
+        margin-left: calc(var(--sidebar-width) * -1);
+    }
+}

@@ -10,6 +10,7 @@ use App\Models\ManagerPermission;
 use App\Models\Product;
 use App\Models\Salesman;
 use App\Models\Team;
+use App\Support\CaliforniaServiceAreas;
 use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -222,21 +223,21 @@ test('leads shop only loads and counts leads that remain in its statuses', funct
                 ->sort()
                 ->values()
                 ->all() === ['Fresh Shop Lead', 'Raw Shop Lead', 'Verify Shop Lead'])
-            ->where('cities', ['Test City'])
+            ->where('cities', CaliforniaServiceAreas::counties())
         );
 
     $this->get(route('lead-workflow.confirm-leads'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/confirm-leads')
-            ->where('cities', ['Confirmation Only City'])
+            ->where('cities', CaliforniaServiceAreas::counties())
         );
 
     $this->get(route('lead-workflow.dispatch-leads'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/dispatch-leads')
-            ->where('cities', ['Dispatch Only City'])
+            ->where('cities', CaliforniaServiceAreas::counties())
         );
 });
 
@@ -636,6 +637,43 @@ test('his expands the current month into dates and keeps past months grouped', f
             ->where('selectedDate', '2026-08-10')
             ->has('leads.data', 1)
             ->where('leads.data.0.customer_name', 'August Two'));
+});
+
+test('555 workspace groups 555 ORA LA NG and TOSS leads', function () {
+    $account = Account::query()->create([
+        'username' => '555-workspace-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => '555 Workspace Agent']);
+
+    foreach (['555', 'ora', 'la', 'ng', 'toss'] as $index => $status) {
+        Lead::query()->create([
+            'customer_name' => strtoupper($status).' Workspace Lead',
+            'marital_status' => 'Unknown',
+            'primary_number' => '+1555000000'.$index,
+            'address' => '555 Workspace Street',
+            'zip_code' => '90001',
+            'city' => 'Los Angeles',
+            'county' => '',
+            'state' => 'CA',
+            'years_in_house' => 0,
+            'appointment_at' => now('America/Los_Angeles')->addDay(),
+            'telemarketer_notes' => '',
+            'source' => 'CallTools',
+            'agent_id' => $agent->agent_id,
+            'created_by' => $account->acc_id,
+            'status' => $status,
+        ]);
+    }
+
+    $this->actingAs($account)
+        ->get(route('lead-workflow.five-five-five'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('lead-workflow/five-five-five')
+            ->where('queueTotal', 5)
+            ->has('leads', 5));
 });
 
 test('salesmen are redirected away from the full CRM leads shop', function () {

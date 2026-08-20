@@ -6,6 +6,23 @@
     color: #17223a;
     background: #f4f7fc;
 }
+
+/* Secondary queue pages inherit their route palette from the application shell. */
+.crm-app-content .workflow-queue-page {
+    background: color-mix(in srgb, var(--page-tint) 10%, #f2efeb);
+}
+
+.crm-app-content .workflow-queue-list,
+.crm-app-content .workflow-queue-detail {
+    border-color: color-mix(in srgb, var(--page-tint) 30%, #d7d2cc);
+    background: color-mix(in srgb, var(--page-tint) 7%, #faf8f5);
+}
+
+.crm-app-content .workflow-queue-list > label,
+.crm-app-content .workflow-queue-detail > header,
+.crm-app-content .workflow-queue-detail__content {
+    background: color-mix(in srgb, var(--page-tint) 10%, #f3f0ec);
+}
 .workflow-queue-header {
     display: flex;
     height: 5.5rem;

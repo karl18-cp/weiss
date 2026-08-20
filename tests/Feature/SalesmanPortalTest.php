@@ -5,8 +5,12 @@ use App\Models\Agent;
 use App\Models\Lead;
 use App\Models\LeadNote;
 use App\Models\PushSubscription;
+use App\Models\Project;
 use App\Models\Salesman;
+use App\Services\GoogleDriveProjectStorage;
 use App\Services\WebPushService;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('the salesman leads page only returns assigned leads', function () {
@@ -99,7 +103,104 @@ test('non-salesman accounts cannot open the salesman portal', function () {
         ->assertForbidden();
 });
 
+test('salesman my sold only returns assigned leads that have projects', function () {
+    $account = Account::query()->create(['username' => 'sold-salesman@example.com', 'password' => 'password', 'role' => 'salesman']);
+    $salesman = Salesman::query()->create(['salesman_name' => 'Sold Salesman', 'account_id' => $account->acc_id]);
+    $other = Salesman::query()->create(['salesman_name' => 'Other Sold Salesman']);
+    $leadData = [
+        'marital_status' => 'Single', 'primary_number' => '555-0101', 'address' => '1 Sold Street',
+        'zip_code' => '90001', 'city' => 'Los Angeles', 'county' => 'Los Angeles', 'state' => 'CA',
+        'years_in_house' => 1, 'appointment_at' => now(), 'source' => 'Test', 'created_by' => $account->acc_id,
+    ];
+    $sold = Lead::query()->create([...$leadData, 'customer_name' => 'My Sold Lead', 'salesman_1_id' => $salesman->salesman_id, 'status' => 'project']);
+    $unsold = Lead::query()->create([...$leadData, 'customer_name' => 'Not Sold Yet', 'salesman_1_id' => $salesman->salesman_id, 'status' => 'dispatched']);
+    $otherSold = Lead::query()->create([...$leadData, 'customer_name' => 'Someone Else Sold', 'salesman_1_id' => $other->salesman_id, 'status' => 'project']);
+    Project::query()->create(['lead_id' => $sold->id, 'project_number' => 'SBH#6001', 'amount' => 15000, 'status' => 'new', 'created_by' => $account->acc_id]);
+    Project::query()->create(['lead_id' => $otherSold->id, 'project_number' => 'SBH#6002', 'amount' => 9000, 'status' => 'new', 'created_by' => $account->acc_id]);
+
+    $this->actingAs($account)->get(route('salesman.sold'))->assertInertia(fn (Assert $page) => $page
+        ->component('salesman/leads')->where('mode', 'sold')->has('leads', 1)
+        ->where('leads.0.id', $sold->id)->where('leads.0.project.project_number', 'SBH#6001'));
+});
+
+test('salesman accounts can keep their portal session alive', function () {
+    $account = Account::query()->create([
+        'username' => 'keep-alive-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    Salesman::query()->create([
+        'salesman_name' => 'Keep Alive Salesman',
+        'account_id' => $account->acc_id,
+    ]);
+
+    $this->actingAs($account)
+        ->get(route('salesman.session.keep-alive'))
+        ->assertOk()
+        ->assertJson(['active' => true])
+        ->assertSessionHas('salesman_last_keep_alive_at');
+});
+
+test('salesman follow ups and crm keep in touch use the same lead status', function () {
+    $account = Account::query()->create([
+        'username' => 'follow-up-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    $salesman = Salesman::query()->create([
+        'salesman_name' => 'Follow Up Salesman',
+        'account_id' => $account->acc_id,
+    ]);
+    $lead = Lead::query()->create([
+        'customer_name' => 'Portal Follow Up',
+        'marital_status' => 'Single',
+        'primary_number' => '555-0199',
+        'address' => '10 Follow Up Street',
+        'zip_code' => '90001',
+        'city' => 'Los Angeles',
+        'county' => 'Los Angeles',
+        'state' => 'CA',
+        'years_in_house' => 2,
+        'appointment_at' => now()->addDay(),
+        'source' => 'Test',
+        'salesman_1_id' => $salesman->salesman_id,
+        'created_by' => $account->acc_id,
+        'status' => 'dispatched',
+    ]);
+
+    $push = Mockery::mock(WebPushService::class);
+    $push->shouldReceive('sendToAccount')->zeroOrMoreTimes()->andReturn(1);
+    app()->instance(WebPushService::class, $push);
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $lead), [
+            'action' => 'follow_up',
+        ])
+        ->assertRedirect(route('salesman.follow-ups'));
+
+    expect($lead->refresh()->status)->toBe('kit');
+
+    $this->actingAs($account)
+        ->get(route('salesman.follow-ups'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('salesman/leads')
+            ->where('mode', 'follow-ups')
+            ->has('leads', 1)
+            ->where('leads.0.id', $lead->id));
+
+    $lead->update(['status' => 'dispatched']);
+    $this->actingAs($account)
+        ->get(route('salesman.follow-ups'))
+        ->assertInertia(fn (Assert $page) => $page->has('leads', 0));
+
+    $lead->update(['status' => 'kit']);
+    $this->actingAs($account)
+        ->get(route('salesman.follow-ups'))
+        ->assertInertia(fn (Assert $page) => $page->has('leads', 1));
+});
+
 test('salesmen can add appointment result notes only to assigned leads', function () {
+    Storage::fake('local');
     $agentAccount = Account::query()->create([
         'username' => 'result-note-agent@example.com',
         'password' => 'password',
@@ -208,7 +309,34 @@ test('salesmen can add appointment result notes only to assigned leads', functio
             'action' => 'sold',
             'sale_amount' => 12500,
         ])
+        ->assertSessionHasErrors('contract_file');
+
+    $drive = Mockery::mock(GoogleDriveProjectStorage::class);
+    $drive->shouldReceive('configured')->once()->andReturnTrue();
+    $drive->shouldReceive('mirror')
+        ->once()
+        ->withArgs(fn ($project, $path, $name, $mime) =>
+            $project instanceof \App\Models\Project
+            && $project->lead_id === $assigned->id
+            && is_string($path)
+            && $name === 'signed-contract.jpg'
+            && str_starts_with((string) $mime, 'image/')
+        )
+        ->andReturn(['id' => 'drive-contract-id', 'name' => 'signed-contract.jpg']);
+    app()->instance(GoogleDriveProjectStorage::class, $drive);
+
+    $this->actingAs($account)
+        ->post(route('salesman.leads.appointment-result-notes.store', $assigned), [
+            'action' => 'sold',
+            'sale_amount' => 12500,
+            'contract_file' => UploadedFile::fake()->image('signed-contract.jpg'),
+        ])
         ->assertRedirect();
+
+    expect($assigned->refresh()->status)->toBe('project');
+    expect($assigned->project)->not->toBeNull();
+    expect($assigned->project->amount)->toBe('12500.00');
+    Storage::disk('local')->assertExists($assigned->project->contract_file_path);
 
     foreach (['appointment_result', 'dispatch'] as $noteType) {
         expect(LeadNote::query()

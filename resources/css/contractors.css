@@ -285,7 +285,8 @@
 
 .contractors-save-button,
 .contractors-delete-button,
-.contractors-reset-button {
+.contractors-reset-button,
+.contractors-report-button {
     display: inline-flex;
     min-height: 2.4rem;
     align-items: center;
@@ -309,10 +310,29 @@
     color: #65738a;
     background: #eff2f7;
 }
+.contractors-report-button { color: #245bd9; background: #edf3ff; }
+.contractors-report-button svg { width: 0.9rem; }
 .contractors-save-button svg,
 .contractors-delete-button svg {
     width: 0.9rem;
 }
+
+.contractor-report-modal { width: min(96vw, 82rem); max-width: 82rem; max-height: 90vh; overflow: hidden; }
+.contractor-report-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.6rem; }
+.contractor-report-summary span { padding: 0.75rem; border: 1px solid #dfe7f2; border-radius: 0.7rem; background: #f7f9fd; }
+.contractor-report-summary small,
+.contractor-report-summary strong { display: block; }
+.contractor-report-summary small { color: #7a899e; font-size: 0.6rem; font-weight: 850; text-transform: uppercase; }
+.contractor-report-summary strong { margin-top: 0.2rem; color: #245bd9; font-size: 0.95rem; font-weight: 900; }
+.contractor-report-table-wrap { max-height: 62vh; overflow: auto; border: 1px solid #dfe6f0; border-radius: 0.75rem; }
+.contractor-report-table-wrap table { width: 100%; min-width: 76rem; border-collapse: separate; border-spacing: 0; font-size: 0.7rem; }
+.contractor-report-table-wrap th { position: sticky; z-index: 1; top: 0; padding: 0.7rem; color: #5d6b80; background: #f3f6fb; font-size: 0.58rem; font-weight: 900; text-align: left; text-transform: uppercase; }
+.contractor-report-table-wrap td { max-width: 20rem; padding: 0.7rem; overflow: hidden; border-top: 1px solid #e8edf4; color: #536177; text-overflow: ellipsis; white-space: nowrap; }
+.contractor-report-table-wrap td a { color: #245bd9; font-weight: 850; text-decoration: none; }
+.contractor-report-kind { display: inline-flex; padding: 0.25rem 0.45rem; border-radius: 999px; color: #245bd9; background: #eaf1ff; font-size: 0.58rem; }
+.contractor-report-kind.is-payable { color: #8a5b00; background: #fff3d2; }
+.contractor-report-loading { display: grid; min-height: 18rem; place-items: center; color: #7b899d; font-size: 0.8rem; font-weight: 750; }
+@media (max-width: 720px) { .contractor-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 @media (max-width: 1100px) {
     .contractors-form {

@@ -204,17 +204,17 @@ test('data accounting registers aggregate receivables and payables from all proj
     ]);
 
     $this->actingAs($admin)
-        ->get(route('lead-workflow.data.receivables'))
+        ->get(route('management.receivables'))
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/accounting-register')
             ->where('type', 'receivable')
             ->has('transactions.data', 1)
-            ->where('transactions.data.0.project_number', 'TC-00001')
+            ->where('transactions.data.0.project_number', 'Not assigned')
             ->where('transactions.data.0.received_from', 'Jordan Customer')
             ->where('transactions.data.0.reference_number', 'CH#100'));
 
     $this->actingAs($admin)
-        ->get(route('lead-workflow.data.payables'))
+        ->get(route('management.payables'))
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/accounting-register')
             ->where('type', 'payable')

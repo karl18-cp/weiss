@@ -272,8 +272,20 @@ test('manager activity header movement totals follow shared filters and ignore c
 
     LeadMovement::query()->create([
         'lead_id' => $lead->id,
+        'from_status' => 'rehash',
+        'to_status' => 'fresh',
+        'moved_by' => $firstAccount->acc_id,
+    ]);
+    LeadMovement::query()->create([
+        'lead_id' => $lead->id,
         'from_status' => 'fresh',
         'to_status' => 'confirmed',
+        'moved_by' => $firstAccount->acc_id,
+    ]);
+    LeadMovement::query()->create([
+        'lead_id' => $lead->id,
+        'from_status' => 'confirmed',
+        'to_status' => 'dispatched',
         'moved_by' => $firstAccount->acc_id,
     ]);
     RingCentralCall::query()
@@ -289,6 +301,8 @@ test('manager activity header movement totals follow shared filters and ignore c
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('calls.total', 0)
+            ->where('movementTotals.total', 1)
             ->where('movementTotals.confirmed', 1)
-            ->where('movementTotals.dispatched', 1));
+            ->where('movementTotals.dispatched', 1)
+            ->where('movementTotals.sold', 0));
 });

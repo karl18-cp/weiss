@@ -206,6 +206,62 @@
     font-size: 1rem;
     font-weight: 800;
 }
+.agents-form-title > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.agents-report-button {
+    display: inline-flex;
+    min-height: 2.2rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding-inline: 0.75rem;
+    border-radius: 0.6rem;
+    color: #245bd9;
+    background: #edf3ff;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.agents-report-button svg { width: 0.9rem; }
+
+.agent-report-modal {
+    width: min(96vw, 78rem);
+    max-width: 78rem;
+    max-height: 90vh;
+    overflow: hidden;
+}
+.agent-report-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+.agent-report-summary span {
+    padding: 0.75rem;
+    border: 1px solid #dfe7f2;
+    border-radius: 0.7rem;
+    background: #f7f9fd;
+}
+.agent-report-summary small,
+.agent-report-summary strong { display: block; }
+.agent-report-summary small { color: #7a899e; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; }
+.agent-report-summary strong { margin-top: 0.2rem; color: #245bd9; font-size: 1rem; font-weight: 900; }
+.agent-report-table-wrap {
+    max-height: 62vh;
+    overflow: auto;
+    border: 1px solid #dfe6f0;
+    border-radius: 0.75rem;
+}
+.agent-report-table-wrap table { width: 100%; min-width: 76rem; border-collapse: separate; border-spacing: 0; font-size: 0.72rem; }
+.agent-report-table-wrap th { position: sticky; z-index: 1; top: 0; padding: 0.7rem; color: #5d6b80; background: #f3f6fb; font-size: 0.6rem; font-weight: 900; text-align: left; text-transform: uppercase; }
+.agent-report-table-wrap td { max-width: 22rem; padding: 0.7rem; overflow: hidden; border-top: 1px solid #e8edf4; color: #536177; text-overflow: ellipsis; white-space: nowrap; }
+.agent-report-table-wrap td:nth-child(5),
+.agent-report-table-wrap td:nth-child(6),
+.agent-report-table-wrap td:nth-child(7) { color: #168252; font-size: 0.85rem; font-weight: 900; text-align: center; }
+.agent-report-table-wrap tbody tr:hover td { background: #f7faff; }
+.agent-report-loading { display: grid; min-height: 18rem; place-items: center; color: #7b899d; font-size: 0.8rem; font-weight: 750; }
+@media (max-width: 720px) { .agent-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .agents-form {
     display: grid;
     gap: 1.25rem;

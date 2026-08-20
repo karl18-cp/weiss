@@ -4,7 +4,7 @@
     min-height: 0;
     flex-direction: column;
     overflow: hidden;
-    padding: 1.5rem;
+    padding: 0.85rem 1.25rem 1rem;
     color: #172036;
     background: #f2f5f8;
 }
@@ -15,7 +15,7 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.55rem;
 }
 
 .accounting-register-heading > div:first-child > span {
@@ -27,28 +27,80 @@
 }
 
 .accounting-register-heading h1 {
-    margin-top: 0.3rem;
+    margin-top: 0.1rem;
     color: #172036;
-    font-size: clamp(1.8rem, 3vw, 2.7rem);
+    font-size: clamp(1.4rem, 2.4vw, 1.8rem);
     font-weight: 850;
     letter-spacing: -0.05em;
 }
 
 .accounting-register-heading p {
-    margin-top: 0.35rem;
+    margin-top: 0.1rem;
     color: #7a899f;
     font-size: 0.8rem;
 }
 
 .accounting-register-summary {
     display: flex;
-    min-width: 15rem;
+    min-width: 12rem;
     align-items: center;
     gap: 0.7rem;
-    padding: 0.8rem 1rem;
+    padding: 0.55rem 0.75rem;
     border: 1px solid #dae3ef;
     border-radius: 0.9rem;
     background: #fff;
+}
+
+.accounting-register-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.accounting-register-show-all {
+    min-height: 2.2rem;
+    padding: 0 0.75rem;
+    border: 1px solid #245bd9;
+    border-radius: 0.6rem;
+    color: #245bd9;
+    background: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.accounting-register-show-all.is-active {
+    color: #fff;
+    background: #245bd9;
+}
+
+.accounting-register-tabs,
+.vendor-register-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.accounting-register-tabs a,
+.vendor-register-tabs a {
+    display: inline-flex;
+    min-height: 2.2rem;
+    align-items: center;
+    padding: 0 0.75rem;
+    border: 1px solid #d4dfed;
+    border-radius: 0.6rem;
+    color: #536177;
+    background: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.accounting-register-tabs a.is-active,
+.vendor-register-tabs a.is-active {
+    border-color: #245bd9;
+    color: #fff;
+    background: #245bd9;
 }
 
 .accounting-register-summary > svg {
@@ -60,6 +112,33 @@
 .accounting-register-summary span {
     display: block;
 }
+
+.accounting-register-navigation {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.75rem;
+}
+
+.accounting-register-navigation a {
+    display: inline-flex;
+    min-height: 2.2rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0 0.7rem;
+    border: 1px solid #d4dfed;
+    border-radius: 0.6rem;
+    color: #536177;
+    background: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.accounting-register-navigation a:first-child { margin-right: auto; }
+.accounting-register-navigation a.is-active { border-color: #245bd9; color: #fff; background: #245bd9; }
+.accounting-register-navigation svg { width: 0.85rem; }
 
 .accounting-register-summary strong {
     font-size: 0.9rem;
@@ -137,6 +216,27 @@
     color: #6d7b90;
 }
 
+.accounting-register-add,
+.accounting-register-pay {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 2.35rem;
+    padding: 0.55rem 0.8rem;
+    border: 0;
+    border-radius: 0.65rem;
+    color: #fff;
+    background: #2563eb;
+    font-size: 0.67rem;
+    font-weight: 850;
+    cursor: pointer;
+}
+
+.accounting-register-add svg { width: 0.9rem; }
+.accounting-register-pay { min-height: 1.8rem; padding: 0.35rem 0.7rem; }
+
 .accounting-register-table-wrap {
     min-width: 0;
     min-height: 0;
@@ -213,7 +313,12 @@
     background: #fff5dc;
     font-size: 0.55rem;
     font-weight: 850;
+    border: 0;
+    outline: none;
+    cursor: pointer;
 }
+
+.accounting-register-project-link { color: #245bd9; font-weight: 850; }
 
 .accounting-register-status.is-ok_to_pay {
     color: #245bd9;
@@ -223,6 +328,219 @@
 .accounting-register-status.is-paid {
     color: #18794e;
     background: #e9f8f0;
+}
+
+.accounting-register-status.is-deposit {
+    color: #18794e;
+    background: #e9f8f0;
+}
+
+.accounting-register-qb {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+    accent-color: #245bd9;
+}
+
+.accounting-register-qb-modal {
+    max-width: 28rem;
+}
+
+.accounting-register-qb-modal > label {
+    display: grid;
+    gap: 0.4rem;
+    color: #536177;
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.accounting-register-qb-modal select,
+.accounting-register-qb-modal input {
+    min-height: 2.5rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #d7e1ee;
+    border-radius: 0.65rem;
+    background: #fff;
+    outline: 0;
+}
+
+.accounting-register-qb-reference {
+    display: flex;
+    align-items: center;
+    border: 1px solid #d7e1ee;
+    border-radius: 0.65rem;
+    overflow: hidden;
+}
+
+.accounting-register-qb-reference strong {
+    padding-left: 0.75rem;
+    color: #27344b;
+    font-size: 0.72rem;
+}
+
+.accounting-register-qb-reference input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+}
+
+.accounting-register-qb-modal > small {
+    color: #c53a47;
+}
+.accounting-register-qb-summary { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 1rem; padding: 0.75rem; border: 1px solid #dce4ef; border-radius: 0.65rem; background: #f8fafc; }
+.accounting-register-qb-summary span { color: #718096; font-size: 0.68rem; }
+.accounting-register-qb-summary strong { color: #1d2940; font-size: 0.72rem; text-align: right; }
+
+.accounting-register-modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    padding-top: 0.25rem;
+}
+
+.accounting-register-modal-actions button {
+    min-width: 7.5rem;
+    min-height: 2.55rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid transparent;
+    border-radius: 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 850;
+    cursor: pointer;
+}
+
+.accounting-register-modal-actions button.is-secondary {
+    border-color: #d5deea;
+    color: #42516a;
+    background: #fff;
+}
+
+.accounting-register-modal-actions button.is-primary {
+    color: #fff;
+    background: #2563eb;
+    box-shadow: 0 6px 14px rgb(37 99 235 / 22%);
+}
+
+.accounting-register-modal-actions button:hover { filter: brightness(0.97); }
+.accounting-register-modal-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.accounting-generate-code {
+    align-self: flex-start;
+    margin-top: 0.4rem;
+    border: 1px solid #2563eb;
+    border-radius: 0.55rem;
+    background: #eff6ff;
+    color: #1d4ed8;
+    padding: 0.45rem 0.7rem;
+    font-weight: 700;
+}
+
+.accounting-register-file-actions { display: flex; align-items: center; gap: 0.4rem; }
+.accounting-register-file-actions button { display: inline-flex; align-items: center; gap: 0.2rem; color: #245bd9; font-size: 0.65rem; font-weight: 800; white-space: nowrap; }
+.accounting-register-file-actions svg { width: 0.75rem; }
+.accounting-register-attachment-trigger, .vendor-invoice-attachment-trigger { color: #245bd9; font-weight: 850; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.accounting-register-attachment-list, .vendor-attachment-list { display: grid; max-height: 15rem; gap: 0.45rem; overflow-y: auto; }
+.accounting-register-attachment-list a, .vendor-attachment-list a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; padding: 0.65rem 0.75rem; border: 1px solid #dce4ef; border-radius: 0.65rem; color: #334155; background: #f8fafc; }
+.accounting-register-attachment-list svg, .vendor-attachment-list svg { width: 1rem; color: #245bd9; }
+.accounting-register-attachment-list span, .vendor-attachment-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accounting-register-attachment-list strong, .vendor-attachment-list strong { color: #245bd9; font-size: 0.7rem; }
+.accounting-register-attachment-list p, .vendor-attachment-list p { margin: 0; padding: 0.75rem; color: #718096; text-align: center; }
+.accounting-register-multi-upload { display: flex; min-height: 7rem; cursor: pointer; align-items: center; justify-content: center; gap: 0.5rem; border: 1px dashed #9db5df; border-radius: 0.75rem; color: #245bd9; background: #f5f8ff; }
+.accounting-register-multi-upload input { display: none; }
+.accounting-register-multi-upload svg { width: 1rem; }
+
+.accounting-register-transaction-modal {
+    width: min(1200px, calc(100vw - 24px));
+    max-width: min(1200px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 16px;
+}
+.accounting-register-transaction-modal form { display: flex; max-height: calc(100vh - 24px); flex-direction: column; }
+.accounting-register-transaction-modal form > div:first-child { padding: 20px 22px 0; }
+.accounting-register-unassigned { display: flex; align-items: flex-start; gap: 10px; margin: 14px 22px 0; padding: 12px 14px; border: 1px solid #cbd9f3; border-radius: 10px; background: #f3f7ff; cursor: pointer; }
+.accounting-register-unassigned input { width: 17px; height: 17px; margin-top: 2px; accent-color: #245bd9; }
+.accounting-register-unassigned span, .accounting-register-unassigned small { display: block; }
+.accounting-register-unassigned strong { color: #31415d; font-size: 12px; }
+.accounting-register-unassigned small { margin-top: 2px; color: #718096; font-size: 10px; }
+.accounting-register-form-top { display: grid; grid-template-columns: 1fr 1fr 1.35fr 1fr 0.9fr 0.9fr; gap: 11px; padding: 16px 22px; }
+.accounting-register-form-top label, .accounting-register-details label { display: grid; min-width: 0; align-content: start; gap: 6px; color: #526076; font-size: 11px; font-weight: 800; }
+.accounting-register-form-top input, .accounting-register-form-top select, .accounting-register-details input, .accounting-register-details select, .accounting-register-details textarea { width: 100%; min-width: 0; min-height: 42px; padding: 10px 12px; border: 1px solid #dce4ef; border-radius: 10px; background: #fff; outline: none; }
+.accounting-register-reference, .accounting-register-amount { display: flex; min-width: 0; min-height: 42px; overflow: hidden; border: 1px solid #dce4ef; border-radius: 10px; background: #fff; }
+.accounting-register-reference strong, .accounting-register-amount strong { display: grid; min-width: 44px; place-items: center; border-right: 1px solid #dce4ef; color: #245bd9; background: #edf3ff; }
+.accounting-register-form-top .accounting-register-reference input, .accounting-register-form-top .accounting-register-amount input { min-height: 40px; border: 0; border-radius: 0; }
+.accounting-register-form-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.35fr) minmax(20rem, 0.8fr); gap: 14px; padding: 0 22px 18px; overflow-y: auto; }
+.accounting-register-form-body > section { min-width: 0; overflow: visible; border: 1px solid #dce4ef; border-radius: 12px; background: #f9fbfe; }
+.accounting-register-form-body > section > header { display: grid; gap: 2px; padding: 12px 14px; border-bottom: 1px solid #e3e9f2; background: #fff; }
+.accounting-register-form-body > section > header strong { color: #2e3b51; font-size: 12px; }
+.accounting-register-form-body > section > header small { color: #8090a5; font-size: 10px; }
+.accounting-register-form-body .accounting-register-form-grid { padding: 14px; }
+.accounting-register-details { display: grid; gap: 12px; padding: 14px; }
+.accounting-register-details input[readonly] { color: #245bd9; background: #f3f7ff; font-weight: 800; }
+.accounting-register-create-upload { position: relative; display: grid !important; min-height: 92px; place-items: center; padding: 12px; border: 1px dashed #aebfda; border-radius: 10px; color: #718096; background: #fff; cursor: pointer; text-align: center; }
+.accounting-register-create-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.accounting-register-create-upload svg { width: 20px; color: #2d65e5; }
+.accounting-register-create-upload strong { max-width: 100%; overflow: hidden; color: #3c4b62; text-overflow: ellipsis; white-space: nowrap; }
+.accounting-register-create-upload small { color: #8290a5; }
+.accounting-register-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.accounting-register-form-grid label { display: grid; gap: 0.35rem; color: #536177; font-size: 0.68rem; font-weight: 800; }
+.accounting-register-form-grid label.is-wide { grid-column: 1 / -1; }
+.accounting-register-form-grid input,
+.accounting-register-form-grid select,
+.accounting-register-form-grid textarea {
+    width: 100%; min-height: 2.55rem; padding: 0.65rem 0.75rem; border: 1px solid #d7e1ee; border-radius: 0.65rem; background: #fff; outline: none;
+}
+.accounting-project-picker {
+    position: relative;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1.35fr;
+    gap: 0.8rem;
+}
+.accounting-project-picker > small { grid-column: 1 / -1; color: #8a6517; }
+.accounting-project-suggestions {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% - 0.15rem);
+    right: 0;
+    left: 0;
+    display: grid;
+    max-height: 16rem;
+    overflow-y: auto;
+    padding: 0.35rem;
+    border: 1px solid #d7e1ee;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 14px 32px rgb(15 23 42 / 16%);
+}
+.accounting-project-suggestions button {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.65rem 0.75rem;
+    border: 0;
+    border-radius: 0.55rem;
+    color: #334155;
+    text-align: left;
+    background: transparent;
+    cursor: pointer;
+}
+.accounting-project-suggestions button:hover { background: #eff6ff; }
+.accounting-project-suggestions strong { color: #172033; font-size: 0.76rem; }
+.accounting-project-suggestions span { font-size: 0.7rem; }
+.accounting-project-suggestions small { color: #2563eb; font-size: 0.65rem; }
+.accounting-project-suggestions p { margin: 0; padding: 0.8rem; color: #7b8799; font-size: 0.72rem; }
+.accounting-register-transaction-modal small { color: #c53a47; }
+.accounting-register-transaction-modal .accounting-register-modal-actions { flex: none; padding: 12px 22px; border-top: 1px solid #e3e9f2; background: #f8fafc; }
+
+@media (max-width: 720px) {
+    .accounting-register-form-top { grid-template-columns: 1fr; overflow-y: auto; }
+    .accounting-register-form-body { grid-template-columns: 1fr; }
+    .accounting-register-form-grid { grid-template-columns: 1fr; }
+    .accounting-register-form-grid label.is-wide { grid-column: auto; }
+    .accounting-project-picker { grid-template-columns: 1fr; }
 }
 
 .accounting-register-empty {

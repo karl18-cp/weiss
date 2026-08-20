@@ -1,6 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     Building2,
+    BarChart3,
     KeyRound,
     Phone,
     Save,
@@ -16,6 +17,13 @@ import '@/../css/managers.css';
 import DirectoryNavigation from '@/components/directory-navigation';
 import AccountStatusControl from '@/components/account-status-control';
 import { useSystemModal } from '@/components/system-modal-provider';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type Access = 'none' | 'view' | 'edit';
 type Manager = {
@@ -29,6 +37,11 @@ type Manager = {
     permissions: { module: string; access_level: Access }[];
 };
 type Company = { com_id: number; company: string };
+type ManagerReport = {
+    manager: { id: number; name: string };
+    summary: { leads: number; confirmed: number; dispatched: number; sold: number; last_sale: string | null };
+    rows: Array<{ id: number; origin_at: string | null; appointment_at: string | null; customer: string; result: string; confirmed: boolean; dispatched: boolean; sold: boolean; city: string | null; notes: string }>;
+};
 
 export default function Managers({
     managers,
@@ -48,6 +61,9 @@ export default function Managers({
     const [selected, setSelected] = useState<Manager | null>(null);
     const [search, setSearch] = useState('');
     const [directoryStatus, setDirectoryStatus] = useState<'active' | 'inactive'>('active');
+    const [report, setReport] = useState<ManagerReport | null>(null);
+    const [reportOpen, setReportOpen] = useState(false);
+    const [reportLoading, setReportLoading] = useState(false);
     const form = useForm({
         manager_name: '',
         username: '',
@@ -161,6 +177,24 @@ export default function Managers({
             });
         }
     };
+    const openReport = async () => {
+        if (!selected) return;
+        setReportOpen(true);
+        setReportLoading(true);
+        setReport(null);
+        try {
+            const response = await fetch(`/management/managers/${selected.manager_id}/report`, {
+                headers: { Accept: 'application/json' }, credentials: 'same-origin',
+            });
+            if (!response.ok) throw new Error('Unable to load report');
+            setReport((await response.json()) as ManagerReport);
+        } finally {
+            setReportLoading(false);
+        }
+    };
+    const reportDate = (value: string | null) => value
+        ? new Intl.DateTimeFormat('en-US', { month: '2-digit', day: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+        : '—';
     const visible = Object.values(form.data.permissions).filter(
         (value) => value !== 'none',
     ).length;
@@ -257,9 +291,10 @@ export default function Managers({
                                 </p>
                             </div>
                             {selected && (
-                                <button type="button" onClick={reset}>
-                                    New manager
-                                </button>
+                                <div className="manager-editor__heading-actions">
+                                    <button type="button" className="manager-report-button" onClick={openReport}><BarChart3 /> Manager report</button>
+                                    <button type="button" onClick={reset}>New manager</button>
+                                </div>
                             )}
                         </div>
                         <form onSubmit={submit} className="manager-form">
@@ -492,6 +527,27 @@ export default function Managers({
                         </form>
                     </section>
                 </div>
+                <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+                    <DialogContent className="manager-report-modal">
+                        <DialogHeader>
+                            <DialogTitle>{selected?.manager_name} — Manager report</DialogTitle>
+                            <DialogDescription>Leads assigned to this manager as the second manager when they moved them through the workflow.</DialogDescription>
+                        </DialogHeader>
+                        {reportLoading ? <div className="manager-report-loading">Loading report…</div> : report ? <>
+                            <div className="manager-report-summary">
+                                <span><small>Assigned leads</small><strong>{report.summary.leads}</strong></span>
+                                <span><small>Confirmed</small><strong>{report.summary.confirmed}</strong></span>
+                                <span><small>Dispatched</small><strong>{report.summary.dispatched}</strong></span>
+                                <span><small>Sold</small><strong>{report.summary.sold}</strong></span>
+                                <span><small>Last sale</small><strong>{reportDate(report.summary.last_sale)}</strong></span>
+                            </div>
+                            <div className="manager-report-table-wrap"><table><thead><tr><th>Origin</th><th>Appointment</th><th>Customer</th><th>Result</th><th>Conf.</th><th>Dispatched</th><th>Sold</th><th>City</th><th>Notes</th></tr></thead><tbody>
+                                {report.rows.map((row) => <tr key={row.id}><td>{reportDate(row.origin_at)}</td><td>{reportDate(row.appointment_at)}</td><td><strong>{row.customer}</strong></td><td>{row.result}</td><td>{row.confirmed ? '✓' : '—'}</td><td>{row.dispatched ? '✓' : '—'}</td><td>{row.sold ? '✓' : '—'}</td><td>{row.city || '—'}</td><td title={row.notes}>{row.notes || '—'}</td></tr>)}
+                                {report.rows.length === 0 && <tr><td colSpan={9}>No second-manager lead assignments found.</td></tr>}
+                            </tbody></table></div>
+                        </> : <div className="manager-report-loading">The report could not be loaded.</div>}
+                    </DialogContent>
+                </Dialog>
             </main>
         </>
     );

@@ -20,10 +20,24 @@ class ProjectInvoiceRequest extends FormRequest
                 Rule::unique('project_invoices')->where('project_id', $this->route('project')->id)->ignore($invoice?->id),
             ],
             'invoice_date' => ['required', 'date'],
-            'contractor_id' => ['required', 'integer', 'exists:contractors,con_id'],
+            'contractor_id' => [
+                'nullable',
+                'required_without:vendor_id',
+                Rule::prohibitedIf(fn (): bool => filled($this->input('vendor_id'))),
+                'integer',
+                'exists:contractors,con_id',
+            ],
+            'vendor_id' => [
+                'nullable',
+                'required_without:contractor_id',
+                Rule::prohibitedIf(fn (): bool => filled($this->input('contractor_id'))),
+                'integer',
+                'exists:vendors,vendor_id',
+            ],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
         ];
     }
 

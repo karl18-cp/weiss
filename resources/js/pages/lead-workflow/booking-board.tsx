@@ -11,7 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Map, { Marker, NavigationControl, Popup } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/../css/booking-board.css";
@@ -20,6 +20,15 @@ import { appointmentDate, appointmentDateKey } from "@/lib/appointment-date";
 type Salesman = {
   salesman_id: number;
   salesman_name: string;
+};
+
+type SalesmanLocation = {
+  salesman_id: number;
+  salesman_name: string;
+  live_latitude: number;
+  live_longitude: number;
+  live_location_accuracy: number | null;
+  live_location_updated_at: string;
 };
 
 type BookingLead = {
@@ -59,6 +68,7 @@ type ViewMode = "daily" | "weekly" | "monthly";
 type BookingBoardProps = {
   leads: BookingLead[];
   salesmen: Salesman[];
+  salesmanLocations: SalesmanLocation[];
   map: { key: string | null; styleUrl: string };
   viewerRole: string;
   viewerSalesmanId: number | null;
@@ -138,12 +148,14 @@ function BookingMap({
   onSelect,
   mapConfig,
   salesmen,
+  salesmanLocations,
 }: {
   leads: BookingLead[];
   selected: BookingLead | null;
   onSelect: (id: number) => void;
   mapConfig: BookingBoardProps["map"];
   salesmen: Salesman[];
+  salesmanLocations: SalesmanLocation[];
 }) {
   const mappedLeads = useMemo(
     () =>
@@ -154,17 +166,21 @@ function BookingMap({
     [leads],
   );
   const camera = useMemo(() => {
-    if (mappedLeads.length === 0) {
+    const points = [
+      ...mappedLeads.map((lead) => ({ longitude: Number(lead.longitude), latitude: Number(lead.latitude) })),
+      ...salesmanLocations.map((salesman) => ({ longitude: Number(salesman.live_longitude), latitude: Number(salesman.live_latitude) })),
+    ];
+    if (points.length === 0) {
       return { longitude: -118.2437, latitude: 34.0522, zoom: 8 };
     }
 
-    const longitudes = mappedLeads.map((lead) => Number(lead.longitude));
-    const latitudes = mappedLeads.map((lead) => Number(lead.latitude));
+    const longitudes = points.map((point) => point.longitude);
+    const latitudes = points.map((point) => point.latitude);
     const longitudeSpan = Math.max(...longitudes) - Math.min(...longitudes);
     const latitudeSpan = Math.max(...latitudes) - Math.min(...latitudes);
     const span = Math.max(longitudeSpan, latitudeSpan);
     const zoom =
-      mappedLeads.length === 1
+      points.length === 1
         ? 12
         : span > 5
           ? 5
@@ -185,9 +201,9 @@ function BookingMap({
       latitude: (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
       zoom,
     };
-  }, [mappedLeads]);
+  }, [mappedLeads, salesmanLocations]);
   const cameraKey =
-    mappedLeads.map((lead) => lead.id).join("-") || "no-mapped-leads";
+    `${mappedLeads.map((lead) => lead.id).join("-")}|${salesmanLocations.map((salesman) => salesman.salesman_id).join("-")}`;
 
   if (!mapConfig.key) {
     return (
@@ -244,6 +260,22 @@ function BookingMap({
           </Marker>
         );
       })}
+      {salesmanLocations.map((salesman) => (
+        <Marker
+          key={`salesman-${salesman.salesman_id}`}
+          longitude={Number(salesman.live_longitude)}
+          latitude={Number(salesman.live_latitude)}
+          anchor="center"
+        >
+          <div
+            className="booking-salesman-location"
+            title={`${salesman.salesman_name} · updated ${new Date(salesman.live_location_updated_at).toLocaleTimeString()}`}
+          >
+            <UserRound />
+            <span>{salesman.salesman_name}</span>
+          </div>
+        </Marker>
+      ))}
       {selected?.latitude != null && selected.longitude != null && (
         <Popup
           longitude={Number(selected.longitude)}
@@ -269,11 +301,20 @@ function BookingMap({
 export default function BookingBoard({
   leads,
   salesmen,
+  salesmanLocations,
   map,
   viewerRole,
   viewerSalesmanId,
   leadBaseUrl = "/lead-workflow/leads-shop",
 }: BookingBoardProps) {
+  useEffect(() => {
+    if (viewerRole === "salesman") return;
+    const timer = window.setInterval(() => {
+      router.reload({ only: ["salesmanLocations"], preserveScroll: true });
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [viewerRole]);
+
   const visibleLeads = useMemo(
     () =>
       viewerRole !== "salesman" || viewerSalesmanId === null
@@ -442,6 +483,12 @@ export default function BookingBoard({
               <MapPin />
               <strong>{mappedCount}</strong> mapped
             </span>
+            {viewerRole !== "salesman" && (
+              <span>
+                <UserRound />
+                <strong>{salesmanLocations.length}</strong> live salesmen
+              </span>
+            )}
           </div>
         </header>
 
@@ -452,6 +499,7 @@ export default function BookingBoard({
             onSelect={setSelectedId}
             mapConfig={map}
             salesmen={salesmen}
+            salesmanLocations={salesmanLocations}
           />
           {viewerRole !== "salesman" && (
             <div className="booking-map-legend">

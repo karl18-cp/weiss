@@ -4,19 +4,13 @@ import { useState } from 'react';
 import '@/../css/lead-data.css';
 
 const dataTabs = [
-    { label: 'Vendor Invoices', href: '/lead-workflow/data/vendor-invoices' },
     { label: 'Proposals', href: null },
     { label: 'Contracts', href: null },
-    { label: 'Payables', href: '/lead-workflow/data/payables' },
-    { label: 'Receivables', href: '/lead-workflow/data/receivables' },
     { label: 'Tele Report', href: '/lead-workflow/data/tele-hours' },
 ] as const;
 
 type DataSection =
     | 'Tele Leads'
-    | 'Vendor Invoices'
-    | 'Payables'
-    | 'Receivables'
     | 'Tele Report'
     | 'Projects';
 

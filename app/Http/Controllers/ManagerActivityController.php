@@ -156,15 +156,15 @@ class ManagerActivityController extends Controller
                 ];
              });
 
-        $movementTotals = DB::table('lead_movements')
-            ->join('leads', 'leads.id', '=', 'lead_movements.lead_id')
-            ->join('accounts', 'accounts.acc_id', '=', 'lead_movements.moved_by')
+        $movementTotals = DB::table('lead_movements as manager_returns')
+            ->join('leads', 'leads.id', '=', 'manager_returns.lead_id')
+            ->join('accounts', 'accounts.acc_id', '=', 'manager_returns.moved_by')
             ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
-            ->whereNotNull('lead_movements.moved_by')
-            ->whereIn('lead_movements.to_status', ['confirmed', 'dispatched'])
-            ->when($managerAccountId, fn (Builder $query) => $query->where('lead_movements.moved_by', $managerAccountId))
-            ->when($from, fn (Builder $query) => $query->where('lead_movements.created_at', '>=', $from))
-            ->when($to, fn (Builder $query) => $query->where('lead_movements.created_at', '<=', $to))
+            ->where('manager_returns.to_status', 'fresh')
+            ->whereNotNull('manager_returns.from_status')
+            ->when($managerAccountId, fn (Builder $query) => $query->where('manager_returns.moved_by', $managerAccountId))
+            ->when($from, fn (Builder $query) => $query->where('manager_returns.created_at', '>=', $from))
+            ->when($to, fn (Builder $query) => $query->where('manager_returns.created_at', '<=', $to))
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $like = '%'.$search.'%';
                 $query->where(function (Builder $query) use ($like): void {
@@ -174,9 +174,25 @@ class ManagerActivityController extends Controller
                         ->orWhere('managers.manager_name', 'like', $like);
                 });
             })
-            ->selectRaw('lead_movements.to_status, COUNT(DISTINCT lead_movements.lead_id) as lead_count')
-            ->groupBy('lead_movements.to_status')
-            ->pluck('lead_count', 'to_status');
+            ->selectRaw("COUNT(DISTINCT manager_returns.lead_id) as total,
+                COUNT(DISTINCT CASE WHEN EXISTS (
+                    SELECT 1 FROM lead_movements confirmed_moves
+                    WHERE confirmed_moves.lead_id = manager_returns.lead_id
+                    AND confirmed_moves.created_at >= manager_returns.created_at
+                    AND confirmed_moves.to_status = 'confirmed'
+                ) THEN manager_returns.lead_id END) as confirmed,
+                COUNT(DISTINCT CASE WHEN EXISTS (
+                    SELECT 1 FROM lead_movements dispatch_moves
+                    WHERE dispatch_moves.lead_id = manager_returns.lead_id
+                    AND dispatch_moves.created_at >= manager_returns.created_at
+                    AND dispatch_moves.to_status = 'dispatched'
+                ) THEN manager_returns.lead_id END) as dispatched,
+                COUNT(DISTINCT CASE WHEN EXISTS (
+                    SELECT 1 FROM projects sold_projects
+                    WHERE sold_projects.lead_id = manager_returns.lead_id
+                    AND sold_projects.created_at >= manager_returns.created_at
+                ) THEN manager_returns.lead_id END) as sold")
+            ->first();
 
         return Inertia::render('lead-workflow/manager-activity', [
             'activities' => $activities,
@@ -204,8 +220,10 @@ class ManagerActivityController extends Controller
             ],
             'canViewAll' => $canViewAll,
             'movementTotals' => [
-                'confirmed' => (int) ($movementTotals['confirmed'] ?? 0),
-                'dispatched' => (int) ($movementTotals['dispatched'] ?? 0),
+                'total' => (int) ($movementTotals?->total ?? 0),
+                'confirmed' => (int) ($movementTotals?->confirmed ?? 0),
+                'dispatched' => (int) ($movementTotals?->dispatched ?? 0),
+                'sold' => (int) ($movementTotals?->sold ?? 0),
             ],
         ]);
     }

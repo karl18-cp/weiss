@@ -8,6 +8,7 @@ use App\Models\Lead;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Salesman;
+use App\Models\Vendor;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -54,7 +55,8 @@ function projectSaleFixtures(): array
 }
 
 test('a sale requires an assigned salesman', function () {
-    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
 
     $this->actingAs($account)
         ->post(route('lead-workflow.leads-shop.sale', $lead), [
@@ -98,6 +100,8 @@ test('project details can update the company and product', function () {
         'project_code' => 'RC-100',
     ]);
     $product = Product::query()->create(['product_name' => 'Replacement Product']);
+    $secondAgent = Agent::query()->create(['agent_name' => 'Second Project Agent']);
+    $secondSalesman = Salesman::query()->create(['salesman_name' => 'Second Project Salesman']);
 
     $this->actingAs($account)
         ->put(route('management.projects.update', $project), [
@@ -117,6 +121,10 @@ test('project details can update the company and product', function () {
             'source' => 'Updated Source',
             'appointment_at' => '2026-08-12 14:30:00',
             'lead_created_at' => '2026-08-01 09:15:00',
+            'agent_id' => $lead->agent_id,
+            'agent_2_id' => $secondAgent->agent_id,
+            'salesman_1_id' => $salesman->salesman_id,
+            'salesman_2_id' => $secondSalesman->salesman_id,
         ])
         ->assertRedirect()
         ->assertSessionHasNoErrors();
@@ -125,10 +133,55 @@ test('project details can update the company and product', function () {
         ->and($lead->product_id)->toBe($product->prod_id)
         ->and($lead->customer_name)->toBe('Updated Customer')
         ->and($lead->created_at->format('Y-m-d H:i'))->toBe('2026-08-01 09:15')
+        ->and($lead->agent_2_id)->toBe($secondAgent->agent_id)
+        ->and($lead->salesman_1_id)->toBe($salesman->salesman_id)
+        ->and($lead->salesman_2_id)->toBe($secondSalesman->salesman_id)
         ->and($project->refresh()->status)->toBe('progress')
-        ->and($project->project_number)->toBe('RC-100')
-        ->and($company->refresh()->project_code)->toBe('RC-101')
+        ->and($project->project_number)->toBe('RC#100')
+        ->and($company->refresh()->project_code)->toBe('RC#101')
         ->and($project->sales()->where('type', 'original')->firstOrFail()->product_id)->toBe($product->prod_id);
+});
+
+test('project details can save an imported project with incomplete legacy fields', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 12500]);
+    $project = $lead->project()->firstOrFail();
+
+    $lead->update([
+        'company_id' => null,
+        'product_id' => null,
+        'primary_number' => '',
+        'address' => '',
+        'city' => '',
+        'state' => '',
+        'zip_code' => '',
+        'source' => '',
+    ]);
+
+    $this->actingAs($account)
+        ->put(route('management.projects.update', $project), [
+            'project_number' => $project->project_number,
+            'status' => 'new',
+            'company_id' => null,
+            'product_id' => null,
+            'customer_name' => 'Saved Legacy Customer',
+            'primary_number' => null,
+            'secondary_number' => null,
+            'mobile_number' => null,
+            'email' => null,
+            'address' => null,
+            'city' => null,
+            'state' => null,
+            'zip_code' => null,
+            'source' => null,
+            'appointment_at' => null,
+            'lead_created_at' => '2026-08-01 09:15:00',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($lead->refresh()->customer_name)->toBe('Saved Legacy Customer');
 });
 
 test('an authenticated user can create a project directly from projects', function () {
@@ -172,14 +225,14 @@ test('an authenticated user can create a project directly from projects', functi
     expect(Lead::query()->count())->toBe($leadCount)
         ->and($project->lead_id)->toBeNull()
         ->and($project->contact_name)->toBe('Direct Contact')
-        ->and($project->project_number)->toBeNull()
+        ->and($project->project_number)->toBe('PC#001')
         ->and($project->amount)->toBe('25000.00')
         ->and($project->budget)->toBe('18000.00')
         ->and($project->manual_notes)->toBe('Standalone project notes.')
         ->and($project->created_at->toDateString())->toBe('2026-08-06')
         ->and($project->sales()->where('type', 'original')->firstOrFail()->amount)->toBe('25000.00');
 
-    expect($company->refresh()->project_code)->toBe('PC-001');
+    expect($company->refresh()->project_code)->toBe('PC#002');
 });
 
 test('changing an appointment records the previous and new dates in lead history', function () {
@@ -538,7 +591,7 @@ test('project vendor invoices support files editing statuses and deletion', func
         ->file_name->toBe('invoice.pdf');
     Storage::disk('local')->assertExists($invoice->file_path);
 
-    $this->get(route('lead-workflow.data.vendor-invoices'))
+    $this->get(route('management.invoices'))
         ->assertInertia(fn (Assert $page) => $page
             ->component('lead-workflow/vendor-invoices')
             ->has('invoices.data', 1)
@@ -558,20 +611,59 @@ test('project vendor invoices support files editing statuses and deletion', func
         'notes' => 'Updated invoice',
     ])->assertRedirect();
 
-    $this->patch(route('management.projects.invoices.status', [$project, $invoice]), [
-        'status' => 'ok_to_pay',
-    ])->assertRedirect();
-
     expect($invoice->refresh())
         ->invoice_number->toBe('INV#1001-UPDATED')
         ->amount->toBe('1500.00')
-        ->status->toBe('ok_to_pay');
+        ->status->toBe('pending');
 
     $filePath = $invoice->file_path;
     $this->delete(route('management.projects.invoices.destroy', [$project, $invoice]))
         ->assertRedirect();
     $this->assertDatabaseMissing('project_invoices', ['id' => $invoice->id]);
     Storage::disk('local')->assertMissing($filePath);
+});
+
+test('project invoices can be charged by a vendor instead of a contractor', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $vendor = Vendor::query()->create(['vendor' => 'Project Supply Vendor']);
+
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), [
+        'amount' => 10000,
+    ])->assertRedirect();
+    $project = $lead->refresh()->project;
+
+    $this->post(route('management.projects.invoices.store', $project), [
+        'invoice_number' => 'INV#VENDOR-1',
+        'invoice_date' => '2026-08-19',
+        'vendor_id' => $vendor->vendor_id,
+        'amount' => 750,
+        'notes' => 'Vendor supplied materials',
+    ])->assertRedirect();
+
+    $invoice = $project->invoices()->firstOrFail();
+    expect($invoice->contractor_id)->toBeNull()
+        ->and($invoice->vendor_id)->toBe($vendor->vendor_id)
+        ->and($invoice->vendor->vendor)->toBe('Project Supply Vendor');
+
+    $this->post(route('management.projects.accounting-transactions.store', $project), [
+        'type' => 'payable',
+        'category' => 'Vendor Payment',
+        'transaction_date' => '2026-08-19',
+        'payment_method' => 'check',
+        'reference_number' => 'CH#VENDOR-1',
+        'amount' => 100,
+        'status' => 'paid',
+        'project_invoice_id' => $invoice->id,
+    ])->assertRedirect();
+
+    expect($project->accountingTransactions()->where('type', 'payable')->firstOrFail()->counterparty)
+        ->toBe('Project Supply Vendor');
+
+    $this->get(route('management.invoices'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('invoices.data.0.vendor.vendor', 'Project Supply Vendor')
+            ->where('invoices.data.0.contractor', null));
 });
 
 test('project accounting supports standalone receivables optional schedules and payables', function () {
@@ -620,10 +712,10 @@ test('project accounting supports standalone receivables optional schedules and 
         ...$receivable,
         'payment_method' => 'zelle',
         'reference_number' => 'ZELLEabc123',
-        'status' => 'ok_to_pay',
+        'status' => 'deposit',
         'scheduled_payment_ids' => [$scheduledPayment->id],
     ])->assertRedirect();
-    expect($transaction->refresh()->status)->toBe('ok_to_pay');
+    expect($transaction->refresh()->status)->toBe('deposit');
 
     $this->post(route('management.projects.accounting-transactions.store', $project), [
         ...$receivable,
@@ -631,12 +723,19 @@ test('project accounting supports standalone receivables optional schedules and 
         'amount' => 1501,
         'status' => 'paid',
         'scheduled_payment_ids' => [$scheduledPayment->id],
-    ])->assertSessionHasErrors('amount');
+    ])->assertSessionHasErrors('status');
+
+    $this->post(route('management.projects.accounting-transactions.store', $project), [
+        ...$receivable,
+        'reference_number' => 'CH#OLD-STATUS',
+        'status' => 'ok_to_pay',
+    ])->assertSessionHasErrors('status');
 
     $this->post(route('management.projects.accounting-transactions.store', $project), [
         ...$receivable,
         'payment_method' => 'credit_card',
         'reference_number' => 'WRONG-100',
+        'status' => 'deposit',
     ])->assertSessionHasErrors('reference_number');
 
     $contractor = Contractor::query()->create([
@@ -676,8 +775,62 @@ test('project accounting supports standalone receivables optional schedules and 
     expect($payable)
         ->counterparty->toBe('Project Vendor')
         ->requested_by->toBe($account->username)
+        ->status->toBe('paid')
+        ->payment_method->toBe('credit_card')
+        ->reference_number->toBe('CC-5544')
         ->file_name->toBe('payable.pdf');
     Storage::disk('local')->assertExists($payable->file_path);
+
+    $this->post(route('management.projects.accounting-transactions.store', $project), [
+        ...$receivable,
+        'type' => 'payable',
+        'category' => 'Vendor Payment',
+        'invoice_order_number' => 'PO-2026-1842',
+        'payment_method' => null,
+        'reference_number' => null,
+        'amount' => 125,
+        'status' => 'ok_to_pay',
+        'contractor_id' => $contractor->con_id,
+        'project_invoice_id' => null,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('project_accounting_transactions', [
+        'project_id' => $project->id,
+        'type' => 'payable',
+        'category' => 'Vendor Payment',
+        'invoice_order_number' => 'PO-2026-1842',
+        'amount' => 125,
+        'project_invoice_id' => null,
+    ]);
+
+    $this->put(route('management.projects.accounting-transactions.update', [$project, $payable]), [
+        ...$receivable,
+        'type' => 'payable',
+        'category' => 'Vendor Payment',
+        'payment_method' => null,
+        'reference_number' => null,
+        'amount' => 500,
+        'status' => 'ok_to_pay',
+        'contractor_id' => $contractor->con_id,
+        'project_invoice_id' => $invoice->id,
+    ])->assertRedirect();
+
+    expect($payable->refresh())
+        ->status->toBe('ok_to_pay')
+        ->payment_method->toBeNull()
+        ->reference_number->toBeNull();
+
+    $this->put(route('management.projects.accounting-transactions.update', [$project, $payable]), [
+        ...$receivable,
+        'type' => 'payable',
+        'category' => 'Vendor Payment',
+        'payment_method' => null,
+        'reference_number' => null,
+        'amount' => 500,
+        'status' => 'paid',
+        'contractor_id' => $contractor->con_id,
+        'project_invoice_id' => $invoice->id,
+    ])->assertSessionHasErrors('payment_method');
 
     $this->post(route('management.projects.accounting-transactions.store', $project), [
         ...$receivable,
@@ -692,4 +845,48 @@ test('project accounting supports standalone receivables optional schedules and 
     $this->delete(route('management.projects.accounting-transactions.destroy', [$project, $transaction]))
         ->assertRedirect();
     $this->assertDatabaseMissing('project_accounting_transactions', ['id' => $transaction->id]);
+});
+
+test('receivables require payment details only when they are moved to qb', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), [
+        'amount' => 10000,
+    ]);
+    $project = $lead->refresh()->project;
+
+    $this->post(route('management.projects.accounting-transactions.store', $project), [
+        'type' => 'receivable',
+        'category' => 'Customer Payment',
+        'transaction_date' => '2026-08-13',
+        'amount' => 500,
+        'status' => 'pending',
+    ])->assertRedirect();
+
+    $receivable = $project->accountingTransactions()->latest('id')->firstOrFail();
+    expect($receivable->payment_method)->toBeNull()
+        ->and($receivable->reference_number)->toBeNull()
+        ->and($receivable->qb)->toBeFalse();
+
+    $this->patch(route('management.projects.accounting-transactions.qb', [$project, $receivable]), [
+        'qb' => true,
+    ])->assertSessionHasErrors(['payment_method', 'reference_number']);
+
+    $this->patch(route('management.projects.accounting-transactions.qb', [$project, $receivable]), [
+        'qb' => true,
+        'payment_method' => 'check',
+        'reference_number' => 'CH#9001',
+    ])->assertRedirect();
+
+    expect($receivable->refresh()->qb)->toBeTrue()
+        ->and($receivable->status)->toBe('deposit')
+        ->and($receivable->payment_method)->toBe('check')
+        ->and($receivable->reference_number)->toBe('CH#9001');
+
+    $this->patch(route('management.projects.accounting-transactions.qb', [$project, $receivable]), [
+        'qb' => false,
+    ])->assertRedirect();
+
+    expect($receivable->refresh()->qb)->toBeFalse()
+        ->and($receivable->status)->toBe('deposit');
 });

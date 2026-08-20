@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowUpDown,
@@ -20,17 +20,20 @@ import {
     Phone,
     PhoneCall,
     Plus,
+    Search,
     Trash2,
     Upload,
     UserRound,
     Users,
 } from 'lucide-react';
-import { createElement, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, createElement, useEffect, useMemo, useRef, useState } from 'react';
 import '@/../css/projects.css';
+import '@/../css/projects-tab-themes.css';
 import { useSystemModal } from '@/components/system-modal-provider';
 import { RingCentralCallButton } from '@/components/ringcentral-call-button';
 import { appointmentDate, appointmentInputValue } from '@/lib/appointment-date';
 import { formatPhoneNumber } from '@/lib/phone-number';
+import type { Auth } from '@/types/auth';
 import { CRM_TIME_ZONE, crmDateKey } from '@/lib/crm-time';
 import {
     Dialog,
@@ -90,9 +93,11 @@ type ScheduledPayment = {
 };
 
 type ContractorOption = { con_id: number; contractor: string };
+type VendorOption = { vendor_id: number; vendor: string };
 
 type ProjectInvoice = {
     id: number;
+    project_document_id: number | null;
     invoice_number: string;
     invoice_date: string;
     amount: string;
@@ -101,21 +106,25 @@ type ProjectInvoice = {
     file_name: string | null;
     file_mime: string | null;
     file_size: number | null;
-    contractor: ContractorOption;
+    contractor: ContractorOption | null;
+    vendor: VendorOption | null;
 };
 
 type AccountingTransaction = {
     id: number;
+    project_document_id: number | null;
     type: 'receivable' | 'payable';
     category: string;
     transaction_date: string;
-    payment_method: 'check' | 'zelle' | 'credit_card';
-    reference_number: string;
+    payment_method: 'check' | 'zelle' | 'credit_card' | 'wire_transfer' | 'square_transfer' | 'cash' | null;
+    reference_number: string | null;
+    invoice_order_number: string | null;
     counterparty: string | null;
     requested_by: string | null;
     contractor: ContractorOption | null;
     amount: string;
-    status: 'pending' | 'ok_to_pay' | 'paid';
+    status: 'pending' | 'deposit' | 'ok_to_pay' | 'paid';
+    qb: boolean;
     notes: string | null;
     file_name: string | null;
     file_mime: string | null;
@@ -126,7 +135,7 @@ type AccountingTransaction = {
 
 type ProjectDocument = {
     key: string;
-    type: 'Invoice' | 'Receivable' | 'Payable';
+    type: 'Contract' | 'Project Upload' | 'Invoice' | 'Receivable' | 'Payable' | 'Sale Contract';
     fileName: string;
     date: string;
     notes: string;
@@ -136,8 +145,23 @@ type ProjectDocument = {
     url: string;
 };
 
+type BalanceView = 'receivable' | 'payable' | 'invoice';
+
+type BalanceItem = {
+    key: string;
+    project: Project;
+    label: string;
+    counterparty: string;
+    date: string;
+    status: string;
+    balance: number;
+};
+
 type Project = {
     id: number;
+    contract_file_name: string | null;
+    contract_file_mime: string | null;
+    contract_file_size: number | null;
     lead_id: number | null;
     tele_lead_excluded: boolean;
     project_number: string | null;
@@ -148,6 +172,8 @@ type Project = {
     scheduled_payments: ScheduledPayment[];
     invoices: ProjectInvoice[];
     accounting_transactions: AccountingTransaction[];
+    documents: Array<{ id: number; project_invoice_id: number | null; project_accounting_transaction_id: number | null; project_sale_id: number | null; category: string; file_name: string; file_mime: string | null; file_size: number | null; created_at: string }>;
+    contractors: Array<ContractorOption & { pivot: { position: number } }>;
     lead: {
         id: number;
         created_at: string;
@@ -165,10 +191,10 @@ type Project = {
         telemarketer_notes: string;
         company: CompanyOption | null;
         product: ProductOption | null;
-        agent: { agent_name: string } | null;
-        second_agent: { agent_name: string } | null;
-        salesman_one: { salesman_name: string; phone: string | null } | null;
-        salesman_two: { salesman_name: string; phone: string | null } | null;
+        agent: AgentOption | null;
+        second_agent: AgentOption | null;
+        salesman_one: SalesmanOption | null;
+        salesman_two: SalesmanOption | null;
         notes: {
             id: number;
             note_type: string;
@@ -228,6 +254,16 @@ const invoiceStatusLabels: Record<ProjectInvoice['status'], string> = {
     paid: 'Paid',
 };
 
+const accountingStatusLabels: Record<
+    AccountingTransaction['status'],
+    string
+> = {
+    pending: 'Pending',
+    deposit: 'Deposit',
+    ok_to_pay: 'OK 2 Pay',
+    paid: 'Paid',
+};
+
 const invoiceNumberWithPrefix = (value: string) => {
     const suffix = value.replace(/^INV[#-]?/i, '').replace(/\s+/g, '');
 
@@ -241,13 +277,21 @@ const paymentPrefixes = {
     check: 'CH#',
     zelle: 'ZELLE',
     credit_card: 'CC-',
+    wire_transfer: 'WIRE-',
+    square_transfer: 'SQUARE-',
+    cash: 'CASH-',
 } as const;
 
 const paymentMethodLabels = {
     check: 'Check',
     zelle: 'Zelle',
     credit_card: 'Credit Card',
+    wire_transfer: 'Wire Transfer',
+    square_transfer: 'Square Transfer',
+    cash: 'Cash',
 } as const;
+
+const cashReferenceCode = () => `CASH-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
 const paymentReference = (method: keyof typeof paymentPrefixes, value = '') => {
     const knownPrefix = Object.values(paymentPrefixes).find((prefix) =>
@@ -257,7 +301,9 @@ const paymentReference = (method: keyof typeof paymentPrefixes, value = '') => {
         .replace(/\s+/g, '')
         .replace(/^CH#/i, '')
         .replace(/^ZELLE/i, '')
-        .replace(/^CC-/i, '');
+        .replace(/^CC-/i, '')
+        .replace(/^WIRE-/i, '')
+        .replace(/^SQUARE-/i, '');
 
     return `${paymentPrefixes[method]}${suffix}`;
 };
@@ -270,6 +316,7 @@ export default function Projects({
     salesmen,
     managers,
     contractors,
+    vendors,
     requesters,
     currentRequester,
     googleDriveUrl,
@@ -281,32 +328,63 @@ export default function Projects({
     salesmen: SalesmanOption[];
     managers: ManagerOption[];
     contractors: ContractorOption[];
+    vendors: VendorOption[];
     requesters: string[];
     currentRequester: string | null;
     googleDriveUrl: string | null;
 }) {
+    const { auth } = usePage<{ auth: Auth }>().props;
+    const canGeneratePaymentCodes = auth.user.role === 'admin' || auth.permissions?.generate_payment_codes === 'edit';
     const { confirm } = useSystemModal();
-    const requestedProjectId =
-        Number(new URLSearchParams(window.location.search).get('project')) ||
-        null;
+    const projectWorkspaceStorageKey = 'weiss.projects.workspace';
+    const storedProjectWorkspace = (() => {
+        try {
+            return JSON.parse(
+                window.sessionStorage.getItem(projectWorkspaceStorageKey) ??
+                    '{}',
+            ) as { projectId?: number; tab?: string };
+        } catch {
+            return {} as { projectId?: number; tab?: string };
+        }
+    })();
+    const queryParameters = new URLSearchParams(window.location.search);
+    const requestedProjectId = Number(queryParameters.get('project')) || null;
+    const restoredProjectId =
+        requestedProjectId ?? Number(storedProjectWorkspace.projectId) ?? null;
     const isSearchFocus =
-        new URLSearchParams(window.location.search).get('focus') === 'search';
+        queryParameters.get('focus') === 'search';
     const focusedProjectRowRef = useRef<HTMLTableRowElement | null>(null);
     const [activeTab, setActiveTab] = useState<
         'PRJ' | 'DTL' | 'SP' | 'INV' | 'ACT' | 'DOC'
-    >('PRJ');
+    >(() => {
+        const requestedTab =
+            queryParameters.get('tab') ?? storedProjectWorkspace.tab;
+
+        return ['DTL', 'SP', 'INV', 'ACT', 'DOC'].includes(
+            requestedTab ?? '',
+        )
+            ? (requestedTab as 'DTL' | 'SP' | 'INV' | 'ACT' | 'DOC')
+            : 'PRJ';
+    });
     const [projectStatusFilter, setProjectStatusFilter] =
         useState<ProjectStatusFilter>('all');
+    const [projectCompanyFilter, setProjectCompanyFilter] = useState('all');
+    const [projectSalesmanFilter, setProjectSalesmanFilter] = useState('all');
+    const [projectSearch, setProjectSearch] = useState('');
     const [projectSort, setProjectSort] = useState<{
         key: ProjectSortKey;
         direction: ProjectSortDirection;
     }>({ key: 'signed', direction: 'desc' });
     const [selectedId, setSelectedId] = useState<number | null>(() =>
-        projects.some((project) => project.id === requestedProjectId)
-            ? requestedProjectId
+        projects.some((project) => project.id === restoredProjectId)
+            ? restoredProjectId
             : null,
     );
     const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
+    const [expandedSaleProjectIds, setExpandedSaleProjectIds] = useState<number[]>([]);
+    const contractorAssignmentForm = useForm({
+        contractor_ids: ['', '', '', ''] as string[],
+    });
     const [selectedScheduledPaymentId, setSelectedScheduledPaymentId] =
         useState<number | null>(null);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(
@@ -321,11 +399,20 @@ export default function Projects({
     const [selectedDocumentKey, setSelectedDocumentKey] = useState<
         string | null
     >(null);
+    const documentUploadForm = useForm<{
+        files: File[];
+        target_type: 'project' | 'invoice' | 'accounting' | 'sale';
+        target_id: string;
+    }>({ files: [], target_type: 'project', target_id: '' });
+    const [accountingAttachmentTransaction, setAccountingAttachmentTransaction] =
+        useState<AccountingTransaction | null>(null);
+    const [saleAttachmentSale, setSaleAttachmentSale] = useState<ProjectSale | null>(null);
     const [editingProjectDetails, setEditingProjectDetails] = useState(false);
     const [creatingProject, setCreatingProject] = useState(false);
     const [syncingDriveFolders, setSyncingDriveFolders] = useState(false);
     const [projectOnlySelectionMode, setProjectOnlySelectionMode] =
         useState(false);
+    const [balanceView, setBalanceView] = useState<BalanceView | null>(null);
     const [selectedProjectOnlyIds, setSelectedProjectOnlyIds] = useState<
         number[]
     >([]);
@@ -347,6 +434,10 @@ export default function Projects({
         source: '',
         appointment_at: '',
         lead_created_at: '',
+        agent_id: '',
+        agent_2_id: '',
+        salesman_1_id: '',
+        salesman_2_id: '',
     });
     const projectCreateForm = useForm({
         customer_name: '',
@@ -416,6 +507,7 @@ export default function Projects({
         amount: '',
         sale_date: '',
         product_id: '',
+        files: [] as File[],
     });
     const [scheduledPaymentModal, setScheduledPaymentModal] = useState<{
         mode: 'create' | 'edit';
@@ -437,36 +529,54 @@ export default function Projects({
         url: string;
         mime: string;
     } | null>(null);
+    const [isInvoiceFileDragging, setIsInvoiceFileDragging] = useState(false);
+    const [invoiceContractorSearch, setInvoiceContractorSearch] = useState('');
     const invoiceForm = useForm<{
         invoice_number: string;
         invoice_date: string;
         contractor_id: string;
+        vendor_id: string;
         amount: string;
         notes: string;
-        file: File | null;
+        files: File[];
+        project_document_id: string;
     }>({
         invoice_number: 'INV#',
         invoice_date: '',
         contractor_id: '',
+        vendor_id: '',
         amount: '',
         notes: '',
         file: null,
+        project_document_id: '',
     });
     const [accountingModal, setAccountingModal] = useState<{
         mode: 'create' | 'edit';
         transaction: AccountingTransaction | null;
+    } | null>(null);
+    const [payablePaymentModalOpen, setPayablePaymentModalOpen] =
+        useState(false);
+    const [receivableQbModal, setReceivableQbModal] = useState<{
+        transaction: AccountingTransaction;
+        paymentMethod: keyof typeof paymentPrefixes;
+        referenceNumber: string;
+        error: string;
     } | null>(null);
     const [accountingFilePreview, setAccountingFilePreview] = useState<{
         url: string;
         mime: string;
         isLocal: boolean;
     } | null>(null);
+    const [isAccountingFileDragging, setIsAccountingFileDragging] =
+        useState(false);
     const accountingForm = useForm<{
         type: 'receivable' | 'payable';
+        unassigned: boolean;
         category: string;
         transaction_date: string;
-        payment_method: 'check' | 'zelle' | 'credit_card';
+        payment_method: 'check' | 'zelle' | 'credit_card' | 'wire_transfer' | 'square_transfer' | 'cash';
         reference_number: string;
+        invoice_order_number: string;
         counterparty: string;
         contractor_id: string;
         requested_by: string;
@@ -474,14 +584,17 @@ export default function Projects({
         status: AccountingTransaction['status'];
         notes: string;
         file: File | null;
+        project_document_id: string;
         project_invoice_id: string;
         scheduled_payment_ids: number[];
     }>({
         type: 'receivable',
+        unassigned: false,
         category: 'Customer Payment',
         transaction_date: '',
         payment_method: 'check',
-        reference_number: 'CH#',
+        reference_number: '',
+        invoice_order_number: '',
         counterparty: '',
         contractor_id: '',
         requested_by: '',
@@ -489,6 +602,7 @@ export default function Projects({
         status: 'pending',
         notes: '',
         file: null,
+        project_document_id: '',
         project_invoice_id: '',
         scheduled_payment_ids: [],
     });
@@ -510,21 +624,110 @@ export default function Projects({
         return 'Not assigned';
     };
 
+    const plainNote = (value: string | null | undefined) =>
+        (value || '')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/\s+/g, ' ')
+            .trim();
+
     const latestNote = (project: Project) =>
-        project.lead.notes[0]?.body || project.lead.telemarketer_notes || '—';
+        plainNote(
+            project.lead.notes[0]?.body || project.lead.telemarketer_notes,
+        ) || '—';
 
     const selected = useMemo(
         () => projects.find((project) => project.id === selectedId) ?? null,
         [projects, selectedId],
     );
+
+    useEffect(() => {
+        const url = new URL(window.location.href);
+        if (selectedId) {
+            url.searchParams.set('project', String(selectedId));
+            url.searchParams.set('tab', activeTab);
+            window.sessionStorage.setItem(
+                projectWorkspaceStorageKey,
+                JSON.stringify({ projectId: selectedId, tab: activeTab }),
+            );
+        } else {
+            url.searchParams.delete('project');
+            url.searchParams.delete('tab');
+            window.sessionStorage.removeItem(projectWorkspaceStorageKey);
+        }
+        window.history.replaceState(window.history.state, '', url);
+    }, [selectedId, activeTab]);
+
+    useEffect(() => {
+        const assigned = [...(selected?.contractors ?? [])]
+            .sort((first, second) => first.pivot.position - second.pivot.position)
+            .map((contractor) => String(contractor.con_id));
+        contractorAssignmentForm.setData(
+            'contractor_ids',
+            Array.from({ length: 4 }, (_, index) => assigned[index] ?? ''),
+        );
+        contractorAssignmentForm.clearErrors();
+    }, [selectedId]);
+
+    const saveContractorAssignments = (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!selected) return;
+
+        contractorAssignmentForm.patch(
+            `/management/projects/${selected.id}/contractors`,
+            { preserveScroll: true },
+        );
+    };
     const filteredProjects = useMemo(() => {
-        const statusFiltered =
-            projectStatusFilter === 'all'
-                ? projects
-                : projects.filter(
-                      (project) =>
-                          (project.status || 'new') === projectStatusFilter,
-                  );
+        const statusFiltered = projects
+            .filter(
+                (project) =>
+                    projectStatusFilter === 'all' ||
+                    (project.status || 'new') === projectStatusFilter,
+            )
+            .filter(
+                (project) =>
+                    projectCompanyFilter === 'all' ||
+                    String(project.lead.company?.com_id ?? '') ===
+                        projectCompanyFilter,
+            )
+            .filter(
+                (project) =>
+                    projectSalesmanFilter === 'all' ||
+                    [
+                        project.lead.salesman_one?.salesman_id,
+                        project.lead.salesman_two?.salesman_id,
+                    ].some((id) => String(id ?? '') === projectSalesmanFilter),
+            )
+            .filter((project) => {
+                const query = projectSearch.trim().toLocaleLowerCase();
+                if (!query) return true;
+
+                return [
+                    projectNumber(project),
+                    project.lead.customer_name,
+                    project.lead.address,
+                    project.lead.city,
+                    project.lead.state,
+                    project.lead.zip_code,
+                    project.lead.primary_number,
+                    project.lead.mobile_number,
+                    project.lead.email,
+                    project.lead.company?.company,
+                    project.lead.company?.prefix,
+                    project.lead.agent?.agent_name,
+                    project.lead.second_agent?.agent_name,
+                    project.lead.salesman_one?.salesman_name,
+                    project.lead.salesman_two?.salesman_name,
+                    project.lead.product?.product_name,
+                    latestNote(project),
+                ]
+                    .filter(Boolean)
+                    .some((value) =>
+                        String(value).toLocaleLowerCase().includes(query),
+                    );
+            });
         const valueFor = (project: Project): string | number => {
             switch (projectSort.key) {
                 case 'signed':
@@ -594,6 +797,9 @@ export default function Projects({
     }, [
         isSearchFocus,
         projects,
+        projectCompanyFilter,
+        projectSalesmanFilter,
+        projectSearch,
         projectSort,
         projectStatusFilter,
         requestedProjectId,
@@ -603,6 +809,9 @@ export default function Projects({
         if (!isSearchFocus || !requestedProjectId) return;
 
         setProjectStatusFilter('all');
+        setProjectCompanyFilter('all');
+        setProjectSalesmanFilter('all');
+        setProjectSearch('');
         const frame = window.requestAnimationFrame(() => {
             focusedProjectRowRef.current?.scrollIntoView({
                 behavior: 'smooth',
@@ -724,7 +933,9 @@ export default function Projects({
     );
 
     const projectInvoiceContractorIds = new Set(
-        selected?.invoices.map((invoice) => invoice.contractor.con_id) ?? [],
+        selected?.invoices
+            .map((invoice) => invoice.contractor?.con_id)
+            .filter((id): id is number => id !== undefined) ?? [],
     );
     const contractorsWithProjectInvoices = contractors.filter((contractor) =>
         projectInvoiceContractorIds.has(contractor.con_id),
@@ -732,10 +943,41 @@ export default function Projects({
     const otherContractors = contractors.filter(
         (contractor) => !projectInvoiceContractorIds.has(contractor.con_id),
     );
+    const selectableContractorIds = new Set(contractors.map((contractor) => contractor.con_id));
+    const assignedProjectContractors = [...(selected?.contractors ?? [])]
+        .filter((contractor) => selectableContractorIds.has(contractor.con_id))
+        .sort((left, right) => left.pivot.position - right.pivot.position);
+    const assignedProjectContractorIds = new Set(
+        assignedProjectContractors.map((contractor) => contractor.con_id),
+    );
+    const availableInvoiceContractors = contractors.filter(
+        (contractor) =>
+            !assignedProjectContractorIds.has(contractor.con_id),
+    );
+    const normalizedInvoiceContractorSearch = invoiceContractorSearch
+        .trim()
+        .toLocaleLowerCase();
+    const searchedAssignedProjectContractors = assignedProjectContractors.filter(
+        (contractor) =>
+            contractor.contractor
+                .toLocaleLowerCase()
+                .includes(normalizedInvoiceContractorSearch),
+    );
+    const searchedAvailableInvoiceContractors =
+        availableInvoiceContractors.filter((contractor) =>
+            contractor.contractor
+                .toLocaleLowerCase()
+                .includes(normalizedInvoiceContractorSearch),
+        );
+    const searchedInvoiceVendors = vendors.filter((vendor) =>
+        vendor.vendor
+            .toLocaleLowerCase()
+            .includes(normalizedInvoiceContractorSearch),
+    );
     const payableInvoices =
         selected?.invoices.filter(
             (invoice) =>
-                invoice.contractor.con_id ===
+                invoice.contractor?.con_id ===
                 Number(accountingForm.data.contractor_id),
         ) ?? [];
     const requesterOptions = Array.from(
@@ -747,6 +989,38 @@ export default function Projects({
     );
     const projectDocuments: ProjectDocument[] = selected
         ? [
+              ...(selected.contract_file_name
+                  ? [{
+                        key: `contract-${selected.id}`,
+                        type: 'Contract' as const,
+                        fileName: selected.contract_file_name,
+                        date: selected.created_at,
+                        notes: 'Signed sales contract',
+                        status: 'Attached',
+                        mime: selected.contract_file_mime ?? '',
+                        size: selected.contract_file_size,
+                        url: `/management/projects/${selected.id}/contract-file`,
+                    }]
+                  : []),
+              ...selected.documents.map((document) => ({
+                  key: `project-document-${document.id}`,
+                  type: document.project_sale_id
+                      ? ('Sale Contract' as const)
+                      : document.project_invoice_id
+                      ? ('Invoice' as const)
+                      : document.project_accounting_transaction_id
+                        ? (selected.accounting_transactions.find((transaction) => transaction.id === document.project_accounting_transaction_id)?.type === 'receivable'
+                            ? ('Receivable' as const)
+                            : ('Payable' as const))
+                        : ('Project Upload' as const),
+                  fileName: document.file_name,
+                  date: document.created_at,
+                  notes: document.category,
+                  status: 'Available',
+                  mime: document.file_mime ?? '',
+                  size: document.file_size,
+                  url: `/management/projects/${selected.id}/documents/${document.id}/file`,
+              })),
               ...selected.invoices
                   .filter((invoice) => invoice.file_name)
                   .map((invoice) => ({
@@ -772,7 +1046,7 @@ export default function Projects({
                           transaction.file_name ?? transaction.reference_number,
                       date: transaction.transaction_date,
                       notes: transaction.notes || transaction.reference_number,
-                      status: invoiceStatusLabels[transaction.status],
+                      status: accountingStatusLabels[transaction.status],
                       mime: transaction.file_mime ?? '',
                       size: transaction.file_size,
                       url: `/management/projects/${selected.id}/accounting-transactions/${transaction.id}/file`,
@@ -815,6 +1089,10 @@ export default function Projects({
                 project.lead.appointment_at ?? '',
             ),
             lead_created_at: dateTimeInputValue(project.lead.created_at),
+            agent_id: String(project.lead.agent?.agent_id ?? ''),
+            agent_2_id: String(project.lead.second_agent?.agent_id ?? ''),
+            salesman_1_id: String(project.lead.salesman_one?.salesman_id ?? ''),
+            salesman_2_id: String(project.lead.salesman_two?.salesman_id ?? ''),
         });
         projectDetailsForm.clearErrors();
     };
@@ -841,6 +1119,10 @@ export default function Projects({
                 selected.lead.appointment_at ?? '',
             ),
             lead_created_at: dateTimeInputValue(selected.lead.created_at),
+            agent_id: String(selected.lead.agent?.agent_id ?? ''),
+            agent_2_id: String(selected.lead.second_agent?.agent_id ?? ''),
+            salesman_1_id: String(selected.lead.salesman_one?.salesman_id ?? ''),
+            salesman_2_id: String(selected.lead.salesman_two?.salesman_id ?? ''),
         });
         projectDetailsForm.clearErrors();
         setEditingProjectDetails(true);
@@ -852,11 +1134,18 @@ export default function Projects({
         projectDetailsForm.put(`/management/projects/${selected.id}`, {
             preserveScroll: true,
             onSuccess: () => setEditingProjectDetails(false),
+            onError: () => {
+                document
+                    .querySelector('.project-details-save-errors')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            },
         });
     };
 
     const noteByType = (project: Project, type: string) =>
-        project.lead.notes.find((note) => note.note_type === type)?.body || '—';
+        plainNote(
+            project.lead.notes.find((note) => note.note_type === type)?.body,
+        ) || '—';
 
     const salesmanAssignmentHistory = (project: Project) =>
         project.lead.notes
@@ -873,6 +1162,18 @@ export default function Projects({
 
     const projectSaleTotal = (project: Project) =>
         project.sales.reduce((sum, sale) => sum + Number(sale.amount), 0);
+
+    const compactSaleDate = (value: string) => {
+        const date = new Date(value.includes('T') ? value : `${value}T12:00:00`);
+
+        return Number.isNaN(date.getTime())
+            ? '—'
+            : new Intl.DateTimeFormat('en-US', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  timeZone: CRM_TIME_ZONE,
+              }).format(date);
+    };
 
     const scheduledPaymentTotal = (project: Project) =>
         project.scheduled_payments.reduce(
@@ -895,7 +1196,7 @@ export default function Projects({
             .filter(
                 (transaction) =>
                     transaction.type === 'receivable' &&
-                    ['ok_to_pay', 'paid'].includes(transaction.status),
+                    transaction.status === 'deposit',
             )
             .sort((first, second) => first.id - second.id)
             .forEach((transaction) => {
@@ -941,7 +1242,7 @@ export default function Projects({
                         (transaction) =>
                             transaction.type === 'payable' &&
                             transaction.invoice?.id === invoice.id &&
-                            ['ok_to_pay', 'paid'].includes(transaction.status),
+                            transaction.status === 'paid',
                     )
                     .reduce(
                         (total, transaction) =>
@@ -949,6 +1250,93 @@ export default function Projects({
                         0,
                     ),
         );
+
+    const outstandingBalances = useMemo<Record<BalanceView, BalanceItem[]>>(
+        () => ({
+            receivable: projects.flatMap((project) =>
+                project.accounting_transactions
+                    .filter(
+                        (transaction) =>
+                            transaction.type === 'receivable' &&
+                            transaction.status === 'pending' &&
+                            !transaction.qb &&
+                            Number(transaction.amount) > 0,
+                    )
+                    .map((transaction) => ({
+                        key: `receivable-${transaction.id}`,
+                        project,
+                        label:
+                            transaction.reference_number ||
+                            transaction.category,
+                        counterparty:
+                            transaction.counterparty ||
+                            project.lead.customer_name,
+                        date: transaction.transaction_date,
+                        status: accountingStatusLabels[transaction.status],
+                        balance: Number(transaction.amount),
+                    })),
+            ),
+            payable: projects.flatMap((project) =>
+                project.accounting_transactions
+                    .filter(
+                        (transaction) =>
+                            transaction.type === 'payable' &&
+                            transaction.status !== 'paid' &&
+                            Number(transaction.amount) > 0,
+                    )
+                    .map((transaction) => ({
+                        key: `payable-${transaction.id}`,
+                        project,
+                        label:
+                            transaction.reference_number ||
+                            transaction.category,
+                        counterparty:
+                            transaction.counterparty || 'Unassigned vendor',
+                        date: transaction.transaction_date,
+                        status: accountingStatusLabels[transaction.status],
+                        balance: Number(transaction.amount),
+                    })),
+            ),
+            invoice: projects.flatMap((project) =>
+                project.invoices.flatMap((invoice) => {
+                    const balance = projectInvoiceBalance(project, invoice);
+
+                    return balance > 0
+                        ? [
+                              {
+                                  key: `invoice-${invoice.id}`,
+                                  project,
+                                  label: invoice.invoice_number,
+                                  counterparty:
+                                      invoice.contractor?.contractor ??
+                                      invoice.vendor?.vendor ??
+                                      'Unknown vendor',
+                                  date: invoice.invoice_date,
+                                  status: invoiceStatusLabels[invoice.status],
+                                  balance,
+                              },
+                          ]
+                        : [];
+                }),
+            ),
+        }),
+        [projects],
+    );
+
+    const balanceTotals = {
+        receivable: outstandingBalances.receivable.reduce(
+            (sum, item) => sum + item.balance,
+            0,
+        ),
+        payable: outstandingBalances.payable.reduce(
+            (sum, item) => sum + item.balance,
+            0,
+        ),
+        invoice: outstandingBalances.invoice.reduce(
+            (sum, item) => sum + item.balance,
+            0,
+        ),
+    };
 
     const projectSalesmen = (project: Project) =>
         [
@@ -1008,11 +1396,14 @@ export default function Projects({
             invoice_number: 'INV#',
             invoice_date: crmDateKey(),
             contractor_id: '',
+            vendor_id: '',
             amount: '',
             notes: '',
             file: null,
+            project_document_id: '',
         });
         invoiceForm.clearErrors();
+        setInvoiceContractorSearch('');
         setInvoiceFilePreview(null);
         setInvoiceModal({ mode: 'create', invoice: null });
     };
@@ -1025,12 +1416,17 @@ export default function Projects({
         invoiceForm.setData({
             invoice_number: invoiceNumberWithPrefix(invoice.invoice_number),
             invoice_date: invoice.invoice_date.slice(0, 10),
-            contractor_id: String(invoice.contractor.con_id),
+            contractor_id: invoice.contractor
+                ? String(invoice.contractor.con_id)
+                : '',
+            vendor_id: invoice.vendor ? String(invoice.vendor.vendor_id) : '',
             amount: invoice.amount,
             notes: invoice.notes ?? '',
             file: null,
+            project_document_id: String(invoice.project_document_id ?? ''),
         });
         invoiceForm.clearErrors();
+        setInvoiceContractorSearch('');
         setInvoiceFilePreview(
             invoice.file_name && invoice.file_mime
                 ? {
@@ -1044,6 +1440,7 @@ export default function Projects({
 
     const chooseInvoiceFile = (file: File | null) => {
         invoiceForm.setData('file', file);
+        if (file) invoiceForm.setData('project_document_id', '');
 
         if (!file) {
             setInvoiceFilePreview(null);
@@ -1055,6 +1452,24 @@ export default function Projects({
             url: URL.createObjectURL(file),
             mime: file.type,
         });
+    };
+
+    const chooseAccountingFile = (file: File | null) => {
+        if (accountingFilePreview?.isLocal) {
+            URL.revokeObjectURL(accountingFilePreview.url);
+        }
+
+        accountingForm.setData('file', file);
+        if (file) accountingForm.setData('project_document_id', '');
+        setAccountingFilePreview(
+            file
+                ? {
+                      url: URL.createObjectURL(file),
+                      mime: file.type,
+                      isLocal: true,
+                  }
+                : null,
+        );
     };
 
     const submitInvoice = (event: React.FormEvent<HTMLFormElement>) => {
@@ -1081,28 +1496,13 @@ export default function Projects({
         });
     };
 
-    const updateInvoiceStatus = (
-        invoice: ProjectInvoice,
-        status: ProjectInvoice['status'],
-    ) => {
-        if (!selected) {
-            return;
-        }
-
-        router.patch(
-            `/management/projects/${selected.id}/invoices/${invoice.id}/status`,
-            { status },
-            { preserveScroll: true },
-        );
-    };
-
     const deleteInvoice = async (invoice: ProjectInvoice) => {
         if (!selected) {
             return;
         }
 
         const confirmed = await confirm({
-            title: 'Delete vendor invoice?',
+            title: 'Delete vendor payment?',
             message: `${invoice.invoice_number} and its attached file will be permanently deleted.`,
             confirmLabel: 'Delete invoice',
             tone: 'danger',
@@ -1126,13 +1526,15 @@ export default function Projects({
 
         accountingForm.setData({
             type: accountingMode,
+            unassigned: false,
             category:
                 accountingMode === 'receivable'
                     ? 'Customer Payment'
                     : 'Vendor Payment',
             transaction_date: crmDateKey(),
             payment_method: 'check',
-            reference_number: 'CH#',
+            reference_number: '',
+            invoice_order_number: '',
             counterparty:
                 accountingMode === 'receivable'
                     ? selected.lead.customer_name
@@ -1143,6 +1545,7 @@ export default function Projects({
             status: 'pending',
             notes: '',
             file: null,
+            project_document_id: '',
             project_invoice_id: '',
             scheduled_payment_ids: [],
         });
@@ -1156,13 +1559,17 @@ export default function Projects({
     ) => {
         accountingForm.setData({
             type: transaction.type,
+            unassigned: false,
             category: transaction.category,
             transaction_date: transaction.transaction_date.slice(0, 10),
-            payment_method: transaction.payment_method,
-            reference_number: paymentReference(
-                transaction.payment_method,
-                transaction.reference_number,
-            ),
+            payment_method: transaction.payment_method ?? 'check',
+            reference_number: transaction.reference_number
+                ? paymentReference(
+                      transaction.payment_method ?? 'check',
+                      transaction.reference_number,
+                  )
+                : '',
+            invoice_order_number: transaction.invoice_order_number ?? '',
             counterparty:
                 transaction.type === 'receivable'
                     ? (selected?.lead.customer_name ?? '')
@@ -1173,6 +1580,7 @@ export default function Projects({
             status: transaction.status,
             notes: transaction.notes ?? '',
             file: null,
+            project_document_id: String(transaction.project_document_id ?? ''),
             project_invoice_id: String(transaction.invoice?.id ?? ''),
             scheduled_payment_ids: transaction.scheduled_payments.map(
                 (payment) => payment.id,
@@ -1247,11 +1655,70 @@ export default function Projects({
         }
     };
 
+    const updateReceivableQb = (
+        transaction: AccountingTransaction,
+        qb: boolean,
+        paymentMethod?: keyof typeof paymentPrefixes,
+        referenceNumber?: string,
+    ) => {
+        if (!selected) return;
+
+        router.patch(
+            `/management/projects/${selected.id}/accounting-transactions/${transaction.id}/qb`,
+            {
+                qb,
+                payment_method: paymentMethod,
+                reference_number: referenceNumber,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => setReceivableQbModal(null),
+                onError: (errors) =>
+                    setReceivableQbModal((current) =>
+                        current
+                            ? {
+                                  ...current,
+                                  error: String(
+                                      errors.reference_number ||
+                                          errors.payment_method ||
+                                          errors.status ||
+                                          'Unable to move this receivable to QB.',
+                                  ),
+                              }
+                            : current,
+                    ),
+            },
+        );
+    };
+
+    const requestReceivableQb = (
+        transaction: AccountingTransaction,
+        checked: boolean,
+    ) => {
+        if (!checked) {
+            updateReceivableQb(transaction, false);
+            return;
+        }
+
+        const method = transaction.payment_method ?? 'check';
+        const prefix = paymentPrefixes[method];
+
+        setReceivableQbModal({
+            transaction,
+            paymentMethod: method,
+            referenceNumber:
+                transaction.reference_number ||
+                (method === 'zelle' ? '' : prefix),
+            error: '',
+        });
+    };
+
     const openReferralSale = () => {
         saleForm.setData({
             amount: '',
             sale_date: crmDateKey(),
             product_id: '',
+            files: [],
         });
         saleForm.clearErrors();
         setSaleModal({ mode: 'create', sale: null });
@@ -1262,6 +1729,7 @@ export default function Projects({
             amount: sale.amount,
             sale_date: sale.sale_date.slice(0, 10),
             product_id: String(sale.product?.prod_id ?? ''),
+            files: [],
         });
         saleForm.clearErrors();
         setSaleModal({ mode: 'edit', sale });
@@ -1284,11 +1752,14 @@ export default function Projects({
         };
 
         if (saleModal.mode === 'create') {
-            saleForm.post(`/management/projects/${selected.id}/sales`, options);
+            saleForm.post(`/management/projects/${selected.id}/sales`, {
+                ...options,
+                forceFormData: true,
+            });
         } else if (saleModal.sale) {
-            saleForm.put(
+            saleForm.post(
                 `/management/projects/${selected.id}/sales/${saleModal.sale.id}`,
-                options,
+                { ...options, forceFormData: true },
             );
         }
     };
@@ -1409,7 +1880,7 @@ export default function Projects({
     return (
         <>
             <Head title="Projects" />
-            <main className="projects-page">
+            <main className={`projects-page is-tab-${activeTab.toLowerCase()}`}>
                 <header className="projects-header">
                     <div>
                         <span>Management</span>
@@ -1447,9 +1918,98 @@ export default function Projects({
                                     <strong>{projectStatusCounts[value]}</strong>
                                 </button>
                             ))}
+                            <div className="projects-header-entity-filters">
+                                <label className="projects-header-search">
+                                    <span>Search projects</span>
+                                    <div>
+                                        <Search />
+                                        <input
+                                            type="search"
+                                            value={projectSearch}
+                                            onChange={(event) =>
+                                                setProjectSearch(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder="Customer, project #, city…"
+                                            aria-label="Search projects"
+                                        />
+                                    </div>
+                                </label>
+                                <label>
+                                    <span>Company</span>
+                                    <select
+                                        value={projectCompanyFilter}
+                                        onChange={(event) =>
+                                            setProjectCompanyFilter(
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="all">All companies</option>
+                                        {companies.map((company) => (
+                                            <option
+                                                key={company.com_id}
+                                                value={company.com_id}
+                                            >
+                                                {company.prefix || company.company}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Salesman</span>
+                                    <select
+                                        value={projectSalesmanFilter}
+                                        onChange={(event) =>
+                                            setProjectSalesmanFilter(
+                                                event.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="all">All salesmen</option>
+                                        {salesmen.map((salesman) => (
+                                            <option
+                                                key={salesman.salesman_id}
+                                                value={salesman.salesman_id}
+                                            >
+                                                {salesman.salesman_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </div>
                         </div>
                     )}
                     <div className="projects-header-actions">
+                        {(
+                            [
+                                ['receivable', 'Receivables'],
+                                ['payable', 'Payable balances'],
+                                ['invoice', 'Invoice balances'],
+                            ] as const
+                        ).map(([view, label]) => (
+                            <button
+                                key={view}
+                                type="button"
+                                className="projects-balance-button"
+                                onClick={() =>
+                                    router.visit(
+                                        view === 'receivable'
+                                            ? '/management/receivables'
+                                            : view === 'payable'
+                                              ? '/management/payables'
+                                              : '/management/invoices',
+                                    )
+                                }
+                                title={`${currencyFormatter.format(balanceTotals[view])} outstanding`}
+                            >
+                                <span>{label}</span>
+                                <strong>
+                                    {outstandingBalances[view].length}
+                                </strong>
+                            </button>
+                        ))}
                         <button
                             type="button"
                             className="projects-add-project"
@@ -1500,6 +2060,127 @@ export default function Projects({
                         </div>
                     </div>
                 </header>
+
+                <Dialog
+                    open={balanceView !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setBalanceView(null);
+                    }}
+                >
+                    {balanceView && (
+                        <DialogContent className="projects-balance-modal">
+                            <DialogHeader>
+                                <DialogTitle>
+                                    Outstanding {balanceView} balances
+                                </DialogTitle>
+                                <DialogDescription>
+                                    All projects with a remaining balance. Total:{' '}
+                                    {currencyFormatter.format(
+                                        balanceTotals[balanceView],
+                                    )}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="projects-balance-table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Project</th>
+                                            <th>Customer</th>
+                                            <th>
+                                                {balanceView === 'invoice'
+                                                    ? 'Invoice'
+                                                    : 'Record'}
+                                            </th>
+                                            <th>
+                                                {balanceView === 'receivable'
+                                                    ? 'Received from'
+                                                    : 'Pay to'}
+                                            </th>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                            <th>Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {outstandingBalances[balanceView].map(
+                                            (item) => (
+                                                <tr
+                                                    key={item.key}
+                                                    tabIndex={0}
+                                                    onClick={() => {
+                                                        selectProject(
+                                                            item.project,
+                                                        );
+                                                        setActiveTab(
+                                                            balanceView ===
+                                                                'invoice'
+                                                                ? 'INV'
+                                                                : 'ACT',
+                                                        );
+                                                        if (
+                                                            balanceView !==
+                                                            'invoice'
+                                                        ) {
+                                                            setAccountingMode(
+                                                                balanceView,
+                                                            );
+                                                        }
+                                                        setBalanceView(null);
+                                                    }}
+                                                >
+                                                    <td>
+                                                        {projectNumber(
+                                                            item.project,
+                                                        )}
+                                                    </td>
+                                                    <td>
+                                                        {
+                                                            item.project.lead
+                                                                .customer_name
+                                                        }
+                                                    </td>
+                                                    <td>{item.label}</td>
+                                                    <td>
+                                                        {item.counterparty}
+                                                    </td>
+                                                    <td>
+                                                        {dateFormatter.format(
+                                                            new Date(item.date),
+                                                        )}
+                                                    </td>
+                                                    <td>{item.status}</td>
+                                                    <td>
+                                                        <strong>
+                                                            {currencyFormatter.format(
+                                                                item.balance,
+                                                            )}
+                                                        </strong>
+                                                    </td>
+                                                </tr>
+                                            ),
+                                        )}
+                                        {outstandingBalances[balanceView]
+                                            .length === 0 && (
+                                            <tr>
+                                                <td colSpan={7}>
+                                                    No outstanding balances.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <DialogFooter>
+                                <button
+                                    type="button"
+                                    onClick={() => setBalanceView(null)}
+                                >
+                                    Close
+                                </button>
+                            </DialogFooter>
+                        </DialogContent>
+                    )}
+                </Dialog>
 
                 <section
                     className={`project-context-bar ${selected ? 'has-project' : ''}`}
@@ -1650,12 +2331,41 @@ export default function Projects({
                                         </p>
                                     </div>
                                 </div>
-                                <strong>
-                                    {projectDocuments.length}{' '}
-                                    {projectDocuments.length === 1
-                                        ? 'document'
-                                        : 'documents'}
-                                </strong>
+                                <div className="project-documents-upload-area">
+                                    <strong>{projectDocuments.length} {projectDocuments.length === 1 ? 'document' : 'documents'}</strong>
+                                    <form
+                                        onSubmit={(event) => {
+                                            event.preventDefault();
+                                            documentUploadForm.post(`/management/projects/${selected.id}/documents`, {
+                                                forceFormData: true,
+                                                preserveScroll: true,
+                                                onSuccess: () => documentUploadForm.reset(),
+                                            });
+                                        }}
+                                    >
+                                        <select
+                                            value={`${documentUploadForm.data.target_type}:${documentUploadForm.data.target_id}`}
+                                            onChange={(event) => {
+                                                const [targetType, targetId = ''] = event.target.value.split(':');
+                                                documentUploadForm.setData((data) => ({ ...data, target_type: targetType as 'project' | 'invoice' | 'accounting', target_id: targetId }));
+                                            }}
+                                        >
+                                            <option value="project:">General project files</option>
+                                            <optgroup label="Invoices">
+                                                {selected.invoices.map((invoice) => <option key={`invoice-${invoice.id}`} value={`invoice:${invoice.id}`}>{invoice.invoice_number}</option>)}
+                                            </optgroup>
+                                            <optgroup label="Receivables and payables">
+                                                {selected.accounting_transactions.map((transaction) => <option key={`accounting-${transaction.id}`} value={`accounting:${transaction.id}`}>{transaction.type === 'receivable' ? 'Receivable' : 'Payable'} · {transaction.reference_number || transaction.category} · {currencyFormatter.format(Number(transaction.amount))}</option>)}
+                                            </optgroup>
+                                        </select>
+                                        <label>
+                                            <Upload />
+                                            <span>{documentUploadForm.data.files.length ? `${documentUploadForm.data.files.length} selected` : 'Choose files'}</span>
+                                            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => documentUploadForm.setData('files', Array.from(event.target.files ?? []))} />
+                                        </label>
+                                        <button type="submit" disabled={documentUploadForm.processing || documentUploadForm.data.files.length === 0}>{documentUploadForm.processing ? 'Uploading…' : 'Upload'}</button>
+                                    </form>
+                                </div>
                             </header>
 
                             <div className="project-documents-workspace">
@@ -1941,10 +2651,12 @@ export default function Projects({
                                                 <th>Proj. #</th>
                                                 <th>Pay To</th>
                                                 <th>Pay For (Invoice)</th>
+                                                <th>Invoice / Order #</th>
                                                 <th>Req. By</th>
                                                 <th>Status</th>
                                                 <th>$ Amount To Pay</th>
                                                 <th>Check #</th>
+                                                <th>Category</th>
                                                 <th>Notes</th>
                                                 <th>File</th>
                                             </tr>
@@ -1956,6 +2668,7 @@ export default function Projects({
                                                 <th>Notes</th>
                                                 <th>Amount</th>
                                                 <th>Status</th>
+                                                <th>QB</th>
                                                 <th>Category</th>
                                                 <th>File</th>
                                             </tr>
@@ -2016,6 +2729,9 @@ export default function Projects({
                                                                         '—'}
                                                                 </td>
                                                                 <td>
+                                                                    {transaction.invoice_order_number || '—'}
+                                                                </td>
+                                                                <td>
                                                                     {transaction.requested_by ||
                                                                         '—'}
                                                                 </td>
@@ -2039,8 +2755,13 @@ export default function Projects({
                                                                     </strong>
                                                                 </td>
                                                                 <td>
+                                                                    <button className="project-accounting-reference-link" type="button" onClick={(event) => { event.stopPropagation(); documentUploadForm.setData({ files: [], target_type: 'accounting', target_id: String(transaction.id) }); documentUploadForm.clearErrors(); setAccountingAttachmentTransaction(transaction); }}>
+                                                                        {transaction.reference_number || 'Add file'}
+                                                                    </button>
+                                                                </td>
+                                                                <td>
                                                                     {
-                                                                        transaction.reference_number
+                                                                        transaction.category
                                                                     }
                                                                 </td>
                                                                 <td className="project-accounting-notes">
@@ -2051,14 +2772,14 @@ export default function Projects({
                                                         ) : (
                                                             <>
                                                                 <td>
-                                                                    <strong>
-                                                                        {
-                                                                            transaction.reference_number
-                                                                        }
-                                                                    </strong>
+                                                                    <button className="project-accounting-reference-link" type="button" onClick={(event) => { event.stopPropagation(); documentUploadForm.setData({ files: [], target_type: 'accounting', target_id: String(transaction.id) }); documentUploadForm.clearErrors(); setAccountingAttachmentTransaction(transaction); }}>
+                                                                        {transaction.reference_number || 'Add file'}
+                                                                    </button>
                                                                 </td>
                                                                 <td>
                                                                     {transaction.counterparty ||
+                                                                        transaction.invoice?.vendor?.vendor ||
+                                                                        transaction.invoice?.contractor?.contractor ||
                                                                         '—'}
                                                                 </td>
                                                                 <td className="project-accounting-notes">
@@ -2076,11 +2797,28 @@ export default function Projects({
                                                                 </td>
                                                                 <td>
                                                                     {
-                                                                        invoiceStatusLabels[
+                                                                        accountingStatusLabels[
                                                                             transaction
                                                                                 .status
                                                                         ]
                                                                     }
+                                                                </td>
+                                                                <td>
+                                                                    <input
+                                                                        className="project-accounting-qb"
+                                                                        type="checkbox"
+                                                                        aria-label="Move receivable to QB"
+                                                                        checked={transaction.qb}
+                                                                        onClick={(event) =>
+                                                                            event.stopPropagation()
+                                                                        }
+                                                                        onChange={(event) =>
+                                                                            requestReceivableQb(
+                                                                                transaction,
+                                                                                event.target.checked,
+                                                                            )
+                                                                        }
+                                                                    />
                                                                 </td>
                                                                 <td>
                                                                     {
@@ -2120,7 +2858,7 @@ export default function Projects({
                                                     colSpan={
                                                         accountingMode ===
                                                         'payable'
-                                                            ? 11
+                                                            ? 13
                                                             : 8
                                                     }
                                                     className="project-accounting-empty"
@@ -2205,7 +2943,7 @@ export default function Projects({
                                         <FileText />
                                     </span>
                                     <div>
-                                        <small>Vendor invoices</small>
+                                        <small>Vendor payments</small>
                                         <h2>
                                             Invoices for{' '}
                                             {projectNumber(selected)}
@@ -2296,9 +3034,11 @@ export default function Projects({
                                                             </td>
                                                             <td>
                                                                 {
-                                                                    invoice
-                                                                        .contractor
-                                                                        .contractor
+                                                                    invoice.contractor
+                                                                        ?.contractor ??
+                                                                        invoice.vendor
+                                                                            ?.vendor ??
+                                                                        'Unknown vendor'
                                                                 }
                                                             </td>
                                                             <td>
@@ -2329,45 +3069,11 @@ export default function Projects({
                                                                     event.stopPropagation()
                                                                 }
                                                             >
-                                                                <select
+                                                                <span
                                                                     className={`project-invoice-status is-${invoice.status}`}
-                                                                    value={
-                                                                        invoice.status
-                                                                    }
-                                                                    onChange={(
-                                                                        event,
-                                                                    ) =>
-                                                                        updateInvoiceStatus(
-                                                                            invoice,
-                                                                            event
-                                                                                .target
-                                                                                .value as ProjectInvoice['status'],
-                                                                        )
-                                                                    }
-                                                                    aria-label={`Status for invoice ${invoice.invoice_number}`}
                                                                 >
-                                                                    {Object.entries(
-                                                                        invoiceStatusLabels,
-                                                                    ).map(
-                                                                        ([
-                                                                            value,
-                                                                            label,
-                                                                        ]) => (
-                                                                            <option
-                                                                                key={
-                                                                                    value
-                                                                                }
-                                                                                value={
-                                                                                    value
-                                                                                }
-                                                                            >
-                                                                                {
-                                                                                    label
-                                                                                }
-                                                                            </option>
-                                                                        ),
-                                                                    )}
-                                                                </select>
+                                                                    {invoiceStatusLabels[invoice.status]}
+                                                                </span>
                                                             </td>
                                                         </tr>
                                                     ),
@@ -2452,7 +3158,10 @@ export default function Projects({
                                                                         ?.contractor ||
                                                                         selectedInvoice
                                                                             ?.contractor
-                                                                            .contractor ||
+                                                                            ?.contractor ||
+                                                                        selectedInvoice
+                                                                            ?.vendor
+                                                                            ?.vendor ||
                                                                         '—'}
                                                                 </td>
                                                                 <td>
@@ -3002,6 +3711,8 @@ export default function Projects({
                                                 'status',
                                                 'Status',
                                             )}
+                                            <th>Type</th>
+                                            <th>Status Sale</th>
                                             {sortableProjectHeader(
                                                 'customer',
                                                 'Customer',
@@ -3046,9 +3757,15 @@ export default function Projects({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredProjects.map((project) => (
+                                        {filteredProjects.map((project) => {
+                                            const referralSales = project.sales.filter(
+                                                (sale) => sale.type === 'referral',
+                                            );
+                                            const hasReferralSale = referralSales.length > 0;
+                                            const salesExpanded = expandedSaleProjectIds.includes(project.id);
+
+                                            return <Fragment key={project.id}>
                                             <tr
-                                                key={project.id}
                                                 ref={
                                                     isSearchFocus &&
                                                     requestedProjectId ===
@@ -3118,6 +3835,38 @@ export default function Projects({
                                                     </span>
                                                 </td>
                                                 <td>
+                                                    <span
+                                                        className={`projects-record-type ${project.lead_id === null || project.tele_lead_excluded ? 'is-project-only' : 'is-lead'}`}
+                                                    >
+                                                        {project.lead_id === null ||
+                                                        project.tele_lead_excluded
+                                                            ? 'Project only'
+                                                            : 'Lead'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div className="projects-sale-status-cell">
+                                                        <strong>{hasReferralSale ? 'N/R' : 'N'}</strong>
+                                                        {hasReferralSale && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    setExpandedSaleProjectIds((current) =>
+                                                                        current.includes(project.id)
+                                                                            ? current.filter((id) => id !== project.id)
+                                                                            : [...current, project.id],
+                                                                    );
+                                                                }}
+                                                                aria-expanded={salesExpanded}
+                                                                aria-label={`${salesExpanded ? 'Collapse' : 'Expand'} sales for ${project.lead.customer_name}`}
+                                                            >
+                                                                {salesExpanded ? <ChevronUp /> : <ChevronDown />}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td>
                                                     <strong>
                                                         {
                                                             project.lead
@@ -3176,12 +3925,33 @@ export default function Projects({
                                                     {latestNote(project)}
                                                 </td>
                                             </tr>
-                                        ))}
+                                            {hasReferralSale && salesExpanded && (
+                                                <tr className="projects-sale-breakdown-row">
+                                                    <td colSpan={projectOnlySelectionMode ? 17 : 16}>
+                                                        <div className="projects-sale-breakdown">
+                                                            {project.sales.map((sale) => (
+                                                                <div key={sale.id}>
+                                                                    <strong>{sale.type === 'original' ? 'New' : `Referral ${referralSales.findIndex((referral) => referral.id === sale.id) + 1}`}</strong>
+                                                                    <span>{currencyFormatter.format(Number(sale.amount))}</span>
+                                                                    <span>{compactSaleDate(sale.sale_date)}</span>
+                                                                    <span>{sale.product?.product_name ?? '—'}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            </Fragment>;
+                                        })}
 
                                         {filteredProjects.length === 0 && (
                                             <tr>
                                                 <td
-                                                    colSpan={14}
+                                                    colSpan={
+                                                        projectOnlySelectionMode
+                                                            ? 17
+                                                            : 16
+                                                    }
                                                     className="projects-empty"
                                                 >
                                                     <BriefcaseBusiness />
@@ -3259,6 +4029,16 @@ export default function Projects({
                                     </button>
                                 </div>
                             </header>
+
+                            {editingProjectDetails &&
+                                Object.keys(projectDetailsForm.errors).length > 0 && (
+                                    <div className="project-details-save-errors" role="alert">
+                                        <strong>Project details were not saved.</strong>
+                                        <span>
+                                            {Object.values(projectDetailsForm.errors)[0]}
+                                        </span>
+                                    </div>
+                                )}
 
                             <div className="project-details-grid">
                                 <article className="project-detail-card project-detail-card--customer">
@@ -3793,17 +4573,7 @@ export default function Projects({
                                                             const status =
                                                                 event.target
                                                                     .value;
-                                                            projectDetailsForm.setData(
-                                                                (current) => ({
-                                                                    ...current,
-                                                                    status,
-                                                                    project_number:
-                                                                        status ===
-                                                                        'new'
-                                                                            ? ''
-                                                                            : current.project_number,
-                                                                }),
-                                                            );
+                                                            projectDetailsForm.setData('status', status);
                                                         }}
                                                     >
                                                         <option value="new">
@@ -3836,6 +4606,16 @@ export default function Projects({
                                                 </strong>
                                             )}
                                         </div>
+                                        <div className="project-overview-ownership">
+                                            <small>Lead and sales ownership</small>
+                                            <div>
+                                                <span><small>Main agent</small>{editingProjectDetails ? <select value={projectDetailsForm.data.agent_id} onChange={(event) => projectDetailsForm.setData('agent_id', event.target.value)}><option value="">Unassigned</option>{agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id}>{agent.agent_name}</option>)}</select> : <strong>{selected.lead.agent?.agent_name || 'Unassigned'}</strong>}</span>
+                                                <span><small>Second agent</small>{editingProjectDetails ? <select value={projectDetailsForm.data.agent_2_id} onChange={(event) => projectDetailsForm.setData('agent_2_id', event.target.value)}><option value="">Unassigned</option>{agents.map((agent) => <option key={agent.agent_id} value={agent.agent_id} disabled={String(agent.agent_id) === projectDetailsForm.data.agent_id}>{agent.agent_name}</option>)}</select> : <strong>{selected.lead.second_agent?.agent_name || 'Unassigned'}</strong>}</span>
+                                                <span><small>Salesman 1</small>{editingProjectDetails ? <select value={projectDetailsForm.data.salesman_1_id} onChange={(event) => projectDetailsForm.setData('salesman_1_id', event.target.value)}><option value="">Unassigned</option>{salesmen.map((salesman) => <option key={salesman.salesman_id} value={salesman.salesman_id}>{salesman.salesman_name}</option>)}</select> : <span className="project-call-row"><strong>{selected.lead.salesman_one?.salesman_name || 'Unassigned'}</strong>{selected.lead.salesman_one?.phone?.trim() && <RingCentralCallButton phone={selected.lead.salesman_one.phone} phoneSlot="primary" className="project-call-button" title={`Call ${selected.lead.salesman_one.salesman_name} with RingCentral`}><PhoneCall /><span>Call</span></RingCentralCallButton>}</span>}</span>
+                                                <span><small>Salesman 2</small>{editingProjectDetails ? <select value={projectDetailsForm.data.salesman_2_id} onChange={(event) => projectDetailsForm.setData('salesman_2_id', event.target.value)}><option value="">Unassigned</option>{salesmen.map((salesman) => <option key={salesman.salesman_id} value={salesman.salesman_id} disabled={String(salesman.salesman_id) === projectDetailsForm.data.salesman_1_id}>{salesman.salesman_name}</option>)}</select> : <span className="project-call-row"><strong>{selected.lead.salesman_two?.salesman_name || 'Unassigned'}</strong>{selected.lead.salesman_two?.phone?.trim() && <RingCentralCallButton phone={selected.lead.salesman_two.phone} phoneSlot="primary" className="project-call-button" title={`Call ${selected.lead.salesman_two.salesman_name} with RingCentral`}><PhoneCall /><span>Call</span></RingCentralCallButton>}</span>}</span>
+                                            </div>
+                                            {editingProjectDetails && (projectDetailsForm.errors.agent_id || projectDetailsForm.errors.agent_2_id || projectDetailsForm.errors.salesman_1_id || projectDetailsForm.errors.salesman_2_id) && <em>{projectDetailsForm.errors.agent_id || projectDetailsForm.errors.agent_2_id || projectDetailsForm.errors.salesman_1_id || projectDetailsForm.errors.salesman_2_id}</em>}
+                                        </div>
                                     </div>
                                 </article>
 
@@ -3848,13 +4628,109 @@ export default function Projects({
                                             <h3>Sales information</h3>
                                             <p>Original and referral sales</p>
                                         </div>
-                                        <div className="project-sale-toolbar">
+                                        <div className="project-sale-summary">
+                                            <small>Total sale</small>
+                                            <strong>
+                                                {currencyFormatter.format(
+                                                    projectSaleTotal(selected),
+                                                )}
+                                            </strong>
+                                            <span>
+                                                {selected.sales.length}{' '}
+                                                {selected.sales.length === 1
+                                                    ? 'sale'
+                                                    : 'sales'}
+                                            </span>
+                                        </div>
+                                    </header>
+                                    <div className="project-sales-table-wrap">
+                                        <table className="project-sales-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Type</th>
+                                                    <th>Sale</th>
+                                                    <th>Date</th>
+                                                    <th>Product</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {selected.sales.map(
+                                                    (sale, saleIndex) => (
+                                                        <tr
+                                                            key={sale.id}
+                                                            className={`${sale.type === 'original' ? 'is-original' : ''} ${selectedSaleId === sale.id ? 'is-selected' : ''}`}
+                                                            onClick={() =>
+                                                                setSelectedSaleId(
+                                                                    sale.id,
+                                                                )
+                                                            }
+                                                        >
+                                                            <td>
+                                                                <span
+                                                                    className={`project-sale-type project-sale-type--${sale.type}`}
+                                                                >
+                                                                    {sale.type ===
+                                                                    'original'
+                                                                        ? 'Original'
+                                                                        : `Referral ${selected.sales
+                                                                              .slice(
+                                                                                  0,
+                                                                                  saleIndex +
+                                                                                      1,
+                                                                              )
+                                                                              .filter(
+                                                                                  (
+                                                                                      item,
+                                                                                  ) =>
+                                                                                      item.type ===
+                                                                                      'referral',
+                                                                              )
+                                                                              .length}`}
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <strong>
+                                                                    {currencyFormatter.format(
+                                                                        Number(
+                                                                            sale.amount,
+                                                                        ),
+                                                                    )}
+                                                                </strong>
+                                                            </td>
+                                                            <td>
+                                                                {dateFormatter.format(
+                                                                    new Date(
+                                                                        sale.sale_date,
+                                                                    ),
+                                                                )}
+                                                            </td>
+                                                            <td>
+                                                                <strong className="project-sale-product">
+                                                                    {sale.product
+                                                                        ?.product_name ||
+                                                                        'No product'}
+                                                                </strong>
+                                                            </td>
+                                                        </tr>
+                                                    ),
+                                                )}
+                                                {selected.sales.length === 0 && (
+                                                    <tr className="project-sales-empty">
+                                                        <td colSpan={4}>
+                                                            No sales recorded for this project.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="project-sale-toolbar">
                                             <button
                                                 type="button"
                                                 className="project-add-sale"
                                                 onClick={openReferralSale}
                                             >
-                                                <Plus /> New
+                                                <Plus /> New referral
                                             </button>
                                             <button
                                                 type="button"
@@ -3864,7 +4740,19 @@ export default function Projects({
                                                 }
                                                 disabled={!selectedSale}
                                             >
-                                                <Pencil /> Edit
+                                                <Pencil /> Edit selected
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!selectedSale) return;
+                                                    documentUploadForm.setData({ files: [], target_type: 'sale', target_id: String(selectedSale.id) });
+                                                    documentUploadForm.clearErrors();
+                                                    setSaleAttachmentSale(selectedSale);
+                                                }}
+                                                disabled={!selectedSale}
+                                            >
+                                                <Upload /> Files
                                             </button>
                                             <button
                                                 type="button"
@@ -3887,84 +4775,12 @@ export default function Projects({
                                                         : 'Delete selected referral sale'
                                                 }
                                             >
-                                                <Trash2 /> Delete
+                                                <Trash2 /> Delete referral
                                             </button>
                                         </div>
-                                    </header>
-                                    <div className="project-sale-total">
-                                        <span>
-                                            <small>Total project sale</small>
-                                            <strong>
-                                                {currencyFormatter.format(
-                                                    projectSaleTotal(selected),
-                                                )}
-                                            </strong>
-                                        </span>
-                                        <CircleDollarSign />
-                                    </div>
-                                    <div className="project-sales-table-wrap">
-                                        <table className="project-sales-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Type</th>
-                                                    <th>Sale</th>
-                                                    <th>Date</th>
-                                                    <th>Product</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {selected.sales.map((sale) => (
-                                                    <tr
-                                                        key={sale.id}
-                                                        className={
-                                                            selectedSaleId ===
-                                                            sale.id
-                                                                ? 'is-selected'
-                                                                : ''
-                                                        }
-                                                        onClick={() =>
-                                                            setSelectedSaleId(
-                                                                sale.id,
-                                                            )
-                                                        }
-                                                    >
-                                                        <td>
-                                                            <span
-                                                                className={`project-sale-type project-sale-type--${sale.type}`}
-                                                            >
-                                                                {sale.type}
-                                                            </span>
-                                                        </td>
-                                                        <td>
-                                                            <strong>
-                                                                {currencyFormatter.format(
-                                                                    Number(
-                                                                        sale.amount,
-                                                                    ),
-                                                                )}
-                                                            </strong>
-                                                        </td>
-                                                        <td>
-                                                            {dateFormatter.format(
-                                                                new Date(
-                                                                    sale.sale_date,
-                                                                ),
-                                                            )}
-                                                        </td>
-                                                        <td>
-                                                            {sale.product
-                                                                ?.product_name ||
-                                                                '—'}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
                                     <p className="project-sale-hint">
-                                        The original sale can be edited but not
-                                        deleted. Referral sales can be added,
-                                        edited, or deleted.
+                                        Select a sale above to edit it. The original
+                                        sale is protected from deletion.
                                     </p>
                                 </article>
 
@@ -3975,77 +4791,39 @@ export default function Projects({
                                         </span>
                                         <div>
                                             <h3>Assigned team</h3>
-                                            <p>Lead and sales ownership</p>
+                                            <p>Project contractors</p>
                                         </div>
                                     </header>
-                                    <div className="project-team-list">
+                                    <form className="project-contractor-assignments" onSubmit={saveContractorAssignments}>
                                         <div>
-                                            <small>Main agent</small>
-                                            <strong>
-                                                {selected.lead.agent
-                                                    ?.agent_name ||
-                                                    'Unassigned'}
-                                            </strong>
-                                        </div>
-                                        <div>
-                                            <small>Second agent</small>
-                                            <strong>
-                                                {selected.lead.second_agent
-                                                    ?.agent_name ||
-                                                    'Unassigned'}
-                                            </strong>
-                                        </div>
-                                        <div>
-                                            <small>Salesman 1</small>
-                                            <span className="project-call-row">
-                                                <strong>
-                                                    {selected.lead.salesman_one
-                                                        ?.salesman_name ||
-                                                        'Unassigned'}
-                                                </strong>
-                                                {selected.lead.salesman_one?.phone?.trim() && (
-                                                    <RingCentralCallButton
-                                                        phone={
-                                                            selected.lead
-                                                                .salesman_one
-                                                                .phone
-                                                        }
-                                                        phoneSlot="primary"
-                                                        className="project-call-button"
-                                                        title={`Call ${selected.lead.salesman_one.salesman_name} with RingCentral`}
+                                            {contractorAssignmentForm.data.contractor_ids.map((contractorId, index) => (
+                                                <label key={index}>
+                                                    <span>Contractor {index + 1}</span>
+                                                    <select
+                                                        value={contractorId}
+                                                        onChange={(event) => {
+                                                            const next = [...contractorAssignmentForm.data.contractor_ids];
+                                                            next[index] = event.target.value;
+                                                            contractorAssignmentForm.setData('contractor_ids', next);
+                                                        }}
                                                     >
-                                                        <PhoneCall />
-                                                        <span>Call</span>
-                                                    </RingCentralCallButton>
-                                                )}
-                                            </span>
+                                                        <option value="">Unassigned</option>
+                                                        {contractors.map((contractor) => {
+                                                            const selectedElsewhere = contractorAssignmentForm.data.contractor_ids.some(
+                                                                (selectedContractorId, selectedIndex) => selectedIndex !== index && selectedContractorId === String(contractor.con_id),
+                                                            );
+
+                                                            return <option key={contractor.con_id} value={contractor.con_id} disabled={selectedElsewhere}>{contractor.contractor}{selectedElsewhere ? ' — Already selected' : ''}</option>;
+                                                        })}
+                                                    </select>
+                                                </label>
+                                            ))}
                                         </div>
-                                        <div>
-                                            <small>Salesman 2</small>
-                                            <span className="project-call-row">
-                                                <strong>
-                                                    {selected.lead.salesman_two
-                                                        ?.salesman_name ||
-                                                        'Unassigned'}
-                                                </strong>
-                                                {selected.lead.salesman_two?.phone?.trim() && (
-                                                    <RingCentralCallButton
-                                                        phone={
-                                                            selected.lead
-                                                                .salesman_two
-                                                                .phone
-                                                        }
-                                                        phoneSlot="primary"
-                                                        className="project-call-button"
-                                                        title={`Call ${selected.lead.salesman_two.salesman_name} with RingCentral`}
-                                                    >
-                                                        <PhoneCall />
-                                                        <span>Call</span>
-                                                    </RingCentralCallButton>
-                                                )}
-                                            </span>
-                                        </div>
-                                    </div>
+                                        {contractorAssignmentForm.errors.contractor_ids && <em>{contractorAssignmentForm.errors.contractor_ids}</em>}
+                                        <button type="submit" disabled={contractorAssignmentForm.processing}>
+                                            <Users /> {contractorAssignmentForm.processing ? 'Saving…' : 'Save assigned team'}
+                                        </button>
+                                    </form>
                                 </article>
 
                                 <article className="project-detail-card project-detail-card--notes">
@@ -4110,7 +4888,9 @@ export default function Projects({
                                                     ).map((note) => (
                                                         <li key={note.id}>
                                                             <span>
-                                                                {note.body}
+                                                                {plainNote(
+                                                                    note.body,
+                                                                )}
                                                             </span>
                                                             <time>
                                                                 {new Date(
@@ -4406,16 +5186,7 @@ export default function Projects({
                                         value={projectCreateForm.data.status}
                                         onChange={(event) => {
                                             const status = event.target.value;
-                                            projectCreateForm.setData(
-                                                (current) => ({
-                                                    ...current,
-                                                    status,
-                                                    project_number:
-                                                        status === 'progress'
-                                                            ? current.project_number
-                                                            : '',
-                                                }),
-                                            );
+                                            projectCreateForm.setData('status', status);
                                         }}
                                     >
                                         <option value="new">New</option>
@@ -4437,14 +5208,7 @@ export default function Projects({
                                     <span>Project number</span>
                                     <input
                                         placeholder={
-                                            projectCreateForm.data.status ===
-                                            'progress'
-                                                ? 'Leave blank to assign automatically'
-                                                : 'Assigned when status becomes In Progress'
-                                        }
-                                        disabled={
-                                            projectCreateForm.data.status !==
-                                            'progress'
+                                            'Leave blank to assign automatically'
                                         }
                                         value={
                                             projectCreateForm.data
@@ -4629,7 +5393,7 @@ export default function Projects({
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className="project-sale-form">
-                                    <label>
+                                    {accountingForm.data.type !== 'payable' && <label>
                                         <span>Sale amount</span>
                                         <div className="project-sale-amount-input">
                                             <strong>$</strong>
@@ -4652,8 +5416,8 @@ export default function Projects({
                                                 {saleForm.errors.amount}
                                             </small>
                                         )}
-                                    </label>
-                                    <label>
+                                    </label>}
+                                    {accountingForm.data.type !== 'payable' && <label>
                                         <span>Sale date</span>
                                         <input
                                             type="date"
@@ -4670,7 +5434,7 @@ export default function Projects({
                                                 {saleForm.errors.sale_date}
                                             </small>
                                         )}
-                                    </label>
+                                    </label>}
                                     <label>
                                         <span>Product</span>
                                         <select
@@ -4699,6 +5463,17 @@ export default function Projects({
                                                 {saleForm.errors.product_id}
                                             </small>
                                         )}
+                                    </label>
+                                    <label className="project-sale-files">
+                                        <span>Contracts, files, or photos</span>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                                            onChange={(event) => saleForm.setData('files', Array.from(event.target.files ?? []))}
+                                        />
+                                        <small>{saleForm.data.files.length ? `${saleForm.data.files.length} files selected` : 'You can select up to 20 files at once.'}</small>
+                                        {saleForm.errors.files && <small>{saleForm.errors.files}</small>}
                                     </label>
                                 </div>
                                 <DialogFooter className="project-sale-modal__footer">
@@ -4952,15 +5727,61 @@ export default function Projects({
                                             : `Edit ${accountingForm.data.type}`}
                                     </DialogTitle>
                                     <DialogDescription>
-                                        Record a project{' '}
+                                        Record a{' '}
+                                        {accountingForm.data.unassigned
+                                            ? 'standalone'
+                                            : 'project'}{' '}
                                         {accountingForm.data.type}. Linking a{' '}
                                         {accountingForm.data.type ===
                                         'receivable'
                                             ? 'scheduled payment'
-                                            : 'vendor invoice'}{' '}
+                                            : 'vendor payment'}{' '}
                                         is optional.
                                     </DialogDescription>
                                 </DialogHeader>
+
+                                {accountingModal.mode === 'create' && (
+                                    <label className="project-accounting-unassigned">
+                                        <input
+                                            type="checkbox"
+                                            checked={
+                                                accountingForm.data.unassigned
+                                            }
+                                            onChange={(event) =>
+                                                accountingForm.setData(
+                                                    (data) => ({
+                                                        ...data,
+                                                        unassigned:
+                                                            event.target
+                                                                .checked,
+                                                        project_invoice_id: '',
+                                                        scheduled_payment_ids:
+                                                            [],
+                                                        counterparty:
+                                                            event.target
+                                                                    .checked &&
+                                                                data.type ===
+                                                                    'receivable'
+                                                                ? ''
+                                                                : data.counterparty,
+                                                    }),
+                                                )
+                                            }
+                                        />
+                                        <span>
+                                            <strong>
+                                                Unassigned / not related to a
+                                                project
+                                            </strong>
+                                            <small>
+                                                Save this record in the global
+                                                receivables or payables register
+                                                without connecting it to the
+                                                selected project.
+                                            </small>
+                                        </span>
+                                    </label>
+                                )}
 
                                 <div className="project-accounting-form-top">
                                     <label>
@@ -5008,6 +5829,24 @@ export default function Projects({
                                             )}
                                         </select>
                                     </label>
+                                    {accountingForm.data.type === 'payable' &&
+                                        accountingForm.data.category === 'Vendor Payment' && (
+                                            <label>
+                                                <span>Invoice / order number</span>
+                                                <input
+                                                    type="text"
+                                                    maxLength={100}
+                                                    placeholder="Enter invoice or order number"
+                                                    value={accountingForm.data.invoice_order_number}
+                                                    onChange={(event) =>
+                                                        accountingForm.setData(
+                                                            'invoice_order_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </label>
+                                        )}
                                     <label>
                                         <span>Date</span>
                                         <input
@@ -5059,7 +5898,7 @@ export default function Projects({
                                         </select>
                                     </label>
                                     <label>
-                                        <span>Reference #</span>
+                                        <span>Reference # (optional)</span>
                                         <div className="project-accounting-reference">
                                             <strong>
                                                 {
@@ -5080,12 +5919,19 @@ export default function Projects({
                                                 )}
                                                 onChange={(event) =>
                                                     accountingForm.setData(
-                                                        'reference_number',
-                                                        paymentReference(
-                                                            accountingForm.data
-                                                                .payment_method,
-                                                            event.target.value,
-                                                        ),
+                                                        (data) => ({
+                                                            ...data,
+                                                            reference_number:
+                                                                paymentReference(
+                                                                    data.payment_method,
+                                                                    event.target.value,
+                                                                ),
+                                                            status:
+                                                                data.type === 'payable' &&
+                                                                event.target.value.trim() !== ''
+                                                                    ? 'paid'
+                                                                    : data.status,
+                                                        }),
                                                     )
                                                 }
                                             />
@@ -5098,6 +5944,19 @@ export default function Projects({
                                                         .reference_number
                                                 }
                                             </small>
+                                        )}
+                                        {accountingForm.data.payment_method === 'cash' && canGeneratePaymentCodes && (
+                                            <button
+                                                className="project-generate-payment-code"
+                                                type="button"
+                                                onClick={() => accountingForm.setData((data) => ({
+                                                    ...data,
+                                                    reference_number: cashReferenceCode(),
+                                                    status: data.type === 'payable' ? 'paid' : data.status,
+                                                }))}
+                                            >
+                                                Generate code
+                                            </button>
                                         )}
                                     </label>
                                     <label>
@@ -5129,16 +5988,31 @@ export default function Projects({
                                         <span>Status</span>
                                         <select
                                             value={accountingForm.data.status}
-                                            onChange={(event) =>
+                                            onChange={(event) => {
+                                                const status = event.target
+                                                    .value as AccountingTransaction['status'];
                                                 accountingForm.setData(
                                                     'status',
-                                                    event.target
-                                                        .value as AccountingTransaction['status'],
-                                                )
-                                            }
+                                                    status,
+                                                );
+                                                if (
+                                                    (accountingForm.data.type === 'payable' && status === 'paid') ||
+                                                    (accountingForm.data.type === 'receivable' && status === 'deposit')
+                                                ) {
+                                                    setPayablePaymentModalOpen(
+                                                        true,
+                                                    );
+                                                }
+                                            }}
                                         >
                                             {Object.entries(
-                                                invoiceStatusLabels,
+                                                accountingForm.data.type ===
+                                                    'receivable'
+                                                    ? {
+                                                          pending: 'Pending',
+                                                          deposit: 'Deposit',
+                                                      }
+                                                    : invoiceStatusLabels,
                                             ).map(([value, label]) => (
                                                 <option
                                                     key={value}
@@ -5156,8 +6030,11 @@ export default function Projects({
                                     </label>
                                 </div>
 
-                                <div className="project-accounting-form-body">
-                                    {accountingForm.data.type ===
+                                <div
+                                    className={`project-accounting-form-body${accountingForm.data.unassigned ? ' is-unassigned' : ''}`}
+                                >
+                                    {!accountingForm.data.unassigned &&
+                                    (accountingForm.data.type ===
                                     'receivable' ? (
                                         <section>
                                             <header>
@@ -5259,7 +6136,7 @@ export default function Projects({
                                         <section>
                                             <header>
                                                 <div>
-                                                    <h3>Vendor invoice</h3>
+                                                    <h3>Vendor payment</h3>
                                                     <p>
                                                         Optionally connect this
                                                         payable to an invoice.
@@ -5530,7 +6407,7 @@ export default function Projects({
                                                 )}
                                             </div>
                                         </section>
-                                    )}
+                                    ))}
 
                                     <section>
                                         <header>
@@ -5555,8 +6432,18 @@ export default function Projects({
                                                     accountingForm.data
                                                         .counterparty
                                                 }
-                                                readOnly
-                                                aria-readonly="true"
+                                                readOnly={
+                                                    !accountingForm.data
+                                                        .unassigned ||
+                                                    accountingForm.data.type ===
+                                                        'payable'
+                                                }
+                                                aria-readonly={
+                                                    !accountingForm.data
+                                                        .unassigned ||
+                                                    accountingForm.data.type ===
+                                                        'payable'
+                                                }
                                                 onChange={(event) =>
                                                     accountingForm.setData(
                                                         'counterparty',
@@ -5570,40 +6457,69 @@ export default function Projects({
                                                     ? 'Automatically set from the customer of the selected project.'
                                                     : 'Automatically set from the selected contractor.'}
                                             </small>
+                                            <span>Use existing project file</span>
+                                            <select value={accountingForm.data.project_document_id} onChange={(event) => { accountingForm.setData('project_document_id', event.target.value); if (event.target.value) chooseAccountingFile(null); }}>
+                                                <option value="">Upload a new file instead</option>
+                                                {(selected?.documents ?? []).map((document) => <option key={document.id} value={document.id}>{document.file_name}</option>)}
+                                            </select>
+                                            {accountingForm.errors.project_document_id && <small>{accountingForm.errors.project_document_id}</small>}
                                             <span>Attachment</span>
-                                            <input
-                                                type="file"
-                                                accept=".pdf,.jpg,.jpeg,.png,.webp"
-                                                onChange={(event) => {
-                                                    const file =
-                                                        event.target
-                                                            .files?.[0] ?? null;
-
-                                                    if (
-                                                        accountingFilePreview?.isLocal
-                                                    ) {
-                                                        URL.revokeObjectURL(
-                                                            accountingFilePreview.url,
-                                                        );
-                                                    }
-
-                                                    accountingForm.setData(
-                                                        'file',
-                                                        file,
-                                                    );
-                                                    setAccountingFilePreview(
-                                                        file
-                                                            ? {
-                                                                  url: URL.createObjectURL(
-                                                                      file,
-                                                                  ),
-                                                                  mime: file.type,
-                                                                  isLocal: true,
-                                                              }
-                                                            : null,
+                                            <label
+                                                className={`project-accounting-file-picker${isAccountingFileDragging ? ' is-dragging' : ''}`}
+                                                onDragEnter={(event) => {
+                                                    event.preventDefault();
+                                                    setIsAccountingFileDragging(
+                                                        true,
                                                     );
                                                 }}
-                                            />
+                                                onDragOver={(event) => {
+                                                    event.preventDefault();
+                                                    event.dataTransfer.dropEffect =
+                                                        'copy';
+                                                }}
+                                                onDragLeave={(event) => {
+                                                    if (
+                                                        !event.currentTarget.contains(
+                                                            event.relatedTarget as Node,
+                                                        )
+                                                    ) {
+                                                        setIsAccountingFileDragging(
+                                                            false,
+                                                        );
+                                                    }
+                                                }}
+                                                onDrop={(event) => {
+                                                    event.preventDefault();
+                                                    setIsAccountingFileDragging(
+                                                        false,
+                                                    );
+                                                    chooseAccountingFile(
+                                                        event.dataTransfer.files?.[0] ?? null,
+                                                    );
+                                                }}
+                                            >
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                                                    onChange={(event) =>
+                                                        chooseAccountingFile(
+                                                            event.target.files?.[0] ?? null,
+                                                        )
+                                                    }
+                                                />
+                                                <Upload />
+                                                <strong>
+                                                    {accountingForm.data.file
+                                                        ?.name ||
+                                                        accountingModal
+                                                            .transaction
+                                                            ?.file_name ||
+                                                        'Drop PDF or image here'}
+                                                </strong>
+                                                <small>
+                                                    or click to browse
+                                                </small>
+                                            </label>
                                             {accountingFilePreview && (
                                                 <a
                                                     href={
@@ -5655,6 +6571,278 @@ export default function Projects({
                 </Dialog>
 
                 <Dialog
+                    open={payablePaymentModalOpen}
+                    onOpenChange={(open) => {
+                        setPayablePaymentModalOpen(open);
+                        if (!open && accountingForm.data.status === 'paid') {
+                            accountingForm.setData('status', 'ok_to_pay');
+                        }
+                    }}
+                >
+                    <DialogContent className="project-sale-modal project-payment-confirm-modal">
+                        <form
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                accountingForm.clearErrors(
+                                    'payment_method',
+                                    'reference_number',
+                                );
+                                setPayablePaymentModalOpen(false);
+                            }}
+                        >
+                            <DialogHeader>
+                                <DialogTitle>{accountingForm.data.status === 'deposit' ? 'Record receivable deposit' : 'Mark payable as paid'}</DialogTitle>
+                                <DialogDescription>
+                                    Select the payment method. The check or reference number is optional.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="project-accounting-form-top">
+                                <label>
+                                    <span>Payment method</span>
+                                    <select
+                                        required
+                                        value={accountingForm.data.payment_method}
+                                        onChange={(event) => {
+                                            const method = event.target
+                                                .value as keyof typeof paymentPrefixes;
+                                            accountingForm.setData((data) => ({
+                                                ...data,
+                                                payment_method: method,
+                                                reference_number:
+                                                    paymentReference(method),
+                                            }));
+                                        }}
+                                    >
+                                        {Object.entries(paymentMethodLabels).map(
+                                            ([value, label]) => (
+                                                <option key={value} value={value}>
+                                                    {label}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Check / reference number (optional)</span>
+                                    <div className="project-accounting-reference">
+                                        <strong>
+                                            {
+                                                paymentPrefixes[
+                                                    accountingForm.data
+                                                        .payment_method
+                                                ]
+                                            }
+                                        </strong>
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            placeholder="Enter number"
+                                            value={accountingForm.data.reference_number.slice(
+                                                paymentPrefixes[
+                                                    accountingForm.data
+                                                        .payment_method
+                                                ].length,
+                                            )}
+                                            onChange={(event) =>
+                                                accountingForm.setData(
+                                                    'reference_number',
+                                                    paymentReference(
+                                                        accountingForm.data
+                                                            .payment_method,
+                                                        event.target.value,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                    {accountingForm.errors.reference_number && (
+                                        <small>
+                                            {
+                                                accountingForm.errors
+                                                    .reference_number
+                                            }
+                                        </small>
+                                    )}
+                                </label>
+                            </div>
+                            <DialogFooter className="project-sale-modal__footer">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        accountingForm.setData(
+                                            'status',
+                                            'ok_to_pay',
+                                        );
+                                        setPayablePaymentModalOpen(false);
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button type="submit">Confirm paid</button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={saleAttachmentSale !== null} onOpenChange={(open) => !open && !documentUploadForm.processing && setSaleAttachmentSale(null)}>
+                    {saleAttachmentSale && selected && (
+                        <DialogContent className="project-accounting-attachment-modal">
+                            <form onSubmit={(event) => {
+                                event.preventDefault();
+                                documentUploadForm.post(`/management/projects/${selected.id}/documents`, {
+                                    forceFormData: true,
+                                    preserveScroll: true,
+                                    onSuccess: () => { setSaleAttachmentSale(null); documentUploadForm.reset(); },
+                                });
+                            }}>
+                                <DialogHeader>
+                                    <DialogTitle>{saleAttachmentSale.type === 'original' ? 'Original sale files' : 'Referral sale files'}</DialogTitle>
+                                    <DialogDescription>View existing contracts and photos or attach more. Files also appear in DOC and Google Drive.</DialogDescription>
+                                </DialogHeader>
+                                <div className="project-accounting-attachment-list">
+                                    {selected.documents.filter((document) => document.project_sale_id === saleAttachmentSale.id).map((document) => <a key={document.id} href={`/management/projects/${selected.id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a>)}
+                                    {selected.documents.every((document) => document.project_sale_id !== saleAttachmentSale.id) && <p>No files attached yet.</p>}
+                                </div>
+                                <label className="project-accounting-attachment-upload"><Upload /><strong>{documentUploadForm.data.files.length ? `${documentUploadForm.data.files.length} files selected` : 'Choose files or photos'}</strong><small>PDF, JPG, PNG, WebP, HEIC, or HEIF</small><input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => documentUploadForm.setData('files', Array.from(event.target.files ?? []))} /></label>
+                                {documentUploadForm.errors.files && <small>{documentUploadForm.errors.files}</small>}
+                                <DialogFooter className="project-sale-modal__footer"><button type="button" onClick={() => setSaleAttachmentSale(null)}>Cancel</button><button type="submit" disabled={documentUploadForm.processing || documentUploadForm.data.files.length === 0}>{documentUploadForm.processing ? 'Uploading...' : 'Upload files'}</button></DialogFooter>
+                            </form>
+                        </DialogContent>
+                    )}
+                </Dialog>
+
+                <Dialog
+                    open={accountingAttachmentTransaction !== null}
+                    onOpenChange={(open) =>
+                        !open &&
+                        !documentUploadForm.processing &&
+                        setAccountingAttachmentTransaction(null)
+                    }
+                >
+                    {accountingAttachmentTransaction && selected && (
+                        <DialogContent className="project-accounting-attachment-modal">
+                            <form
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    documentUploadForm.post(
+                                        `/management/projects/${selected.id}/documents`,
+                                        {
+                                            forceFormData: true,
+                                            preserveScroll: true,
+                                            onSuccess: () => {
+                                                setAccountingAttachmentTransaction(null);
+                                                documentUploadForm.reset();
+                                            },
+                                        },
+                                    );
+                                }}
+                            >
+                                <DialogHeader>
+                                    <DialogTitle>{accountingAttachmentTransaction.reference_number || `Files for this ${accountingAttachmentTransaction.type}`}</DialogTitle>
+                                    <DialogDescription>View existing attachments or add PDFs, images, and photos. New files also appear in the DOC tab and Google Drive.</DialogDescription>
+                                </DialogHeader>
+                                <div className="project-accounting-attachment-list">
+                                    {accountingAttachmentTransaction.file_name && <a href={`/management/projects/${selected.id}/accounting-transactions/${accountingAttachmentTransaction.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{accountingAttachmentTransaction.file_name}</span><strong>View</strong></a>}
+                                    {selected.documents.filter((document) => document.project_accounting_transaction_id === accountingAttachmentTransaction.id).map((document) => <a key={document.id} href={`/management/projects/${selected.id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a>)}
+                                    {!accountingAttachmentTransaction.file_name && selected.documents.every((document) => document.project_accounting_transaction_id !== accountingAttachmentTransaction.id) && <p>No files attached yet.</p>}
+                                </div>
+                                <label className="project-accounting-attachment-upload"><Upload /><strong>{documentUploadForm.data.files.length ? `${documentUploadForm.data.files.length} files selected` : 'Choose files or photos'}</strong><small>PDF, JPG, PNG, WebP, HEIC, or HEIF</small><input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => documentUploadForm.setData('files', Array.from(event.target.files ?? []))} /></label>
+                                {documentUploadForm.errors.files && <small>{documentUploadForm.errors.files}</small>}
+                                <DialogFooter className="project-sale-modal__footer"><button type="button" onClick={() => setAccountingAttachmentTransaction(null)}>Cancel</button><button type="submit" disabled={documentUploadForm.processing || documentUploadForm.data.files.length === 0}>{documentUploadForm.processing ? 'Uploading…' : 'Upload files'}</button></DialogFooter>
+                            </form>
+                        </DialogContent>
+                    )}
+                </Dialog>
+
+                <Dialog
+                    open={receivableQbModal !== null}
+                    onOpenChange={(open) =>
+                        !open && setReceivableQbModal(null)
+                    }
+                >
+                    <DialogContent className="project-sale-modal">
+                        <DialogHeader>
+                            <DialogTitle>Confirm move to QB</DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to mark this receivable as QB? Review the details before confirming.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {receivableQbModal && (
+                            <><div className="project-qb-confirm-summary"><span>Received from</span><strong>{receivableQbModal.transaction.counterparty || selected?.lead?.customer_name || 'Customer'}</strong><span>Amount</span><strong>{currencyFormatter.format(Number(receivableQbModal.transaction.amount))}</strong></div><div className="project-accounting-form-top">
+                                <label>
+                                    <span>Payment method</span>
+                                    <select
+                                        value={receivableQbModal.paymentMethod}
+                                        onChange={(event) => {
+                                            const method = event.target.value as keyof typeof paymentPrefixes;
+                                            setReceivableQbModal((current) =>
+                                                current
+                                                    ? {
+                                                          ...current,
+                                                          paymentMethod: method,
+                                                          referenceNumber: paymentPrefixes[method],
+                                                          error: '',
+                                                      }
+                                                    : current,
+                                            );
+                                        }}
+                                    >
+                                        {Object.entries(paymentMethodLabels).map(
+                                            ([value, label]) => (
+                                                <option key={value} value={value}>{label}</option>
+                                            ),
+                                        )}
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Check / reference number (optional)</span>
+                                    <div className="project-accounting-reference">
+                                        <strong>{paymentPrefixes[receivableQbModal.paymentMethod]}</strong>
+                                        <input
+                                            autoFocus
+                                            value={receivableQbModal.referenceNumber.slice(
+                                                paymentPrefixes[receivableQbModal.paymentMethod].length,
+                                            )}
+                                            onChange={(event) =>
+                                                setReceivableQbModal((current) =>
+                                                    current
+                                                        ? {
+                                                              ...current,
+                                                              referenceNumber: `${paymentPrefixes[current.paymentMethod]}${event.target.value}`,
+                                                              error: '',
+                                                          }
+                                                        : current,
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                </label>
+                                {receivableQbModal.error && (
+                                    <small>{receivableQbModal.error}</small>
+                                )}
+                            </div></>
+                        )}
+                        <DialogFooter className="project-sale-modal__footer">
+                            <button type="button" onClick={() => setReceivableQbModal(null)}>Cancel</button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    receivableQbModal &&
+                                    updateReceivableQb(
+                                        receivableQbModal.transaction,
+                                        true,
+                                        receivableQbModal.paymentMethod,
+                                        receivableQbModal.referenceNumber,
+                                    )
+                                }
+                            >
+                                Yes, move to QB
+                            </button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog
                     open={invoiceModal !== null}
                     onOpenChange={(open) => {
                         if (!open && !invoiceForm.processing) {
@@ -5669,8 +6857,8 @@ export default function Projects({
                                 <DialogHeader>
                                     <DialogTitle>
                                         {invoiceModal.mode === 'create'
-                                            ? 'Add vendor invoice'
-                                            : 'Edit vendor invoice'}
+                                            ? 'Add vendor payment'
+                                            : 'Edit vendor payment'}
                                     </DialogTitle>
                                     <DialogDescription>
                                         This invoice is connected to{' '}
@@ -5715,38 +6903,114 @@ export default function Projects({
                                         </label>
                                         <label>
                                             <span>Charged by</span>
-                                            <select
-                                                value={
-                                                    invoiceForm.data
-                                                        .contractor_id
-                                                }
-                                                onChange={(event) =>
-                                                    invoiceForm.setData(
-                                                        'contractor_id',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            >
-                                                <option value="">
-                                                    Select contractor
-                                                </option>
-                                                {contractors.map(
-                                                    (contractor) => (
-                                                        <option
-                                                            key={
-                                                                contractor.con_id
-                                                            }
-                                                            value={
-                                                                contractor.con_id
-                                                            }
-                                                        >
-                                                            {
-                                                                contractor.contractor
-                                                            }
-                                                        </option>
-                                                    ),
-                                                )}
-                                            </select>
+                                            <div className="project-invoice-contractor-picker">
+                                                <input
+                                                    type="search"
+                                                    value={invoiceContractorSearch}
+                                                    placeholder="Type contractor or vendor name"
+                                                    autoComplete="off"
+                                                    onChange={(event) =>
+                                                        setInvoiceContractorSearch(
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                <select
+                                                    value={
+                                                        invoiceForm.data.contractor_id
+                                                            ? `contractor:${invoiceForm.data.contractor_id}`
+                                                            : invoiceForm.data.vendor_id
+                                                              ? `vendor:${invoiceForm.data.vendor_id}`
+                                                              : ''
+                                                    }
+                                                    onChange={(event) => {
+                                                        const [kind, id = ''] =
+                                                            event.target.value.split(':');
+                                                        invoiceForm.setData(
+                                                            (data) => ({
+                                                                ...data,
+                                                                contractor_id:
+                                                                    kind === 'contractor'
+                                                                        ? id
+                                                                        : '',
+                                                                vendor_id:
+                                                                    kind === 'vendor'
+                                                                        ? id
+                                                                        : '',
+                                                            }),
+                                                        );
+                                                    }}
+                                                >
+                                                    <option value="">
+                                                        Select contractor or vendor
+                                                    </option>
+                                                    {searchedAssignedProjectContractors.length >
+                                                        0 && (
+                                                        <optgroup label="Assigned to this project">
+                                                            {searchedAssignedProjectContractors.map(
+                                                            (contractor) => (
+                                                                <option
+                                                                    key={
+                                                                        `contractor:${contractor.con_id}`
+                                                                    }
+                                                                    value={
+                                                                        `contractor:${contractor.con_id}`
+                                                                    }
+                                                                >
+                                                                    {`[Assigned ${contractor.pivot.position}] ${contractor.contractor}`}
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                        </optgroup>
+                                                    )}
+                                                    {searchedAvailableInvoiceContractors.length >
+                                                        0 && (
+                                                        <optgroup label="Other contractors">
+                                                            {searchedAvailableInvoiceContractors.map(
+                                                            (contractor) => (
+                                                                <option
+                                                                    key={
+                                                                        `contractor:${contractor.con_id}`
+                                                                    }
+                                                                    value={
+                                                                        `contractor:${contractor.con_id}`
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        contractor.contractor
+                                                                    }
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                        </optgroup>
+                                                    )}
+                                                    {searchedInvoiceVendors.length >
+                                                        0 && (
+                                                        <optgroup label="Vendors">
+                                                            {searchedInvoiceVendors.map(
+                                                                (vendor) => (
+                                                                    <option
+                                                                        key={`vendor-${vendor.vendor_id}`}
+                                                                        value={`vendor:${vendor.vendor_id}`}
+                                                                    >
+                                                                        {vendor.vendor}
+                                                                    </option>
+                                                                ),
+                                                            )}
+                                                        </optgroup>
+                                                    )}
+                                                    {searchedAssignedProjectContractors.length ===
+                                                        0 &&
+                                                        searchedAvailableInvoiceContractors.length ===
+                                                            0 &&
+                                                        searchedInvoiceVendors.length ===
+                                                            0 && (
+                                                            <option disabled>
+                                                                No contractors or vendors found
+                                                            </option>
+                                                        )}
+                                                </select>
+                                            </div>
                                             {invoiceForm.errors
                                                 .contractor_id && (
                                                 <small>
@@ -5755,6 +7019,9 @@ export default function Projects({
                                                             .contractor_id
                                                     }
                                                 </small>
+                                                )}
+                                            {invoiceForm.errors.vendor_id && (
+                                                <small>{invoiceForm.errors.vendor_id}</small>
                                             )}
                                         </label>
                                         <label className="is-wide">
@@ -5868,7 +7135,45 @@ export default function Projects({
                                             <Upload />
                                             <span>Invoice file</span>
                                         </div>
-                                        <label className="project-invoice-file-picker">
+                                        <label>
+                                            <span>Use existing project file</span>
+                                            <select value={invoiceForm.data.project_document_id} onChange={(event) => { invoiceForm.setData('project_document_id', event.target.value); if (event.target.value) chooseInvoiceFile(null); }}>
+                                                <option value="">Upload a new file instead</option>
+                                                {(selected?.documents ?? []).map((document) => <option key={document.id} value={document.id}>{document.file_name}</option>)}
+                                            </select>
+                                            {invoiceForm.errors.project_document_id && <small>{invoiceForm.errors.project_document_id}</small>}
+                                        </label>
+                                        <label
+                                            className={`project-invoice-file-picker${isInvoiceFileDragging ? ' is-dragging' : ''}`}
+                                            onDragEnter={(event) => {
+                                                event.preventDefault();
+                                                setIsInvoiceFileDragging(true);
+                                            }}
+                                            onDragOver={(event) => {
+                                                event.preventDefault();
+                                                event.dataTransfer.dropEffect =
+                                                    'copy';
+                                            }}
+                                            onDragLeave={(event) => {
+                                                if (
+                                                    !event.currentTarget.contains(
+                                                        event.relatedTarget as Node,
+                                                    )
+                                                ) {
+                                                    setIsInvoiceFileDragging(
+                                                        false,
+                                                    );
+                                                }
+                                            }}
+                                            onDrop={(event) => {
+                                                event.preventDefault();
+                                                setIsInvoiceFileDragging(false);
+                                                chooseInvoiceFile(
+                                                    event.dataTransfer.files?.[0] ??
+                                                        null,
+                                                );
+                                            }}
+                                        >
                                             <input
                                                 type="file"
                                                 accept=".pdf,.jpg,.jpeg,.png,.webp"
@@ -5887,6 +7192,7 @@ export default function Projects({
                                                     'Choose PDF or image'}
                                             </strong>
                                             <span>
+                                                Drop here or click to browse ·
                                                 Maximum file size: 10 MB
                                             </span>
                                         </label>

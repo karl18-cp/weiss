@@ -1,115 +1,236 @@
 import { Head, router } from '@inertiajs/react';
-import { Clock3, LogIn, LogOut } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-
+import {
+    CalendarDays,
+    ChevronLeft,
+    ChevronRight,
+    Coffee,
+    LogIn,
+    LogOut,
+    Play,
+    Users,
+} from 'lucide-react';
+import { useState } from 'react';
 type Session = {
     id: number;
     clocked_in_at: string;
     clocked_out_at: string | null;
+    lunch_out_at: string | null;
+    lunch_in_at: string | null;
     duration_seconds: number;
 };
-
-const duration = (seconds: number) => {
-    const safe = Math.max(0, Math.floor(seconds));
-    const hours = Math.floor(safe / 3600);
-    const minutes = Math.floor((safe % 3600) / 60);
-    const secs = safe % 60;
-
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-};
-
-const dateTime = (value: string) =>
-    new Intl.DateTimeFormat(undefined, {
+type Score = { total: number; confirmed: number; sold: number };
+const duration = (n: number) =>
+    `${String(Math.floor(n / 3600)).padStart(2, '0')}:${String(Math.floor((n % 3600) / 60)).padStart(2, '0')}`;
+const dateTime = (v: string) =>
+    new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Los_Angeles',
         dateStyle: 'medium',
         timeStyle: 'short',
-    }).format(new Date(value));
-
-export default function AgentDashboard({
+    }).format(new Date(v));
+const clock = (v?: string | null) =>
+    v
+        ? new Intl.DateTimeFormat('en-US', {
+              timeZone: 'UTC',
+              hour: 'numeric',
+              minute: '2-digit',
+          }).format(new Date(`2000-01-01T${v}Z`))
+        : '—';
+export default function Dashboard({
     agent,
+    schedule,
     openSession,
     todaySeconds,
     recentSessions,
-    serverNow,
+    leadSummary,
+    recentLeads,
+    scoreDate,
+    todayDate,
+    teamScores,
 }: {
-    agent: { id: number; name: string };
-    openSession: { id: number; clocked_in_at: string } | null;
+    agent: { name: string };
+    schedule: null | {
+        is_working: boolean;
+        shift_start: string;
+        shift_end: string;
+        lunch_start: string;
+        lunch_end: string;
+    };
+    openSession: Session | null;
     todaySeconds: number;
     recentSessions: Session[];
-    serverNow: string;
+    leadSummary: Score;
+    recentLeads: { id: number; customer: string; city: string | null }[];
+    scoreDate: string;
+    todayDate: string;
+    teamScores: (Score & { id: number; name: string })[];
 }) {
-    const [processing, setProcessing] = useState(false);
-    const [now, setNow] = useState(() => new Date(serverNow).getTime());
-
-    useEffect(() => {
-        const interval = window.setInterval(
-            () => setNow((value) => value + 1000),
-            1000,
+    const [busy, setBusy] = useState(false);
+    const selectDate = (date: string) =>
+        router.get(
+            '/agent/dashboard',
+            { date },
+            { preserveState: true, replace: true },
         );
-
-        return () => window.clearInterval(interval);
-    }, []);
-
-    const activeSeconds = useMemo(() => {
-        if (!openSession) return 0;
-
-        return Math.max(
-            0,
-            Math.floor(
-                (now - new Date(openSession.clocked_in_at).getTime()) / 1000,
-            ),
+    const moveDate = (days: number) => {
+        const date = new Date(`${scoreDate}T12:00:00`);
+        date.setDate(date.getDate() + days);
+        selectDate(
+            `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
         );
-    }, [now, openSession]);
-
-    const submit = (path: string) => {
-        if (processing) return;
-        setProcessing(true);
-        router.post(path, {}, {
-            preserveScroll: true,
-            onFinish: () => setProcessing(false),
-        });
     };
-
+    const post = (path: string) => {
+        setBusy(true);
+        router.post(
+            path,
+            {},
+            { preserveScroll: true, onFinish: () => setBusy(false) },
+        );
+    };
+    let action = { path: '/agent/time-in', label: 'Clock in', icon: <LogIn /> };
+    if (openSession && !openSession.lunch_out_at)
+        action = {
+            path: '/agent/lunch-out',
+            label: 'Lunch out',
+            icon: <Coffee />,
+        };
+    else if (openSession?.lunch_out_at && !openSession.lunch_in_at)
+        action = { path: '/agent/lunch-in', label: 'Lunch in', icon: <Play /> };
+    const ScoreCards = ({ score }: { score: Score }) => (
+        <div className="agent-score-cards">
+            <span>
+                <small>TOTAL</small>
+                <b>{score.total}</b>
+            </span>
+            <span>
+                <small>CONFIRMED</small>
+                <b>{score.confirmed}</b>
+            </span>
+            <span>
+                <small>SOLD</small>
+                <b>{score.sold}</b>
+            </span>
+        </div>
+    );
     return (
-        <section className="agent-clock">
-            <Head title="Agent Time Clock" />
+        <section className="agent-clock agent-dashboard">
+            <Head title="Agent Portal" />
             <header>
-                <span>Agent workspace</span>
+                <span>Agent portal · California time</span>
                 <h1>Hello, {agent.name}</h1>
-                <p>Use the button below to record the start and end of your shift.</p>
+                <p>Record attendance and review your daily score.</p>
             </header>
-
-            <article className={`agent-clock__card ${openSession ? 'is-active' : ''}`}>
-                <div className="agent-clock__icon"><Clock3 /></div>
-                <small>{openSession ? 'Currently timed in' : 'Currently timed out'}</small>
-                <strong>{openSession ? duration(activeSeconds) : duration(todaySeconds)}</strong>
-                <p>
-                    {openSession
-                        ? `Started ${dateTime(openSession.clocked_in_at)}`
-                        : `Today's completed time: ${duration(todaySeconds)}`}
-                </p>
-                {openSession ? (
-                    <button type="button" className="is-time-out" disabled={processing} onClick={() => submit('/agent/time-out')}>
-                        <LogOut /> {processing ? 'Saving…' : 'Time Out'}
-                    </button>
-                ) : (
-                    <button type="button" className="is-time-in" disabled={processing} onClick={() => submit('/agent/time-in')}>
-                        <LogIn /> {processing ? 'Saving…' : 'Time In'}
-                    </button>
-                )}
-            </article>
-
-            <section className="agent-clock__history">
-                <h2>Recent sessions</h2>
-                {recentSessions.length ? recentSessions.map((session) => (
-                    <div key={session.id}>
+            <div className="agent-dashboard__grid">
+                <article
+                    className={`agent-clock__card ${openSession ? 'is-active' : ''}`}
+                >
+                    <small>
+                        {openSession
+                            ? 'Shift in progress'
+                            : 'Ready for your shift'}
+                    </small>
+                    <strong>
+                        {duration(
+                            openSession?.duration_seconds ?? todaySeconds,
+                        )}
+                    </strong>
+                    <p>Net rendered time today</p>
+                    {openSession && openSession.lunch_in_at ? (
+                        <button
+                            className="is-time-out"
+                            disabled={busy}
+                            onClick={() => post('/agent/time-out')}
+                        >
+                            <LogOut />
+                            Clock out
+                        </button>
+                    ) : (
+                        <button
+                            className="is-time-in"
+                            disabled={busy || !schedule?.is_working}
+                            onClick={() => post(action.path)}
+                        >
+                            {action.icon}
+                            {action.label}
+                        </button>
+                    )}
+                    {!schedule?.is_working && (
+                        <em>No working schedule today</em>
+                    )}
+                </article>
+                <article className="agent-schedule-card">
+                    <h2>Today's schedule</h2>
+                    <div>
                         <span>
-                            <strong>{dateTime(session.clocked_in_at)}</strong>
-                            <small>{session.clocked_out_at ? `Out: ${dateTime(session.clocked_out_at)}` : 'In progress'}</small>
+                            Clock in<b>{clock(schedule?.shift_start)}</b>
                         </span>
-                        <b>{duration(session.duration_seconds)}</b>
+                        <span>
+                            Lunch
+                            <b>
+                                {clock(schedule?.lunch_start)} –{' '}
+                                {clock(schedule?.lunch_end)}
+                            </b>
+                        </span>
+                        <span>
+                            Clock out<b>{clock(schedule?.shift_end)}</b>
+                        </span>
                     </div>
-                )) : <p>No attendance sessions yet.</p>}
+                </article>
+            </div>
+            <section className="agent-leads">
+                <header className="agent-score-header">
+                    <div>
+                        <Users />
+                        <span>
+                            <small>MY DAILY SCORE</small>
+                            <strong>{agent.name}</strong>
+                        </span>
+                    </div>
+                    <div className="agent-date-nav">
+                        <button type="button" onClick={() => moveDate(-1)} aria-label="Previous day"><ChevronLeft /></button>
+                        <label><CalendarDays /><input type="date" max={todayDate} value={scoreDate} onChange={(e) => selectDate(e.target.value)} /></label>
+                        <button type="button" disabled={scoreDate >= todayDate} onClick={() => moveDate(1)} aria-label="Next day"><ChevronRight /></button>
+                    </div>
+                </header>
+                <ScoreCards score={leadSummary} />
+                <div className="agent-leads__list">
+                    {recentLeads.map((l) => (
+                        <div key={l.id}>
+                            <strong>{l.customer}</strong>
+                            <small>{l.city || 'City not provided'}</small>
+                        </div>
+                    ))}
+                    {!recentLeads.length && <p>No leads for this date.</p>}
+                </div>
+            </section>
+            <section className="agent-team-scores">
+                <h2>My team score <small>{scoreDate}</small></h2>
+                {teamScores.map((team) => (
+                    <article key={team.id}>
+                        <strong>{team.name}</strong>
+                        <ScoreCards score={team} />
+                    </article>
+                ))}
+                {!teamScores.length && <p>You are not assigned to a team.</p>}
+            </section>
+            <section className="agent-clock__history">
+                <h2>Recent attendance</h2>
+                {recentSessions.map((s) => (
+                    <div key={s.id}>
+                        <span>
+                            <strong>{dateTime(s.clocked_in_at)}</strong>
+                            <small>
+                                {s.clocked_out_at
+                                    ? `Out: ${dateTime(s.clocked_out_at)}`
+                                    : 'In progress'}{' '}
+                                · Lunch{' '}
+                                {s.lunch_out_at && s.lunch_in_at
+                                    ? 'recorded'
+                                    : '—'}
+                            </small>
+                        </span>
+                        <b>{duration(s.duration_seconds)}</b>
+                    </div>
+                ))}
             </section>
         </section>
     );

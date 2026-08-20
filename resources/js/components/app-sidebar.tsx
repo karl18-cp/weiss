@@ -3,10 +3,12 @@ import type { InertiaLinkProps } from '@inertiajs/react';
 import {
     BadgeCheck,
     CalendarDays,
+    CalendarClock,
     ClipboardCheck,
     Clock3,
     History,
     LayoutDashboard,
+    ListTodo,
     LogOut,
     MessageCircle,
     PanelsTopLeft,
@@ -31,6 +33,7 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarTrigger,
     useSidebar,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
@@ -159,6 +162,12 @@ const workflowItems: SidebarItem[] = [
 
 const managementItems: SidebarItem[] = [
     {
+        title: 'Tasks', icon: ListTodo, href: '/management/tasks', permission: 'tasks', roles: ['admin', 'manager'],
+    },
+    {
+        title: 'Agent Schedules', icon: CalendarClock, href: '/management/agent-schedules', permission: 'agent_schedules',
+    },
+    {
         title: 'Quality Control',
         icon: ClipboardCheck,
         href: '/management/quality-control',
@@ -182,15 +191,17 @@ function NavigationSection({
     label,
     items,
     counts = {},
-    leadsShopHasNewLead = false,
-    onLeadsShopViewed,
+    workflowAlerts = {},
+    urgentCounts = {},
+    onWorkflowViewed,
     onNavigate,
 }: {
     label: string;
     items: SidebarItem[];
     counts?: Record<string, number>;
-    leadsShopHasNewLead?: boolean;
-    onLeadsShopViewed?: () => void;
+    workflowAlerts?: Record<string, boolean>;
+    urgentCounts?: Record<string, number>;
+    onWorkflowViewed?: (key: string) => void;
     onNavigate?: () => void;
 }) {
     const { currentUrl, isCurrentUrl } = useCurrentUrl();
@@ -202,19 +213,31 @@ function NavigationSection({
             </SidebarGroupLabel>
             <SidebarMenu className="crm-sidebar__menu">
                 {items.map((item) => {
-                    const isLeadsShopAlert =
-                        item.countKey === 'leads_shop' && leadsShopHasNewLead;
+                    const hasNewLead = Boolean(
+                        item.countKey && workflowAlerts[item.countKey],
+                    );
+                    const urgentCount = item.countKey
+                        ? (urgentCounts[item.countKey] ?? 0)
+                        : 0;
+                    const urgency =
+                        urgentCount > 0
+                            ? item.countKey === 'dispatch_leads'
+                                ? 'critical'
+                                : 'urgent'
+                            : null;
                     const content = (
                         <>
                             <item.icon />
                             <span>{item.title}</span>
                             {item.countKey && (
                                 <span
-                                    className={`crm-sidebar__count${isLeadsShopAlert ? ' crm-sidebar__count--new-lead' : ''}`}
+                                    className={`crm-sidebar__count${urgency ? ` crm-sidebar__count--${urgency}` : hasNewLead ? ' crm-sidebar__count--new-lead' : ''}`}
                                     aria-label={
-                                        isLeadsShopAlert
-                                            ? 'New unviewed lead'
-                                            : undefined
+                                        urgency
+                                            ? `${urgentCount} urgent ${item.title.toLowerCase()}`
+                                            : hasNewLead
+                                              ? 'New unviewed lead'
+                                              : undefined
                                     }
                                 >
                                     {(
@@ -234,14 +257,14 @@ function NavigationSection({
                                     (item.title === 'Contacts & Users' &&
                                         currentUrl === '/management/products')
                                 }
-                                className="crm-sidebar__item"
+                                className={`crm-sidebar__item crm-sidebar__item--${item.permission ?? item.title.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`}
                                 tooltip={item.title}
                             >
                                 <Link
                                     href={item.href}
                                     onClick={() => {
-                                        if (item.countKey === 'leads_shop') {
-                                            onLeadsShopViewed?.();
+                                        if (item.countKey) {
+                                            onWorkflowViewed?.(item.countKey);
                                         }
                                         onNavigate?.();
                                     }}
@@ -263,30 +286,34 @@ export function AppSidebar() {
         auth: Auth;
         workflowCounts: Record<string, number>;
     }>().props;
-    const [latestLeadsShopMarker, setLatestLeadsShopMarker] = useState<{
+    type WorkflowMarker = {
         id: number;
         created_at: string;
-    } | null>(null);
-    const [leadsShopHasNewLead, setLeadsShopHasNewLead] = useState(false);
-    const leadsShopSeenKey = `weiss:leads-shop:last-seen:${auth.user.acc_id ?? auth.user.id ?? 'user'}`;
+    };
+    const [latestWorkflowMarkers, setLatestWorkflowMarkers] = useState<
+        Record<string, WorkflowMarker | null>
+    >({});
+    const [workflowAlerts, setWorkflowAlerts] = useState<Record<string, boolean>>({});
+    const [urgentCounts, setUrgentCounts] = useState<Record<string, number>>({});
+    const workflowSeenKey = `weiss:workflow:last-seen:${auth.user.acc_id ?? auth.user.id ?? 'user'}`;
 
-    const saveLatestLeadsShopMarker = () => {
-        if (!latestLeadsShopMarker) return;
+    const saveLatestWorkflowMarker = (key: string) => {
+        const marker = latestWorkflowMarkers[key];
+        if (!marker) return;
 
-        localStorage.setItem(
-            leadsShopSeenKey,
-            JSON.stringify(latestLeadsShopMarker),
-        );
-        setLeadsShopHasNewLead(false);
+        const seen = JSON.parse(localStorage.getItem(workflowSeenKey) ?? '{}') as Record<string, WorkflowMarker>;
+        seen[key] = marker;
+        localStorage.setItem(workflowSeenKey, JSON.stringify(seen));
+        setWorkflowAlerts((current) => ({ ...current, [key]: false }));
     };
 
     useEffect(() => {
         let active = true;
 
-        const checkForNewLead = async () => {
+        const checkWorkflowAlerts = async () => {
             try {
                 const response = await fetch(
-                    '/lead-workflow/leads-shop/latest-marker',
+                    '/lead-workflow/sidebar-alerts',
                     {
                         headers: { Accept: 'application/json' },
                         credentials: 'same-origin',
@@ -295,42 +322,48 @@ export function AppSidebar() {
                 if (!response.ok) return;
 
                 const payload = (await response.json()) as {
-                    latest: { id: number; created_at: string } | null;
+                    markers: Record<string, WorkflowMarker | null>;
+                    urgent: Record<string, number>;
                 };
-                if (!active || !payload.latest) return;
+                if (!active) return;
 
-                setLatestLeadsShopMarker(payload.latest);
-                const stored = localStorage.getItem(leadsShopSeenKey);
+                setLatestWorkflowMarkers(payload.markers);
+                setUrgentCounts(payload.urgent);
+                const stored = localStorage.getItem(workflowSeenKey);
+                const seen = JSON.parse(stored ?? '{}') as Record<string, WorkflowMarker>;
+
                 if (!stored) {
-                    localStorage.setItem(
-                        leadsShopSeenKey,
-                        JSON.stringify(payload.latest),
-                    );
+                    localStorage.setItem(workflowSeenKey, JSON.stringify(payload.markers));
                     return;
                 }
 
-                const seen = JSON.parse(stored) as {
-                    id?: number;
-                    created_at?: string;
-                };
-                const isNewer =
-                    payload.latest.created_at > (seen.created_at ?? '') ||
-                    (payload.latest.created_at === seen.created_at &&
-                        payload.latest.id > (seen.id ?? 0));
-                setLeadsShopHasNewLead(isNewer);
+                setWorkflowAlerts(
+                    Object.fromEntries(
+                        Object.entries(payload.markers).map(([key, marker]) => {
+                            const previous = seen[key];
+                            const isNewer = Boolean(
+                                marker &&
+                                    (!previous ||
+                                        marker.created_at > previous.created_at ||
+                                        (marker.created_at === previous.created_at && marker.id > previous.id)),
+                            );
+                            return [key, isNewer];
+                        }),
+                    ),
+                );
             } catch {
                 // Sidebar alerts should never interrupt normal CRM navigation.
             }
         };
 
-        void checkForNewLead();
-        const interval = window.setInterval(checkForNewLead, 30000);
+        void checkWorkflowAlerts();
+        const interval = window.setInterval(checkWorkflowAlerts, 30000);
 
         return () => {
             active = false;
             window.clearInterval(interval);
         };
-    }, [leadsShopSeenKey]);
+    }, [workflowSeenKey]);
     const filterItems = (items: SidebarItem[]) => {
         const accessible = items.filter(
             (item) =>
@@ -363,6 +396,12 @@ export function AppSidebar() {
 
     return (
         <Sidebar collapsible="icon" className="crm-sidebar">
+            <div className="crm-sidebar__toggle">
+                <SidebarTrigger
+                    aria-label="Open or close sidebar"
+                    title="Open or close sidebar"
+                />
+            </div>
             <header className="crm-sidebar__identity">
                 <img
                     src="/images/weiss-logo.png"
@@ -388,8 +427,9 @@ export function AppSidebar() {
                         label="Lead Workflow"
                         items={filteredWorkflow}
                         counts={workflowCounts}
-                        leadsShopHasNewLead={leadsShopHasNewLead}
-                        onLeadsShopViewed={saveLatestLeadsShopMarker}
+                        workflowAlerts={workflowAlerts}
+                        urgentCounts={urgentCounts}
+                        onWorkflowViewed={saveLatestWorkflowMarker}
                         onNavigate={closeMobileNavigation}
                     />
                 )}

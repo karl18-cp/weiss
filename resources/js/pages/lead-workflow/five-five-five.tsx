@@ -13,7 +13,8 @@ export default function FiveFiveFive(props: LeadsShopProps) {
         dateLabel: "Appointment dates",
         dateField: "appointment_at",
         statusFilters: [
-          ["555", "ORA"],
+          ["555", "555"],
+          ["ora", "ORA"],
           ["la", "LA"],
           ["ng", "NG"],
           ["toss", "TOSS"],

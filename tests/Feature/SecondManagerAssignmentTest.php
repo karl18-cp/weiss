@@ -163,6 +163,20 @@ test('manager returning a lead to leads shop becomes its second manager', functi
             ->where('leads.0.id', $lead->id));
 });
 
+test('manager returning a verify lead to leads shop becomes its second manager and stamps the rehash date', function () {
+    ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('verify');
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.leads-shop', ['queue_status' => 'verify']))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'fresh'])
+        ->assertRedirect();
+
+    expect($lead->fresh())
+        ->status->toBe('fresh')
+        ->manager_2_id->toBe($manager->manager_id)
+        ->rehash_at->not->toBeNull();
+});
+
 test('manager cannot move a lead to a tab without edit permission', function () {
     ['account' => $account, 'lead' => $lead] = secondManagerFixture('his');
 

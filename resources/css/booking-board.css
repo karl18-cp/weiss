@@ -697,3 +697,19 @@
     white-space: normal;
   }
 }
+.booking-salesman-location {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.5rem;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  color: #fff;
+  background: #142b55;
+  box-shadow: 0 4px 14px rgb(15 34 66 / 35%);
+  font-size: 0.65rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.booking-salesman-location svg { width: 0.9rem; }

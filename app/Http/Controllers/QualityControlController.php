@@ -33,7 +33,7 @@ class QualityControlController extends Controller
             'companies' => Company::query()->whereNull('archived_at')->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
             'agents' => Agent::query()->orderBy('agent_name')->get(['agent_id', 'agent_name']),
-            'salesmen' => Salesman::query()->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
+            'salesmen' => Salesman::query()->whereNull('inactive_at')->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
         ]);
     }
 

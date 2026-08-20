@@ -2,7 +2,6 @@ import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowUpRight,
     LayoutDashboard,
-    Search,
     Sparkles,
     SquareStack,
     TrendingUp,
@@ -28,6 +27,7 @@ type DashboardProps = {
         from: string;
         to: string;
         timezone: string;
+        all: boolean;
     };
     teamPerformance: {
         id: number;
@@ -50,16 +50,20 @@ type DashboardProps = {
         assigned: number;
         sold: number;
     }[];
+    managerPerformance: {
+        id: number;
+        name: string;
+        total: number;
+        confirmed: number;
+        dispatched: number;
+        sold: number;
+    }[];
     bookingPressure: {
         today: number;
         tomorrow: number;
         noAppointment: number;
         overdue: number;
     };
-    projectHealth: Record<
-        'new' | 'progress' | 'completed' | 'canceled',
-        number
-    >;
     workflowLanes: {
         key: string;
         label: string;
@@ -83,32 +87,30 @@ export default function Dashboard({
     teamFilters,
     teamPerformance,
     salesmanPerformance,
+    managerPerformance,
     bookingPressure,
-    projectHealth,
     workflowLanes,
     activeWorkflowCount,
     topSources,
 }: DashboardProps) {
-    const [search, setSearch] = useState('');
     const [teamFrom, setTeamFrom] = useState(teamFilters.from);
     const [teamTo, setTeamTo] = useState(teamFilters.to);
     const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
     const selectedTeam =
         teamPerformance.find((team) => team.id === selectedTeamId) ?? null;
-    const maxProjectStatus = Math.max(...Object.values(projectHealth), 1);
     const maxSource = Math.max(...topSources.map((source) => source.total), 1);
     const kpis = [
         {
             label: 'Total leads',
             value: metrics.totalLeads.toLocaleString(),
-            caption: 'All leads in the CRM',
+            caption: 'Created in selected range',
             icon: Users,
             tone: 'blue',
         },
         {
-            label: 'Created today',
+            label: 'Leads created',
             value: metrics.createdToday.toLocaleString(),
-            caption: `${metrics.createdLastSevenDays.toLocaleString()} in last 7 days`,
+            caption: `${teamFilters.from} to ${teamFilters.to}`,
             icon: Sparkles,
             tone: 'green',
         },
@@ -152,23 +154,21 @@ export default function Dashboard({
                             </p>
                         </div>
                     </div>
-                    <form
-                        style={{ display: 'none' }}
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            router.get('/lead-workflow/data', {
-                                search: search.trim() || undefined,
-                            });
-                        }}
-                    >
-                        <Search />
-                        <input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search leads, customers, phone numbers…"
-                        />
-                    </form>
-                    <LeadGlobalSearch className="crm-dashboard-search" />
+                    <div className="crm-dashboard-hero-actions">
+                        <form
+                            className="crm-dashboard-date-filter"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                router.get('/dashboard', { from: teamFrom, to: teamTo }, { preserveScroll: true });
+                            }}
+                        >
+                            <label><span>From</span><input type="date" value={teamFrom} max={teamTo} onChange={(event) => setTeamFrom(event.target.value)} /></label>
+                            <label><span>To</span><input type="date" value={teamTo} min={teamFrom} onChange={(event) => setTeamTo(event.target.value)} /></label>
+                            <button type="submit">Apply</button>
+                            <button type="button" className={teamFilters.all ? 'is-active' : ''} onClick={() => router.get('/dashboard', { all: 1 })}>See all</button>
+                        </form>
+                        <LeadGlobalSearch className="crm-dashboard-search" />
+                    </div>
                 </section>
 
                 <section className="crm-dashboard-kpis">
@@ -198,53 +198,8 @@ export default function Dashboard({
                         <header>
                             <div>
                                 <h2>Team Lead Performance</h2>
-                                <p>Leads counted by their creation date.</p>
+                                <p>Uses the same lead scoring rules as Team Dashboard.</p>
                             </div>
-                            <form
-                                onSubmit={(event) => {
-                                    event.preventDefault();
-                                    router.get(
-                                        '/dashboard',
-                                        {
-                                            team_from: teamFrom,
-                                            team_to: teamTo,
-                                        },
-                                        {
-                                            preserveScroll: true,
-                                            preserveState: true,
-                                            only: [
-                                                'teamFilters',
-                                                'teamPerformance',
-                                                'salesmanPerformance',
-                                            ],
-                                        },
-                                    );
-                                }}
-                            >
-                                <label>
-                                    <span>From</span>
-                                    <input
-                                        type="date"
-                                        value={teamFrom}
-                                        max={teamTo}
-                                        onChange={(event) =>
-                                            setTeamFrom(event.target.value)
-                                        }
-                                    />
-                                </label>
-                                <label>
-                                    <span>To</span>
-                                    <input
-                                        type="date"
-                                        value={teamTo}
-                                        min={teamFrom}
-                                        onChange={(event) =>
-                                            setTeamTo(event.target.value)
-                                        }
-                                    />
-                                </label>
-                                <button type="submit">Apply</button>
-                            </form>
                         </header>
                         <div className="crm-dashboard-team-table">
                             <div className="crm-dashboard-team-row is-heading">
@@ -280,7 +235,7 @@ export default function Dashboard({
                     <article className="crm-dashboard-card crm-dashboard-salesmen">
                         <header>
                             <h2>Salesman Lead Performance</h2>
-                            <p>Current assignments and leads sold.</p>
+                            <p>Current Dispatch leads by appointment date in the selected range.</p>
                         </header>
                         <div className="crm-dashboard-salesman-table">
                             <div className="crm-dashboard-salesman-row is-heading">
@@ -306,31 +261,34 @@ export default function Dashboard({
                         </div>
                     </article>
 
-                    <article className="crm-dashboard-card crm-dashboard-health">
+                    <article className="crm-dashboard-card crm-dashboard-salesmen">
                         <header>
-                            <h2>Project Health</h2>
-                            <p>Jobs by current status.</p>
+                            <h2>Manager Lead Performance</h2>
+                            <p>Leads returned to Leads Shop in the selected range and their progress.</p>
                         </header>
-                        <div>
-                            {Object.entries(projectHealth).map(
-                                ([label, value]) => (
-                                    <div key={label}>
-                                        <span>
-                                            <em>{label}</em>
-                                            <strong>{value}</strong>
-                                        </span>
-                                        <i>
-                                            <b
-                                                style={{
-                                                    width: `${(value / maxProjectStatus) * 100}%`,
-                                                }}
-                                            />
-                                        </i>
-                                    </div>
-                                ),
+                        <div className="crm-dashboard-salesman-table">
+                            <div className="crm-dashboard-manager-row is-heading">
+                                <span>Manager</span>
+                                <span>Total</span>
+                                <span>Confirmed</span>
+                                <span>Dispatched</span>
+                                <span>Sold</span>
+                            </div>
+                            {managerPerformance.map((manager) => (
+                                <div className="crm-dashboard-manager-row" key={manager.id}>
+                                    <strong>{manager.name}</strong>
+                                    <span>{manager.total}</span>
+                                    <span>{manager.confirmed}</span>
+                                    <span>{manager.dispatched}</span>
+                                    <span>{manager.sold}</span>
+                                </div>
+                            ))}
+                            {managerPerformance.length === 0 && (
+                                <p className="crm-dashboard-team-empty">No manager returns in this range.</p>
                             )}
                         </div>
                     </article>
+
                 </section>
 
                 {selectedTeam && (

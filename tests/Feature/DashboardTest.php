@@ -40,6 +40,28 @@ test('authenticated users can visit the dashboard', function () {
         ->has('topSources', 0));
 });
 
+test('team dashboard supports a customizable date range and normalizes reversed dates', function () {
+    $account = Account::create([
+        'username' => 'dashboard-range@example.com',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+
+    $this->actingAs($account)
+        ->get(route('team-dashboard', [
+            'period' => 'range',
+            'date' => '2026-08-15',
+            'from' => '2026-08-15',
+            'to' => '2026-08-10',
+        ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.period', 'range')
+            ->where('filters.from', '2026-08-10')
+            ->where('filters.to', '2026-08-15')
+            ->where('range.start', '2026-08-10')
+            ->where('range.end', '2026-08-15'));
+});
+
 test('team performance uses lead creation dates and reports confirmed and sold totals', function () {
     $account = Account::create([
         'username' => 'team-dashboard@example.com',
@@ -72,7 +94,7 @@ test('team performance uses lead creation dates and reports confirmed and sold t
     ]);
     $team->agents()->attach($agent->agent_id);
 
-    $makeLead = function (string $name, string $status, string $createdAt) use ($account, $agent, $company, $product, $salesman): Lead {
+    $makeLead = function (string $name, string $status, string $createdAt, string $appointmentAt) use ($account, $agent, $company, $product, $salesman): Lead {
         $lead = Lead::create([
             'customer_name' => $name,
             'marital_status' => 'Single',
@@ -84,7 +106,7 @@ test('team performance uses lead creation dates and reports confirmed and sold t
             'state' => 'CA',
             'years_in_house' => 1,
             'product_id' => $product->prod_id,
-            'appointment_at' => '2026-07-30 12:00:00',
+            'appointment_at' => $appointmentAt,
             'telemarketer_notes' => 'Test',
             'company_id' => $company->com_id,
             'source' => 'Test',
@@ -103,15 +125,43 @@ test('team performance uses lead creation dates and reports confirmed and sold t
     };
 
     $inside = CarbonImmutable::create(2026, 7, 29, 10, 0, 0, 'America/Los_Angeles')->utc();
-    $makeLead('Confirmed Lead', 'confirmed', $inside->toDateTimeString());
-    $sold = $makeLead('Sold Lead', 'project', $inside->addHour()->toDateTimeString());
-    $makeLead('Dispatched Lead', 'dispatched', $inside->addHours(2)->toDateTimeString());
-    $makeLead('Outside Lead', 'confirmed', $inside->subDay()->toDateTimeString());
+    $makeLead('Confirmed Lead', 'confirmed', $inside->toDateTimeString(), '2026-07-29 10:00:00');
+    $sold = $makeLead('Sold Lead', 'project', $inside->addHour()->toDateTimeString(), '2026-07-29 11:00:00');
+    $movedFromDispatch = $makeLead('Dispatched Lead', 'dispatched', $inside->addHours(2)->toDateTimeString(), '2026-07-29 12:00:00');
+    $movedFromDispatch->update(['status' => 'rehash']);
+    $makeLead('Outside Lead', 'confirmed', $inside->subDay()->toDateTimeString(), '2026-07-28 10:00:00');
+    $makeLead('Appointment In Range', 'confirmed', $inside->subDays(5)->toDateTimeString(), '2026-07-29 13:00:00');
     Project::create([
         'lead_id' => $sold->id,
         'amount' => 1000,
         'status' => 'new',
         'created_by' => $account->acc_id,
+    ]);
+    DB::table('lead_movements')->insert([
+        [
+            'lead_id' => $sold->id,
+            'from_status' => 'rehash',
+            'to_status' => 'fresh',
+            'moved_by' => $account->acc_id,
+            'created_at' => '2026-07-29 17:00:00',
+            'updated_at' => '2026-07-29 17:00:00',
+        ],
+        [
+            'lead_id' => $sold->id,
+            'from_status' => 'fresh',
+            'to_status' => 'confirmed',
+            'moved_by' => $account->acc_id,
+            'created_at' => '2026-07-29 18:00:00',
+            'updated_at' => '2026-07-29 18:00:00',
+        ],
+        [
+            'lead_id' => $sold->id,
+            'from_status' => 'confirmed',
+            'to_status' => 'dispatched',
+            'moved_by' => $account->acc_id,
+            'created_at' => '2026-07-29 19:00:00',
+            'updated_at' => '2026-07-29 19:00:00',
+        ],
     ]);
 
     $this->actingAs($account)
@@ -122,15 +172,20 @@ test('team performance uses lead creation dates and reports confirmed and sold t
             ->where('teamPerformance.0.name', 'Test Team')
             ->where('teamPerformance.0.manager', 'Team Manager')
             ->where('teamPerformance.0.total', 3)
-            ->where('teamPerformance.0.confirmed', 2)
+            ->where('teamPerformance.0.confirmed', 1)
             ->where('teamPerformance.0.sold', 1)
             ->where('teamPerformance.0.agents.0.name', 'Team Agent')
             ->where('teamPerformance.0.agents.0.total', 3)
-            ->where('teamPerformance.0.agents.0.confirmed', 2)
+            ->where('teamPerformance.0.agents.0.confirmed', 1)
             ->where('teamPerformance.0.agents.0.sold', 1)
             ->where('salesmanPerformance.0.name', 'Test Salesman')
-            ->where('salesmanPerformance.0.assigned', 3)
-            ->where('salesmanPerformance.0.sold', 1));
+            ->where('salesmanPerformance.0.assigned', 2)
+            ->where('salesmanPerformance.0.sold', 1)
+            ->where('managerPerformance.0.name', 'Team Manager')
+            ->where('managerPerformance.0.total', 1)
+            ->where('managerPerformance.0.confirmed', 1)
+            ->where('managerPerformance.0.dispatched', 1)
+            ->where('managerPerformance.0.sold', 1));
 });
 
 test('team dashboard reports total confirmed and sold counts for each team', function () {
@@ -270,6 +325,9 @@ test('team dashboard reports total confirmed and sold counts for each team', fun
             ->component('team-dashboard')
             ->where('filters.timezone', 'America/Los_Angeles')
             ->where('summary.workedAgents', 1)
+            ->where('summary.confirmed', 2)
+            ->where('summary.dispatched', 1)
+            ->where('summary.sold', 2)
             ->where('teams.0.name', 'Scoreboard Team')
             ->where('teams.0.total', 4)
             ->where('teams.0.confirmed', 2)
@@ -322,4 +380,44 @@ test('team dashboard treats a live calltools login as worked before its shift is
             ->where('summary.workedAgents', 1)
             ->where('teams.0.agents.0.name', 'Live Dashboard Agent')
             ->where('teams.0.agents.0.worked', true));
+});
+
+test('team dashboard does not count zero-duration calltools shift placeholders as worked', function () {
+    $account = Account::query()->create([
+        'username' => 'placeholder-dashboard@example.com',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $manager = Manager::query()->create([
+        'account_id' => $account->acc_id,
+        'manager_name' => 'Placeholder Dashboard Manager',
+        'phone' => '',
+        'manager_types' => ['manager'],
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Not Logged In Agent',
+        'calltools_user_id' => 'not-logged-in-agent',
+    ]);
+    $team = Team::query()->create([
+        'team_name' => 'Placeholder Dashboard Team',
+        'manager_id' => $manager->manager_id,
+    ]);
+    $team->agents()->attach($agent->agent_id);
+
+    DB::table('calltools_user_login_shifts')->insert([
+        'calltools_id' => 'zero-duration-placeholder',
+        'app_user_id' => 'not-logged-in-agent',
+        'started_at' => '2026-08-13 16:00:00',
+        'stopped_at' => null,
+        'duration_seconds' => 0,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($account)
+        ->get(route('team-dashboard', ['period' => 'daily', 'date' => '2026-08-13']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('summary.workedAgents', 0)
+            ->where('teams.0.agents.0.worked', false));
 });

@@ -50,9 +50,16 @@ export default function SalesmanLeadInformation({
     const [showSoldAmount, setShowSoldAmount] = useState(false);
     const [saleAmount, setSaleAmount] = useState('');
     const [saleAmountError, setSaleAmountError] = useState('');
+    const [contractFile, setContractFile] = useState<File | null>(null);
+    const [contractFileError, setContractFileError] = useState('');
     const [showMapChoices, setShowMapChoices] = useState(false);
     const phoneNumber = lead?.primary_number || lead?.mobile_number || '';
     const dialNumber = phoneNumber.replace(/[^\d+]/g, '');
+    const openDeviceDialer = () => {
+        if (!dialNumber) return;
+
+        window.location.assign(`tel:${dialNumber}`);
+    };
 
     const saveAppointmentResultNote = () => {
         if (!lead) return;
@@ -63,12 +70,13 @@ export default function SalesmanLeadInformation({
         });
     };
 
-    const sendAppointmentAction = (action: 'on_my_way' | 'sold' | 'not_sold') => {
+    const sendAppointmentAction = (action: 'on_my_way' | 'sold' | 'not_sold' | 'follow_up') => {
         if (!lead || actionProcessing) return;
 
         if (action === 'sold' && !showSoldAmount) {
             setActionMessage('');
             setSaleAmountError('');
+            setContractFileError('');
             setShowSoldAmount(true);
             return;
         }
@@ -78,31 +86,42 @@ export default function SalesmanLeadInformation({
             setSaleAmountError('Enter the sold amount before confirming the sale.');
             return;
         }
+        if (action === 'sold' && !contractFile) {
+            setContractFileError('Attach the signed contract or a clear photo of it.');
+            return;
+        }
 
         const labels = {
             on_my_way: 'On My Way',
             sold: 'Sold',
             not_sold: 'Not Sold',
+            follow_up: 'My Follow Ups',
         } as const;
 
         setActionProcessing(true);
         setActionMessage(`Sending ${labels[action]}…`);
         router.post(
             `/salesman/leads/${lead.id}/appointment-result-notes`,
-            action === 'sold' ? { action, sale_amount: numericSaleAmount } : { action },
+            action === 'sold'
+                ? { action, sale_amount: numericSaleAmount, contract_file: contractFile }
+                : { action },
             {
+                forceFormData: action === 'sold',
                 preserveScroll: true,
                 preserveState: true,
                 onSuccess: () => {
                     setShowSoldAmount(false);
                     setSaleAmount('');
                     setSaleAmountError('');
+                    setContractFile(null);
+                    setContractFileError('');
                     setActionMessage(
                         `${labels[action]} was saved and sent to managers and admins.`,
                     );
                 },
                 onError: (errors) => {
                     if (errors.sale_amount) setSaleAmountError(errors.sale_amount);
+                    if (errors.contract_file) setContractFileError(errors.contract_file);
                     setActionMessage(
                         'The status could not be sent. Please try again.',
                     );
@@ -169,14 +188,16 @@ export default function SalesmanLeadInformation({
                                 </strong>
                             </span>
                             {dialNumber && (
-                                <a
-                                    href={`tel:${dialNumber}`}
+                                <button
+                                    type="button"
                                     className="salesman-lead-detail__dial"
                                     aria-label={`Call ${formatPhoneNumber(phoneNumber)}`}
+                                    title="Open phone dialer"
+                                    onClick={openDeviceDialer}
                                 >
                                     <PhoneCall />
-                                    <span>Call</span>
-                                </a>
+                                    <span>Dial phone</span>
+                                </button>
                             )}
                         </div>
                         <button
@@ -237,6 +258,9 @@ export default function SalesmanLeadInformation({
                             <button type="button" className="is-not-sold" disabled={actionProcessing} onClick={() => sendAppointmentAction('not_sold')}>
                                 <CircleX /> Not Sold
                             </button>
+                            <button type="button" disabled={actionProcessing} onClick={() => sendAppointmentAction('follow_up')}>
+                                <CalendarClock /> My Follow Ups
+                            </button>
                         </div>
                         {showSoldAmount && (
                             <div className="salesman-appointment-result__sold-amount">
@@ -259,11 +283,23 @@ export default function SalesmanLeadInformation({
                                     />
                                 </div>
                                 {saleAmountError && <small>{saleAmountError}</small>}
+                                <label htmlFor="salesman-contract-file">Signed contract or contract photo</label>
+                                <input
+                                    id="salesman-contract-file"
+                                    type="file"
+                                    accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                                    onChange={(event) => {
+                                        setContractFile(event.target.files?.[0] ?? null);
+                                        setContractFileError('');
+                                    }}
+                                />
+                                {contractFile && <em>{contractFile.name}</em>}
+                                {contractFileError && <small>{contractFileError}</small>}
                                 <div className="salesman-appointment-result__sold-buttons">
-                                    <button type="button" className="is-cancel" onClick={() => { setShowSoldAmount(false); setSaleAmountError(''); }}>
+                                    <button type="button" className="is-cancel" disabled={!contractFile || actionProcessing} onClick={() => { setShowSoldAmount(false); setSaleAmountError(''); setContractFileError(''); setContractFile(null); }}>
                                         Cancel
                                     </button>
-                                    <button type="button" className="is-sold" disabled={actionProcessing} onClick={() => sendAppointmentAction('sold')}>
+                                    <button type="button" className="is-sold" disabled={actionProcessing || !contractFile} onClick={() => sendAppointmentAction('sold')}>
                                         <BadgeDollarSign /> Confirm sold
                                     </button>
                                 </div>

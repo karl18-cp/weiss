@@ -15,10 +15,10 @@ test('admins can view full phone numbers', function () {
     $this->actingAs($admin);
 
     expect(PhoneNumberVisibility::canView())->toBeTrue()
-        ->and(PhoneNumberVisibility::mask('(555) 123-4567'))->toBe('*******567');
+        ->and(PhoneNumberVisibility::mask('(555) 123-4567'))->toBe('5551******');
 });
 
-test('restricted users only receive the last three phone digits', function () {
+test('restricted users only receive the first four phone digits', function () {
     $account = Account::query()->create([
         'username' => 'restricted-phone-agent',
         'password' => 'password',
@@ -39,8 +39,8 @@ test('restricted users only receive the last three phone digits', function () {
     $data = $lead->toArray();
 
     expect(PhoneNumberVisibility::canView())->toBeFalse()
-        ->and($data['primary_number'])->toBe('*******567')
-        ->and($data['secondary_number'])->toBe('*******543')
+        ->and($data['primary_number'])->toBe('5551******')
+        ->and($data['secondary_number'])->toBe('5559******')
         ->and($data['mobile_number'])->toBeNull();
 });
 

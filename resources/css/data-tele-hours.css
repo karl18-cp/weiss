@@ -23,6 +23,12 @@
 .data-hours-total { color: #8e25bd !important; font-weight: 800; }
 .data-hours-override { display: block; margin-top: .15rem; color: #8e25bd; font-size: .62rem; font-weight: 800; text-transform: uppercase; }
 .data-hours-empty { padding: 3rem !important; text-align: center; }
+.data-hours-row-actions { display: flex; gap: .35rem; }
+.data-hours-row-actions button { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid #dcc9e4; border-radius: .45rem; background: #fff; color: #8e25bd; cursor: pointer; }
+.data-hours-row-actions button:hover { background: #f9edfc; }
+.data-hours-row-actions button.is-delete { border-color: #f0c7ce; color: #c9364e; }
+.data-hours-row-actions button.is-delete:hover { background: #fff0f2; }
+.data-hours-row-actions svg { width: 15px; height: 15px; }
 .data-hours-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1rem; background: rgba(17, 10, 28, .64); }
 .data-hours-modal { width: min(520px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; border-radius: 14px; background: #fff; box-shadow: 0 24px 80px rgba(0,0,0,.3); }
 .data-hours-modal header { display: flex; justify-content: space-between; padding: 1rem 1.1rem; border-bottom: 1px solid #eee8f3; }

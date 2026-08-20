@@ -9,7 +9,8 @@ use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -17,11 +18,17 @@ class DashboardController extends Controller
 {
     public function __invoke(Request $request): Response
     {
-        $today = Carbon::today();
-        $tomorrow = Carbon::tomorrow();
-        $bookingQuery = fn (): Builder => Lead::query()->whereIn('status', ['confirmed', 'dispatched']);
-        $totalLeads = Lead::query()->count();
-        $projectCount = Project::query()->count();
+        $teamTimezone = (string) config('app.timezone', 'America/Los_Angeles');
+        [$teamFrom, $teamTo] = $this->teamDateRange($request, $teamTimezone);
+        $createdRange = [$teamFrom->utc(), $teamTo->endOfDay()->utc()];
+        $appointmentRange = [
+            $teamFrom->startOfDay()->format('Y-m-d H:i:s'),
+            $teamTo->endOfDay()->format('Y-m-d H:i:s'),
+        ];
+        $rangeLeadQuery = fn (): Builder => Lead::query()->whereBetween('created_at', $createdRange);
+        $bookingQuery = fn (): Builder => Lead::query()->whereIn('status', ['confirmed', 'dispatched'])->whereBetween('appointment_at', $appointmentRange);
+        $totalLeads = $rangeLeadQuery()->count();
+        $projectCount = Project::query()->whereBetween('created_at', $createdRange)->count();
 
         $workflowLanes = collect([
             ['key' => 'fresh', 'label' => 'Freshly In', 'statuses' => ['fresh']],
@@ -29,12 +36,13 @@ class DashboardController extends Controller
             ['key' => 'kit', 'label' => 'Keep in Touch', 'statuses' => ['kit', 'kit_ng', 'kit_toss', 'kit_cb']],
             ['key' => 'dispatched', 'label' => 'Dispatch', 'statuses' => ['dispatched']],
             ['key' => 'reschedule', 'label' => 'Reschedule', 'statuses' => ['reschedule']],
-        ])->map(function (array $lane): array {
+        ])->map(function (array $lane) use ($createdRange): array {
             return [
                 'key' => $lane['key'],
                 'label' => $lane['label'],
-                'count' => Lead::query()->whereIn('status', $lane['statuses'])->count(),
+                'count' => Lead::query()->whereBetween('created_at', $createdRange)->whereIn('status', $lane['statuses'])->count(),
                 'leads' => Lead::query()
+                    ->whereBetween('created_at', $createdRange)
                     ->whereIn('status', $lane['statuses'])
                     ->latest()
                     ->limit(3)
@@ -47,18 +55,34 @@ class DashboardController extends Controller
         });
 
         $projectStatuses = Project::query()
+            ->whereBetween('created_at', $createdRange)
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
-        $teamTimezone = (string) config('app.timezone', 'America/Los_Angeles');
-        [$teamFrom, $teamTo] = $this->teamDateRange($request, $teamTimezone);
+        $effectiveCreatedAt = Schema::hasTable('lead_movements')
+            ? 'COALESCE((SELECT MIN(team_lm.created_at) FROM lead_movements team_lm WHERE team_lm.lead_id = leads.id), leads.created_at)'
+            : 'leads.created_at';
         $teamLeads = Lead::query()
-            ->whereBetween('created_at', [
-                $teamFrom->utc(),
-                $teamTo->endOfDay()->utc(),
+            ->whereBetween(DB::raw($effectiveCreatedAt), $createdRange)
+            ->withExists('project')
+            ->get(['leads.id', 'agent_id', 'salesman_1_id', 'salesman_2_id', 'status']);
+        $teamSoldLeads = Lead::query()
+            ->where('status', 'project')
+            ->whereHas('project')
+            ->whereBetween('appointment_at', $appointmentRange)
+            ->get(['id', 'agent_id']);
+        $salesmanLeads = Lead::query()
+            ->whereBetween('appointment_at', $appointmentRange)
+            ->where(function (Builder $query): void {
+                $query->whereNotNull('salesman_1_id')
+                    ->orWhereNotNull('salesman_2_id');
+            })
+            ->withExists([
+                'movements as dispatched_exists' => fn (Builder $movementQuery) => $movementQuery
+                    ->where('to_status', 'dispatched'),
             ])
             ->withExists('project')
-            ->get(['id', 'agent_id', 'salesman_1_id', 'salesman_2_id', 'status']);
+            ->get(['id', 'salesman_1_id', 'salesman_2_id', 'status']);
         $teamPerformance = Team::query()
             ->with([
                 'manager:manager_id,manager_name',
@@ -66,11 +90,11 @@ class DashboardController extends Controller
             ])
             ->orderBy('team_name')
             ->get()
-            ->map(function (Team $team) use ($teamLeads): array {
+            ->map(function (Team $team) use ($teamLeads, $teamSoldLeads): array {
                 $agentIds = $team->agents->pluck('agent_id')->map(fn ($id): int => (int) $id);
                 $leads = $teamLeads->whereIn('agent_id', $agentIds);
                 $agents = $team->agents
-                    ->map(function ($agent) use ($teamLeads): array {
+                    ->map(function ($agent) use ($teamLeads, $teamSoldLeads): array {
                         $agentLeads = $teamLeads->where('agent_id', $agent->agent_id);
 
                         return [
@@ -78,7 +102,7 @@ class DashboardController extends Controller
                             'name' => $agent->agent_name,
                             'total' => $agentLeads->count(),
                             'confirmed' => $agentLeads->whereIn('status', ['confirmed', 'dispatched'])->count(),
-                            'sold' => $agentLeads->where('project_exists', true)->count(),
+                            'sold' => $teamSoldLeads->where('agent_id', $agent->agent_id)->count(),
                         ];
                     })
                     ->sortByDesc('total')
@@ -90,17 +114,18 @@ class DashboardController extends Controller
                     'manager' => $team->manager?->manager_name ?? 'No manager',
                     'total' => $leads->count(),
                     'confirmed' => $leads->whereIn('status', ['confirmed', 'dispatched'])->count(),
-                    'sold' => $leads->where('project_exists', true)->count(),
+                    'sold' => $teamSoldLeads->whereIn('agent_id', $agentIds)->count(),
                     'agents' => $agents,
                 ];
             })
             ->sortByDesc('total')
             ->values();
         $salesmanPerformance = Salesman::query()
+            ->whereNull('inactive_at')
             ->orderBy('salesman_name')
             ->get(['salesman_id', 'salesman_name'])
-            ->map(function (Salesman $salesman) use ($teamLeads): array {
-                $leads = $teamLeads->filter(
+            ->map(function (Salesman $salesman) use ($salesmanLeads): array {
+                $leads = $salesmanLeads->filter(
                     fn (Lead $lead): bool => (int) $lead->salesman_1_id === (int) $salesman->salesman_id
                         || (int) $lead->salesman_2_id === (int) $salesman->salesman_id,
                 );
@@ -108,19 +133,59 @@ class DashboardController extends Controller
                 return [
                     'id' => (int) $salesman->salesman_id,
                     'name' => $salesman->salesman_name,
-                    'assigned' => $leads->count(),
+                    'assigned' => $leads->filter(
+                        fn (Lead $lead): bool => $lead->status === 'dispatched'
+                            || (bool) $lead->dispatched_exists,
+                    )->count(),
                     'sold' => $leads->where('project_exists', true)->count(),
                 ];
             })
             ->sortByDesc('assigned')
             ->values();
+        $managerPerformance = DB::table('lead_movements as manager_returns')
+            ->join('leads', 'leads.id', '=', 'manager_returns.lead_id')
+            ->join('accounts', 'accounts.acc_id', '=', 'manager_returns.moved_by')
+            ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
+            ->where('manager_returns.to_status', 'fresh')
+            ->whereNotNull('manager_returns.from_status')
+            ->whereBetween('manager_returns.created_at', $createdRange)
+            ->groupBy('managers.manager_id', 'managers.manager_name')
+            ->selectRaw("managers.manager_id as id, managers.manager_name as name,
+                COUNT(DISTINCT manager_returns.lead_id) as total,
+                COUNT(DISTINCT CASE WHEN EXISTS (
+                    SELECT 1 FROM lead_movements confirmed_moves
+                    WHERE confirmed_moves.lead_id = manager_returns.lead_id
+                    AND confirmed_moves.created_at >= manager_returns.created_at
+                    AND confirmed_moves.to_status = 'confirmed'
+                ) THEN manager_returns.lead_id END) as confirmed,
+                COUNT(DISTINCT CASE WHEN EXISTS (
+                    SELECT 1 FROM lead_movements dispatch_moves
+                    WHERE dispatch_moves.lead_id = manager_returns.lead_id
+                    AND dispatch_moves.created_at >= manager_returns.created_at
+                    AND dispatch_moves.to_status = 'dispatched'
+                ) THEN manager_returns.lead_id END) as dispatched,
+                COUNT(DISTINCT CASE WHEN EXISTS (
+                    SELECT 1 FROM projects sold_projects
+                    WHERE sold_projects.lead_id = manager_returns.lead_id
+                    AND sold_projects.created_at >= manager_returns.created_at
+                ) THEN manager_returns.lead_id END) as sold")
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn (object $row): array => [
+                'id' => (int) $row->id,
+                'name' => $row->name,
+                'total' => (int) $row->total,
+                'confirmed' => (int) $row->confirmed,
+                'dispatched' => (int) $row->dispatched,
+                'sold' => (int) $row->sold,
+            ]);
 
         return Inertia::render('dashboard', [
             'metrics' => [
                 'totalLeads' => $totalLeads,
-                'createdToday' => Lead::query()->whereDate('created_at', $today)->count(),
-                'createdLastSevenDays' => Lead::query()->where('created_at', '>=', $today->copy()->subDays(6))->count(),
-                'activePipeline' => Lead::query()->whereNotIn('status', ['project', 'toss'])->count(),
+                'createdToday' => $totalLeads,
+                'createdLastSevenDays' => $totalLeads,
+                'activePipeline' => $rangeLeadQuery()->whereNotIn('status', ['project', 'toss'])->count(),
                 'soldRate' => $totalLeads > 0 ? round(($projectCount / $totalLeads) * 100, 1) : 0,
                 'projects' => $projectCount,
                 'completedProjects' => (int) ($projectStatuses['completed'] ?? 0),
@@ -129,24 +194,21 @@ class DashboardController extends Controller
                 'from' => $teamFrom->format('Y-m-d'),
                 'to' => $teamTo->format('Y-m-d'),
                 'timezone' => $teamTimezone,
+                'all' => $request->boolean('all'),
             ],
             'teamPerformance' => $teamPerformance,
             'salesmanPerformance' => $salesmanPerformance,
+            'managerPerformance' => $managerPerformance,
             'bookingPressure' => [
-                'today' => $bookingQuery()->whereDate('appointment_at', $today)->count(),
-                'tomorrow' => $bookingQuery()->whereDate('appointment_at', $tomorrow)->count(),
-                'noAppointment' => $bookingQuery()->whereNull('appointment_at')->count(),
+                'today' => $bookingQuery()->count(),
+                'tomorrow' => 0,
+                'noAppointment' => 0,
                 'overdue' => $bookingQuery()->where('appointment_at', '<', now())->count(),
             ],
-            'projectHealth' => [
-                'new' => (int) ($projectStatuses['new'] ?? 0),
-                'progress' => (int) ($projectStatuses['progress'] ?? 0),
-                'completed' => (int) ($projectStatuses['completed'] ?? 0),
-                'canceled' => (int) ($projectStatuses['canceled'] ?? 0),
-            ],
             'workflowLanes' => $workflowLanes,
-            'activeWorkflowCount' => Lead::query()->whereNotIn('status', ['project', 'toss'])->count(),
+            'activeWorkflowCount' => $rangeLeadQuery()->whereNotIn('status', ['project', 'toss'])->count(),
             'topSources' => Lead::query()
+                ->whereBetween('created_at', $createdRange)
                 ->selectRaw('source, count(*) as total')
                 ->groupBy('source')
                 ->orderByDesc('total')
@@ -163,11 +225,33 @@ class DashboardController extends Controller
     private function teamDateRange(Request $request, string $timezone): array
     {
         try {
-            $from = $request->filled('team_from')
-                ? CarbonImmutable::parse($request->string('team_from')->toString(), $timezone)->startOfDay()
+            if ($request->boolean('all')) {
+                $minimum = collect([
+                    Lead::query()->min('created_at'),
+                    Lead::query()->min('appointment_at'),
+                    Project::query()->min('created_at'),
+                ])->filter()->min();
+                $maximum = collect([
+                    Lead::query()->max('created_at'),
+                    Lead::query()->max('appointment_at'),
+                    Project::query()->max('created_at'),
+                ])->filter()->max();
+
+                if ($minimum && $maximum) {
+                    return [
+                        CarbonImmutable::parse((string) $minimum, $timezone)->startOfDay(),
+                        CarbonImmutable::parse((string) $maximum, $timezone)->startOfDay(),
+                    ];
+                }
+            }
+
+            $fromValue = $request->input('from', $request->input('team_from'));
+            $toValue = $request->input('to', $request->input('team_to'));
+            $from = filled($fromValue)
+                ? CarbonImmutable::parse((string) $fromValue, $timezone)->startOfDay()
                 : CarbonImmutable::today($timezone);
-            $to = $request->filled('team_to')
-                ? CarbonImmutable::parse($request->string('team_to')->toString(), $timezone)->startOfDay()
+            $to = filled($toValue)
+                ? CarbonImmutable::parse((string) $toValue, $timezone)->startOfDay()
                 : $from;
         } catch (\Throwable) {
             $from = CarbonImmutable::today($timezone);

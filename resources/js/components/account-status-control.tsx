@@ -17,7 +17,7 @@ export default function AccountStatusControl({
                     : 'border-emerald-200 bg-emerald-50'
             }`}
         >
-            <label className="flex cursor-pointer items-start gap-3">
+            <label className={`flex items-start gap-3 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                 <input
                     type="checkbox"
                     checked={suspended}

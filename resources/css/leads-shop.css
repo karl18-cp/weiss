@@ -591,6 +591,34 @@
     display: none;
 }
 
+.lead-555-destination-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.lead-555-destination-grid button {
+    display: flex;
+    min-height: 5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    border: 1px solid #d9e1ed;
+    border-radius: 0.8rem;
+    color: #31415a;
+    background: #f8fafc;
+}
+
+.lead-555-destination-grid button:hover:not(:disabled) {
+    border-color: #8b5cf6;
+    color: #6d28d9;
+    background: #f5f0ff;
+}
+
+.lead-555-destination-grid svg {
+    width: 1.1rem;
+}
+
 .lead-dropdown-filters select option {
     font-size: 0.76rem;
     font-weight: 800;
@@ -1477,7 +1505,8 @@ body.is-resizing-lead-cards {
 .lead-inline-save-field {
     display: flex;
     min-width: 0;
-    align-items: center;
+    align-items: stretch;
+    flex-direction: column;
     gap: 0.35rem;
     margin-top: 0.12rem;
 }
@@ -1506,12 +1535,27 @@ body.is-resizing-lead-cards {
     opacity: 0.65;
 }
 
+.lead-inline-time-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    cursor: pointer;
+}
+
+.lead-inline-time-trigger svg {
+    width: 0.85rem;
+    height: 0.85rem;
+}
+
 .lead-inline-save {
-    display: grid;
-    width: 1.85rem;
+    display: flex;
+    width: 100%;
     height: 1.85rem;
     flex: none;
-    place-items: center;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
     border: 1px solid #c8d7f0;
     border-radius: 0.45rem;
     color: #fff;
@@ -1531,6 +1575,63 @@ body.is-resizing-lead-cards {
 
 .lead-inline-save svg {
     width: 0.8rem;
+}
+
+.lead-inline-save span {
+    font-size: 0.67rem;
+    font-weight: 800;
+}
+
+.lead-time-picker__card {
+    width: min(24rem, calc(100vw - 2rem));
+}
+
+.lead-time-picker__fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.6rem;
+    padding: 1rem;
+}
+
+.lead-time-picker__fields label {
+    display: grid;
+    gap: 0.35rem;
+    color: #667085;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.lead-time-picker__fields select {
+    min-height: 2.6rem;
+    border: 1px solid #d9ccf7;
+    border-radius: 0.55rem;
+    padding: 0 0.55rem;
+    color: #27344b;
+    background: #fff;
+    font-weight: 800;
+}
+
+.lead-time-picker__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    padding: 0 1rem 1rem;
+}
+
+.lead-time-picker__actions button {
+    min-height: 2.25rem;
+    border: 1px solid #d9ccf7;
+    border-radius: 0.55rem;
+    padding: 0 1rem;
+    color: #6d28d9;
+    background: #fff;
+    font-weight: 800;
+}
+
+.lead-time-picker__actions button:last-child {
+    color: #fff;
+    border-color: #6d28d9;
+    background: #6d28d9;
 }
 .lead-detail-card--notes {
     display: flex;
@@ -3056,6 +3157,40 @@ body.is-resizing-lead-cards {
     --shop-purple-soft: #effaff;
     --shop-purple-line: #a2def8;
     --shop-page-background: linear-gradient(145deg, #f6fcff, #eaf8ff);
+}
+
+/* Keep each workflow tab visibly themed instead of limiting its color to the header. */
+.leads-shop-page .lead-dates,
+.leads-shop-page .lead-browser,
+.leads-shop-page .lead-detail {
+    background: color-mix(in srgb, var(--shop-purple) 7%, #f4f1ed);
+}
+
+.leads-shop-page .lead-dates__header,
+.leads-shop-page .lead-browser__header,
+.leads-shop-page .lead-detail__header,
+.leads-shop-page .lead-browser-filters,
+.leads-shop-page .lead-workflow-actions {
+    background: color-mix(in srgb, var(--shop-purple) 10%, #f2efeb);
+}
+
+.leads-shop-page .lead-detail-card,
+.leads-shop-page .lead-dropdown-filters label,
+.leads-shop-page .lead-dates__basis {
+    border-color: color-mix(in srgb, var(--shop-purple) 28%, #d5d0ca);
+    background: color-mix(in srgb, var(--shop-purple) 6%, #faf8f5);
+}
+
+.leads-shop-page .lead-dates__columns,
+.leads-shop-page .lead-browser__columns {
+    background: color-mix(in srgb, var(--shop-purple) 13%, #eeeae5);
+}
+
+.leads-shop-page .lead-date-row:hover,
+.leads-shop-page .lead-browser-row:hover,
+.leads-shop-page .lead-browser-row--active,
+.leads-shop-page .lead-date-row--active {
+    background: color-mix(in srgb, var(--shop-purple) 15%, #f1ede8);
 }
 
 .leads-shop-header {

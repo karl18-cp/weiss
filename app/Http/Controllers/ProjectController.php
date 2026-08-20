@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProjectAccountingTransactionRequest;
 use App\Http\Requests\ProjectDetailsRequest;
 use App\Http\Requests\ProjectInvoiceRequest;
-use App\Http\Requests\ProjectInvoiceStatusRequest;
+use App\Http\Requests\ReceivableQuickBooksRequest;
 use App\Http\Requests\ProjectSaleRequest;
 use App\Http\Requests\ProjectStoreRequest;
 use App\Http\Requests\ScheduledPaymentRequest;
@@ -18,12 +18,15 @@ use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
+use App\Models\ProjectDocument;
 use App\Models\ProjectSale;
 use App\Models\Salesman;
+use App\Models\Vendor;
 use App\Models\ScheduledPayment;
 use App\Services\GoogleDriveProjectStorage;
 use App\Services\ProjectNumberAllocator;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -53,14 +56,18 @@ class ProjectController extends Controller
                     'sales.product:prod_id,product_name',
                     'scheduledPayments',
                     'invoices.contractor:con_id,contractor',
+                    'invoices.vendor:vendor_id,vendor',
                     'accountingTransactions.scheduledPayments',
                     'accountingTransactions.invoice.contractor:con_id,contractor',
+                    'accountingTransactions.invoice.vendor:vendor_id,vendor',
                     'accountingTransactions.contractor:con_id,contractor',
+                    'documents:id,project_id,project_invoice_id,project_accounting_transaction_id,project_sale_id,category,file_name,file_mime,file_size,created_at',
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',
                     'telemarketer:agent_id,agent_name',
                     'salesman:salesman_id,salesman_name,phone',
                     'manager:manager_id,manager_name',
+                    'contractors:con_id,contractor',
                 ])
                 ->latest()
                 ->get()
@@ -72,12 +79,14 @@ class ProjectController extends Controller
                 ->orderBy('agent_name')
                 ->get(['agent_id', 'agent_name']),
             'salesmen' => Salesman::query()
+                ->whereNull('inactive_at')
                 ->orderBy('salesman_name')
                 ->get(['salesman_id', 'salesman_name', 'phone']),
             'managers' => Manager::query()
                 ->orderBy('manager_name')
                 ->get(['manager_id', 'manager_name']),
-            'contractors' => Contractor::query()->orderBy('contractor')->get(['con_id', 'contractor']),
+            'contractors' => Contractor::query()->whereNull('moved_to_vendor_at')->orderBy('contractor')->get(['con_id', 'contractor']),
+            'vendors' => Vendor::query()->orderBy('vendor')->get(['vendor_id', 'vendor']),
             'requesters' => Manager::query()->orderBy('manager_name')->pluck('manager_name')->values(),
             'currentRequester' => request()->user()?->manager?->manager_name ?: request()->user()?->username,
             'googleDriveUrl' => filled(config('services.google_drive.root_folder_id'))
@@ -93,11 +102,9 @@ class ProjectController extends Controller
         $project = DB::transaction(function () use ($request, $data, $projectNumbers): Project {
             $project = Project::query()->create([
                 'lead_id' => null,
-                'project_number' => $data['status'] === 'progress'
-                    ? (filled($data['project_number'] ?? null)
-                        ? trim($data['project_number'])
-                        : $projectNumbers->allocateForCompany((int) $data['company_id']))
-                    : null,
+                'project_number' => filled($data['project_number'] ?? null)
+                    ? $projectNumbers->normalizeForCompany((int) $data['company_id'], $data['project_number'])
+                    : $projectNumbers->allocateForCompany((int) $data['company_id']),
                 'customer_name' => $data['customer_name'],
                 'contact_name' => $data['contact_name'] ?? null,
                 'company_id' => $data['company_id'],
@@ -137,6 +144,25 @@ class ProjectController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Project added successfully.']);
 
         return to_route('management.projects', ['project' => $project->id]);
+    }
+
+    public function updateContractors(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'contractor_ids' => ['required', 'array', 'size:4'],
+            'contractor_ids.*' => ['nullable', 'integer', 'distinct', 'exists:contractors,con_id'],
+        ]);
+
+        $assignments = collect($data['contractor_ids'])
+            ->filter()
+            ->mapWithKeys(fn ($contractorId, $position) => [
+                (int) $contractorId => ['position' => $position + 1],
+            ])
+            ->all();
+
+        $project->contractors()->sync($assignments);
+
+        return back()->with('success', 'Project contractors saved.');
     }
 
     public function updateTeleLeadVisibility(Project $project): RedirectResponse
@@ -225,12 +251,14 @@ class ProjectController extends Controller
 
     public function storeReferral(ProjectSaleRequest $request, Project $project): RedirectResponse
     {
-        $project->sales()->create([
-            ...$request->validated(),
+        $sale = $project->sales()->create([
+            ...$request->safe()->except('files'),
             'type' => 'referral',
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Referral sale added.']);
+        $driveFailures = $this->storeSaleDocuments($request, $project, $sale);
+
+        Inertia::flash('toast', $this->driveSyncToast('Referral sale added.', $driveFailures === 0));
 
         return back();
     }
@@ -243,17 +271,18 @@ class ProjectController extends Controller
         $data = $request->validated();
 
         DB::transaction(function () use ($project, $data, $projectNumbers): void {
-            $projectNumber = match ($data['status']) {
-                'new' => filled($data['project_number'] ?? null)
-                    ? trim($data['project_number'])
-                    : null,
-                'progress' => filled($data['project_number'] ?? null)
-                    ? trim($data['project_number'])
-                    : $projectNumbers->allocateForCompany((int) $data['company_id']),
-                default => filled($data['project_number'] ?? null)
-                    ? trim($data['project_number'])
-                    : $project->project_number,
-            };
+            $companyId = (int) ($data['company_id'] ?? 0);
+            $currentCompanyId = (int) ($project->lead?->company_id ?? $project->company_id ?? 0);
+            $requestedNumber = filled($data['project_number'] ?? null)
+                ? (string) $data['project_number']
+                : (string) ($project->project_number ?? '');
+            $projectNumber = $companyId > 0
+                ? ($currentCompanyId > 0 && $currentCompanyId !== $companyId
+                    ? $projectNumbers->allocateForCompany($companyId)
+                    : (filled($requestedNumber)
+                    ? $projectNumbers->normalizeForCompany($companyId, $requestedNumber, $project->id)
+                    : $projectNumbers->allocateForCompany($companyId)))
+                : $project->project_number;
 
             $project->update([
                 'project_number' => $projectNumber,
@@ -266,13 +295,19 @@ class ProjectController extends Controller
                     'company_id' => $data['company_id'],
                     'product_id' => $data['product_id'],
                     'customer_name' => $data['customer_name'],
-                    'primary_number' => $data['primary_number'],
+                    'primary_number' => $data['primary_number'] ?? '',
                     'mobile_number' => $data['mobile_number'] ?? null,
                     'email' => $data['email'] ?? null,
-                    'address' => $data['address'],
-                    'city' => $data['city'],
-                    'state' => $data['state'],
-                    'zip_code' => $data['zip_code'],
+                    'address' => $data['address'] ?? '',
+                    'city' => $data['city'] ?? '',
+                    'state' => $data['state'] ?? '',
+                    'zip_code' => $data['zip_code'] ?? '',
+                    'telemarketer_id' => array_key_exists('agent_id', $data) && $data['agent_id'] !== null
+                        ? $data['agent_id']
+                        : $project->telemarketer_id,
+                    'salesman_id' => array_key_exists('salesman_1_id', $data)
+                        ? $data['salesman_1_id']
+                        : $project->salesman_id,
                 ]);
                 $project->forceFill([
                     'created_at' => Carbon::parse($data['lead_created_at'], config('app.timezone')),
@@ -288,16 +323,28 @@ class ProjectController extends Controller
                 'company_id' => $data['company_id'],
                 'product_id' => $data['product_id'],
                 'customer_name' => $data['customer_name'],
-                'primary_number' => $data['primary_number'],
+                'primary_number' => $data['primary_number'] ?? '',
                 'secondary_number' => $data['secondary_number'] ?? null,
                 'mobile_number' => $data['mobile_number'] ?? null,
                 'email' => $data['email'] ?? null,
-                'address' => $data['address'],
-                'city' => $data['city'],
-                'state' => $data['state'],
-                'zip_code' => $data['zip_code'],
-                'source' => $data['source'],
+                'address' => $data['address'] ?? '',
+                'city' => $data['city'] ?? '',
+                'state' => $data['state'] ?? '',
+                'zip_code' => $data['zip_code'] ?? '',
+                'source' => $data['source'] ?? '',
                 'appointment_at' => $data['appointment_at'] ?? null,
+                'agent_id' => array_key_exists('agent_id', $data) && $data['agent_id'] !== null
+                    ? $data['agent_id']
+                    : $lead->agent_id,
+                'agent_2_id' => array_key_exists('agent_2_id', $data)
+                    ? $data['agent_2_id']
+                    : $lead->agent_2_id,
+                'salesman_1_id' => array_key_exists('salesman_1_id', $data)
+                    ? $data['salesman_1_id']
+                    : $lead->salesman_1_id,
+                'salesman_2_id' => array_key_exists('salesman_2_id', $data)
+                    ? $data['salesman_2_id']
+                    : $lead->salesman_2_id,
             ]);
             $lead->created_at = Carbon::parse($data['lead_created_at'], config('app.timezone'));
             $lead->save();
@@ -348,7 +395,7 @@ class ProjectController extends Controller
                 - (float) $sale->amount
                 + (float) $request->validated('amount');
             $this->ensureContractCoversScheduledPayments($lockedProject, $prospectiveContractTotal);
-            $sale->update($request->validated());
+            $sale->update($request->safe()->except('files'));
 
             if ($sale->type === 'original') {
                 $project->update(['amount' => $request->validated('amount')]);
@@ -360,7 +407,9 @@ class ProjectController extends Controller
             }
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => ucfirst($sale->type).' sale updated.']);
+        $driveFailures = $this->storeSaleDocuments($request, $project, $sale);
+
+        Inertia::flash('toast', $this->driveSyncToast(ucfirst($sale->type).' sale updated.', $driveFailures === 0));
 
         return back();
     }
@@ -434,10 +483,12 @@ class ProjectController extends Controller
     public function storeInvoice(ProjectInvoiceRequest $request, Project $project): RedirectResponse
     {
         $data = $request->safe()->except(['file']);
+        $data = $this->withSelectedProjectDocument($project, $data);
 
         if ($file = $request->file('file')) {
             $data = [
                 ...$data,
+                'project_document_id' => null,
                 'file_path' => $file->store("project-invoices/{$project->id}", 'local'),
                 'file_name' => $file->getClientOriginalName(),
                 'file_mime' => $file->getMimeType(),
@@ -453,7 +504,7 @@ class ProjectController extends Controller
             $invoice->file_mime,
         );
 
-        Inertia::flash('toast', $this->driveSyncToast('Vendor invoice added.', $driveSync));
+        Inertia::flash('toast', $this->driveSyncToast('Vendor payment added.', $driveSync));
 
         return back();
     }
@@ -465,11 +516,14 @@ class ProjectController extends Controller
     ): RedirectResponse {
         $this->ensureInvoiceBelongsToProject($project, $invoice);
         $data = $request->safe()->except(['file']);
+        $data = $this->withSelectedProjectDocument($project, $data);
         $oldFilePath = $invoice->file_path;
+        $oldDocumentId = $invoice->project_document_id;
 
         if ($file = $request->file('file')) {
             $data = [
                 ...$data,
+                'project_document_id' => null,
                 'file_path' => $file->store("project-invoices/{$project->id}", 'local'),
                 'file_name' => $file->getClientOriginalName(),
                 'file_mime' => $file->getMimeType(),
@@ -478,8 +532,9 @@ class ProjectController extends Controller
         }
 
         $invoice->update($data);
+        $invoice->syncStatusFromPayables();
 
-        if ($request->hasFile('file') && $oldFilePath) {
+        if ($request->hasFile('file') && $oldFilePath && ! $oldDocumentId) {
             Storage::disk('local')->delete($oldFilePath);
         }
 
@@ -492,20 +547,7 @@ class ProjectController extends Controller
             )
             : null;
 
-        Inertia::flash('toast', $this->driveSyncToast('Vendor invoice updated.', $driveSync));
-
-        return back();
-    }
-
-    public function updateInvoiceStatus(
-        ProjectInvoiceStatusRequest $request,
-        Project $project,
-        ProjectInvoice $invoice,
-    ): RedirectResponse {
-        $this->ensureInvoiceBelongsToProject($project, $invoice);
-        $invoice->update($request->validated());
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Invoice status updated.']);
+        Inertia::flash('toast', $this->driveSyncToast('Vendor payment updated.', $driveSync));
 
         return back();
     }
@@ -516,11 +558,11 @@ class ProjectController extends Controller
         $filePath = $invoice->file_path;
         $invoice->delete();
 
-        if ($filePath) {
+        if ($filePath && ! $invoice->project_document_id) {
             Storage::disk('local')->delete($filePath);
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Vendor invoice deleted.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Vendor payment deleted.']);
 
         return back();
     }
@@ -537,34 +579,72 @@ class ProjectController extends Controller
         );
     }
 
+    public function showContractFile(Project $project): StreamedResponse
+    {
+        abort_unless(
+            $project->contract_file_path
+            && Storage::disk('local')->exists($project->contract_file_path),
+            404,
+        );
+
+        return Storage::disk('local')->response(
+            $project->contract_file_path,
+            $project->contract_file_name ?: basename($project->contract_file_path),
+            ['Content-Type' => $project->contract_file_mime ?: 'application/octet-stream'],
+        );
+    }
+
     public function storeAccountingTransaction(
         ProjectAccountingTransactionRequest $request,
         Project $project,
     ): RedirectResponse {
-        $data = $request->safe()->except(['scheduled_payment_ids', 'file']);
+        $unassigned = $request->boolean('unassigned');
+        $data = $request->safe()->except(['scheduled_payment_ids', 'file', 'unassigned']);
         $scheduledPaymentIds = $data['type'] === 'receivable' ? $request->input('scheduled_payment_ids', []) : [];
+        if ($unassigned) {
+            $scheduledPaymentIds = [];
+        }
         $data['project_invoice_id'] = $data['type'] === 'payable' ? ($data['project_invoice_id'] ?? null) : null;
+        if ($unassigned) {
+            $data['project_invoice_id'] = null;
+            $data['project_document_id'] = null;
+        } else {
+            $data = $this->withSelectedProjectDocument($project, $data);
+        }
         $data['contractor_id'] = $data['type'] === 'payable' ? ($data['contractor_id'] ?? null) : null;
-        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id']);
+        if ($data['type'] === 'payable' && $data['status'] !== 'paid') {
+            $data['payment_method'] = null;
+            $data['reference_number'] = null;
+        }
+        $data['counterparty'] = $unassigned && $data['type'] === 'receivable'
+            ? ($data['counterparty'] ?? null)
+            : $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['project_invoice_id']);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
-        $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
-        $this->ensureReceivableFitsScheduledPayments($project, $data, $scheduledPaymentIds);
-        $this->ensurePayableFitsInvoice($data);
-        $data = $this->withAccountingFile($request, $project, $data);
+        if (! $unassigned) {
+            $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
+            $this->ensureReceivableFitsScheduledPayments($project, $data, $scheduledPaymentIds);
+            $this->ensurePayableFitsInvoice($data);
+        }
+        $data = $this->withAccountingFile($request, $unassigned ? null : $project, $data);
 
-        $transaction = DB::transaction(function () use ($project, $data, $scheduledPaymentIds): ProjectAccountingTransaction {
-            $transaction = $project->accountingTransactions()->create($data);
+        $transaction = DB::transaction(function () use ($project, $data, $scheduledPaymentIds, $unassigned): ProjectAccountingTransaction {
+            $transaction = ProjectAccountingTransaction::query()->create([
+                ...$data,
+                'project_id' => $unassigned ? null : $project->id,
+            ]);
             $transaction->scheduledPayments()->sync($scheduledPaymentIds);
 
             return $transaction;
         });
 
-        $driveSync = $this->mirrorProjectFile(
-            $project,
-            $transaction->file_path,
-            $transaction->file_name,
-            $transaction->file_mime,
-        );
+        $driveSync = $unassigned
+            ? null
+            : $this->mirrorProjectFile(
+                $project,
+                $transaction->file_path,
+                $transaction->file_name,
+                $transaction->file_mime,
+            );
 
         Inertia::flash('toast', $this->driveSyncToast(ucfirst($data['type']).' added.', $driveSync));
 
@@ -578,12 +658,18 @@ class ProjectController extends Controller
     ): RedirectResponse {
         abort_unless($accountingTransaction->project_id === $project->id, 404);
         $data = $request->safe()->except(['scheduled_payment_ids', 'file']);
+        $data = $this->withSelectedProjectDocument($project, $data);
         $scheduledPaymentIds = $data['type'] === 'receivable' ? $request->input('scheduled_payment_ids', []) : [];
         $data['project_invoice_id'] = $data['type'] === 'payable' ? ($data['project_invoice_id'] ?? null) : null;
         $data['contractor_id'] = $data['type'] === 'payable' ? ($data['contractor_id'] ?? null) : null;
-        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id']);
+        if ($data['type'] === 'payable' && $data['status'] !== 'paid') {
+            $data['payment_method'] = null;
+            $data['reference_number'] = null;
+        }
+        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['project_invoice_id']);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: $accountingTransaction->requested_by ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         $oldFilePath = $accountingTransaction->file_path;
+        $oldDocumentId = $accountingTransaction->project_document_id;
         $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
         $this->ensureReceivableFitsScheduledPayments($project, $data, $scheduledPaymentIds, $accountingTransaction->id);
         $this->ensurePayableFitsInvoice($data, $accountingTransaction->id);
@@ -594,7 +680,7 @@ class ProjectController extends Controller
             $accountingTransaction->scheduledPayments()->sync($scheduledPaymentIds);
         });
 
-        if ($request->hasFile('file') && $oldFilePath) {
+        if ($request->hasFile('file') && $oldFilePath && ! $oldDocumentId) {
             Storage::disk('local')->delete($oldFilePath);
         }
 
@@ -618,15 +704,138 @@ class ProjectController extends Controller
     ): RedirectResponse {
         abort_unless($accountingTransaction->project_id === $project->id, 404);
         $filePath = $accountingTransaction->file_path;
+        $documentId = $accountingTransaction->project_document_id;
         $accountingTransaction->delete();
 
-        if ($filePath) {
+        if ($filePath && ! $documentId) {
             Storage::disk('local')->delete($filePath);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Accounting transaction deleted.']);
 
         return back();
+    }
+
+    public function showProjectDocument(Project $project, ProjectDocument $document): StreamedResponse
+    {
+        abort_unless($document->project_id === $project->id && Storage::disk('local')->exists($document->file_path), 404);
+
+        return Storage::disk('local')->response($document->file_path, $document->file_name, ['Content-Disposition' => 'inline']);
+    }
+
+    public function storeProjectDocuments(
+        Request $request,
+        Project $project,
+        GoogleDriveProjectStorage $drive,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'files' => ['required', 'array', 'min:1', 'max:20'],
+            'files.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
+            'target_type' => ['required', 'in:project,invoice,accounting,sale'],
+            'target_id' => ['nullable', 'integer'],
+        ]);
+
+        $invoice = null;
+        $transaction = null;
+        $sale = null;
+        if ($data['target_type'] === 'invoice') {
+            $invoice = $project->invoices()->findOrFail($data['target_id'] ?? 0);
+        } elseif ($data['target_type'] === 'accounting') {
+            $transaction = $project->accountingTransactions()->findOrFail($data['target_id'] ?? 0);
+        } elseif ($data['target_type'] === 'sale') {
+            $sale = $project->sales()->findOrFail($data['target_id'] ?? 0);
+        }
+
+        $category = $sale
+            ? 'Sale Contract'
+            : ($invoice
+            ? 'Invoice'
+            : ($transaction
+                ? ($transaction->type === 'receivable' ? 'Receivable' : 'Payable')
+                : 'Project Upload'));
+        $driveFailures = 0;
+
+        foreach ($data['files'] as $file) {
+            $path = $file->store("project-documents/{$project->id}", 'local');
+            $document = $project->documents()->create([
+                'project_invoice_id' => $invoice?->id,
+                'project_accounting_transaction_id' => $transaction?->id,
+                'project_sale_id' => $sale?->id,
+                'uploaded_by' => $request->user()?->getAuthIdentifier(),
+                'category' => $category,
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'file_mime' => $file->getMimeType(),
+                'file_size' => $file->getSize(),
+            ]);
+
+            try {
+                $mirrored = $drive->mirror($project, $path, $document->file_name, $document->file_mime);
+                $document->update([
+                    'drive_file_id' => $mirrored['id'] ?? null,
+                    'drive_url' => $mirrored['webViewLink'] ?? null,
+                ]);
+            } catch (Throwable $exception) {
+                $driveFailures++;
+                Log::warning('Project DOC upload Drive sync failed.', [
+                    'project_id' => $project->id,
+                    'document_id' => $document->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        Inertia::flash('toast', [
+            'type' => $driveFailures ? 'warning' : 'success',
+            'message' => $driveFailures
+                ? 'Files saved in CRM; some Google Drive uploads need retrying.'
+                : 'Files uploaded to the record, project DOC tab, and Google Drive.',
+        ]);
+
+        return back();
+    }
+
+    public function updateReceivableQuickBooks(
+        ReceivableQuickBooksRequest $request,
+        Project $project,
+        ProjectAccountingTransaction $accountingTransaction,
+    ): RedirectResponse {
+        abort_unless(
+            $accountingTransaction->project_id === $project->id
+            && $accountingTransaction->type === 'receivable',
+            404,
+        );
+
+        if (! $request->boolean('qb')) {
+            $accountingTransaction->update(['qb' => false]);
+
+            return back();
+        }
+
+        $paymentMethod = $request->input('payment_method') ?: $accountingTransaction->payment_method;
+        $referenceNumber = $request->input('reference_number') ?: $accountingTransaction->reference_number;
+        $scheduledPaymentIds = $accountingTransaction->scheduledPayments()->pluck('scheduled_payments.id')->all();
+        $data = [
+            'type' => 'receivable',
+            'status' => 'deposit',
+            'amount' => $accountingTransaction->amount,
+        ];
+
+        $this->ensureReceivableFitsScheduledPayments(
+            $project,
+            $data,
+            $scheduledPaymentIds,
+            $accountingTransaction->id,
+        );
+
+        $accountingTransaction->update([
+            'qb' => true,
+            'status' => 'deposit',
+            'payment_method' => $paymentMethod,
+            'reference_number' => $referenceNumber,
+        ]);
+
+        return back()->with('success', 'Receivable moved to QB and marked as Deposit.');
     }
 
     public function showAccountingTransactionFile(
@@ -647,13 +856,24 @@ class ProjectController extends Controller
         );
     }
 
-    private function accountingCounterparty(Project $project, string $type, ?int $contractorId): ?string
+    private function accountingCounterparty(
+        Project $project,
+        string $type,
+        ?int $contractorId,
+        ?int $invoiceId = null,
+    ): ?string
     {
         if ($type === 'receivable') {
             return $project->lead()->value('customer_name') ?: $project->customer_name;
         }
 
-        return $contractorId ? Contractor::query()->whereKey($contractorId)->value('contractor') : null;
+        if ($contractorId) {
+            return Contractor::query()->whereKey($contractorId)->value('contractor');
+        }
+
+        return $invoiceId
+            ? $project->invoices()->whereKey($invoiceId)->first()?->vendor()->value('vendor')
+            : null;
     }
 
     private function mirrorProjectFile(
@@ -681,6 +901,46 @@ class ProjectController extends Controller
         }
     }
 
+    private function storeSaleDocuments(ProjectSaleRequest $request, Project $project, ProjectSale $sale): int
+    {
+        $failures = 0;
+
+        foreach ($request->file('files', []) as $file) {
+            $path = $file->store("project-documents/{$project->id}", 'local');
+            $document = $project->documents()->create([
+                'project_sale_id' => $sale->id,
+                'uploaded_by' => $request->user()?->getAuthIdentifier(),
+                'category' => 'Sale Contract',
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'file_mime' => $file->getMimeType(),
+                'file_size' => $file->getSize(),
+            ]);
+
+            if (! $this->googleDrive->configured()) {
+                continue;
+            }
+
+            try {
+                $mirrored = $this->googleDrive->mirror($project, $path, $document->file_name, $document->file_mime);
+                $document->update([
+                    'drive_file_id' => $mirrored['id'] ?? null,
+                    'drive_url' => $mirrored['webViewLink'] ?? null,
+                ]);
+            } catch (Throwable $exception) {
+                $failures++;
+                Log::warning('Sale attachment Drive sync failed.', [
+                    'project_id' => $project->id,
+                    'sale_id' => $sale->id,
+                    'document_id' => $document->id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        return $failures;
+    }
+
     /** @return array{type: string, message: string} */
     private function driveSyncToast(string $message, ?bool $driveSync): array
     {
@@ -693,7 +953,7 @@ class ProjectController extends Controller
 
     private function withAccountingFile(
         ProjectAccountingTransactionRequest $request,
-        Project $project,
+        ?Project $project,
         array $data,
     ): array {
         if (! $file = $request->file('file')) {
@@ -702,16 +962,44 @@ class ProjectController extends Controller
 
         return [
             ...$data,
-            'file_path' => $file->store("project-accounting/{$project->id}", 'local'),
+            'project_document_id' => null,
+            'file_path' => $file->store(
+                $project ? "project-accounting/{$project->id}" : 'project-accounting/unassigned',
+                'local',
+            ),
             'file_name' => $file->getClientOriginalName(),
             'file_mime' => $file->getMimeType(),
             'file_size' => $file->getSize(),
         ];
     }
 
+    private function withSelectedProjectDocument(Project $project, array $data): array
+    {
+        if (empty($data['project_document_id'])) {
+            return $data;
+        }
+
+        $document = $project->documents()->find($data['project_document_id']);
+        if (! $document) {
+            throw ValidationException::withMessages(['project_document_id' => 'The selected file must belong to this project.']);
+        }
+
+        return [
+            ...$data,
+            'file_path' => $document->file_path,
+            'file_name' => $document->file_name,
+            'file_mime' => $document->file_mime,
+            'file_size' => $document->file_size,
+        ];
+    }
+
     private function ensurePayableFitsInvoice(array $data, ?int $excludingTransactionId = null): void
     {
-        if ($data['type'] !== 'payable' || ! in_array($data['status'], ['ok_to_pay', 'paid'], true)) {
+        if (
+            $data['type'] !== 'payable'
+            || empty($data['project_invoice_id'])
+            || ! in_array($data['status'], ['ok_to_pay', 'paid'], true)
+        ) {
             return;
         }
 
@@ -742,7 +1030,7 @@ class ProjectController extends Controller
     ): void {
         if (
             $data['type'] !== 'receivable'
-            || ! in_array($data['status'], ['ok_to_pay', 'paid'], true)
+            || $data['status'] !== 'deposit'
             || $scheduledPaymentIds === []
         ) {
             return;
@@ -756,7 +1044,7 @@ class ProjectController extends Controller
 
         $approvedReceivables = $project->accountingTransactions()
             ->where('type', 'receivable')
-            ->whereIn('status', ['ok_to_pay', 'paid'])
+            ->where('status', 'deposit')
             ->when(
                 $excludingTransactionId !== null,
                 fn ($query) => $query->where('id', '!=', $excludingTransactionId),
@@ -842,7 +1130,7 @@ class ProjectController extends Controller
 
         if (! empty($data['project_invoice_id']) && ! $project->invoices()->whereKey($data['project_invoice_id'])->exists()) {
             throw ValidationException::withMessages([
-                'project_invoice_id' => 'The selected vendor invoice must belong to this project.',
+                'project_invoice_id' => 'The selected vendor payment must belong to this project.',
             ]);
         }
 

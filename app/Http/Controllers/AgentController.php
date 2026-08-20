@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\AgentRequest;
 use App\Models\Account;
 use App\Models\Agent;
+use App\Models\AgentSchedule;
 use App\Models\Company;
 use App\Support\ManagerAccess;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,6 +29,10 @@ class AgentController extends Controller
     {
         DB::transaction(function () use ($request): void {
             $data = $request->validated();
+            $templateAgentId = AgentSchedule::query()->latest('updated_at')->value('agent_id');
+            $sharedSchedule = $templateAgentId
+                ? AgentSchedule::query()->where('agent_id', $templateAgentId)->get()
+                : collect();
             $account = $this->createAccount($data, 'agent');
             $agent = Agent::query()->create([
                 'agent_name' => $data['agent_name'],
@@ -34,12 +40,73 @@ class AgentController extends Controller
                 'account_id' => $account?->acc_id,
                 'inactive_at' => ($data['suspended'] ?? false) ? now() : null,
             ]);
+            if (! $agent->inactive_at) {
+                $sharedSchedule->each(fn (AgentSchedule $day) => AgentSchedule::query()->create([
+                    'agent_id' => $agent->agent_id,
+                    ...$day->only(['weekday', 'is_working', 'shift_start', 'shift_end', 'lunch_start', 'lunch_end']),
+                ]));
+            }
             $this->syncPermissions($agent, $data['permissions']);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Agent created.']);
 
         return back();
+    }
+
+    public function report(Agent $agent): JsonResponse
+    {
+        $base = $agent->leads()->whereNotNull('appointment_at');
+        $confirmedStatuses = ['confirmed', 'dispatched', 'project'];
+
+        $isConfirmed = fn ($query) => $query->whereIn('status', $confirmedStatuses)
+            ->orWhereHas('movements', fn ($movement) => $movement->whereIn('to_status', $confirmedStatuses));
+        $isDispatched = fn ($query) => $query->where('status', 'dispatched')
+            ->orWhereHas('movements', fn ($movement) => $movement->where('to_status', 'dispatched'));
+
+        $rows = (clone $base)
+            ->withExists('project')
+            ->with([
+                'notes:id,lead_id,note_type,body,created_at',
+                'movements:id,lead_id,to_status,created_at',
+            ])
+            ->latest('appointment_at')
+            ->limit(300)
+            ->get()
+            ->map(function ($lead) use ($confirmedStatuses): array {
+                $movementStatuses = $lead->movements->pluck('to_status');
+                $confirmed = in_array($lead->status, $confirmedStatuses, true)
+                    || $movementStatuses->intersect($confirmedStatuses)->isNotEmpty();
+                $dispatched = $lead->status === 'dispatched'
+                    || $movementStatuses->contains('dispatched');
+
+                return [
+                    'id' => $lead->id,
+                    'origin_at' => $lead->created_at?->toIso8601String(),
+                    'appointment_at' => $lead->appointment_at?->toIso8601String(),
+                    'customer' => $lead->customer_name,
+                    'result' => ucwords(str_replace('_', ' ', $lead->status ?: 'fresh')),
+                    'confirmed' => $confirmed,
+                    'dispatched' => $dispatched,
+                    'sold' => (bool) $lead->project_exists,
+                    'city' => $lead->city,
+                    'notes' => $lead->notes->sortByDesc('id')->pluck('body')->filter()->take(3)->join(' | '),
+                ];
+            });
+
+        $soldQuery = (clone $base)->whereHas('project');
+
+        return response()->json([
+            'agent' => ['id' => $agent->agent_id, 'name' => $agent->agent_name],
+            'summary' => [
+                'appointments' => (clone $base)->count(),
+                'confirmed' => (clone $base)->where($isConfirmed)->count(),
+                'dispatched' => (clone $base)->where($isDispatched)->count(),
+                'sold' => (clone $soldQuery)->count(),
+                'last_sale' => (clone $soldQuery)->max('appointment_at'),
+            ],
+            'rows' => $rows,
+        ]);
     }
 
     public function update(AgentRequest $request, Agent $agent): RedirectResponse

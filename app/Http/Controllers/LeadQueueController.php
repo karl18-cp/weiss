@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\LeadSearch;
+
+use App\Support\CaliforniaServiceAreas;
+
 use App\Models\Agent;
 use App\Models\Company;
 use App\Models\Lead;
@@ -73,12 +77,25 @@ class LeadQueueController extends Controller
                 ->orderBy('id')
                 ->get(),
             'salesmen' => Salesman::query()
+                ->whereNull('inactive_at')
                 ->when(
                     $user?->role === 'salesman',
                     fn ($query) => $query->whereKey($salesmanId),
                 )
                 ->orderBy('salesman_name')
                 ->get(['salesman_id', 'salesman_name']),
+            'salesmanLocations' => $user?->role === 'salesman'
+                ? []
+                : Salesman::query()
+                    ->whereNull('inactive_at')
+                    ->whereNotNull('live_latitude')
+                    ->whereNotNull('live_longitude')
+                    ->where('live_location_updated_at', '>=', now()->subMinutes(30))
+                    ->orderBy('salesman_name')
+                    ->get([
+                        'salesman_id', 'salesman_name', 'live_latitude', 'live_longitude',
+                        'live_location_accuracy', 'live_location_updated_at',
+                    ]),
             'map' => [
                 'key' => config('services.maptiler.browser_key'),
                 'styleUrl' => 'https://api.maptiler.com/maps/streets-v2/style.json',
@@ -122,7 +139,7 @@ class LeadQueueController extends Controller
 
     public function fiveFiveFive(): Response
     {
-        return $this->renderQueue('lead-workflow/five-five-five', ['555', 'la', 'ng', 'toss']);
+        return $this->renderQueue('lead-workflow/five-five-five', ['555', 'ora', 'la', 'ng', 'toss']);
     }
 
     public function la(): Response
@@ -197,7 +214,7 @@ class LeadQueueController extends Controller
             ))
             ->when($search !== '', function ($query) use ($search): void {
                 $like = '%'.$search.'%';
-                $query->where(function ($query) use ($like): void {
+                $query->where(function ($query) use ($like, $search): void {
                     $query->where('customer_name', 'like', $like)
                         ->orWhere('address', 'like', $like)
                         ->orWhere('city', 'like', $like)
@@ -210,6 +227,7 @@ class LeadQueueController extends Controller
                         ->orWhereHas('company', fn ($relation) => $relation->where('company', 'like', $like))
                         ->orWhereHas('product', fn ($relation) => $relation->where('product_name', 'like', $like))
                         ->orWhereHas('agent', fn ($relation) => $relation->where('agent_name', 'like', $like));
+                    LeadSearch::orWhereFullAddress($query, $search);
                 });
             });
 
@@ -348,7 +366,7 @@ class LeadQueueController extends Controller
             'leads' => (clone $queueQuery)
                 ->when(
                     $selectedCity !== '' && $selectedCity !== 'all',
-                    fn ($query) => $query->where('city', $selectedCity),
+                    fn ($query) => CaliforniaServiceAreas::apply($query, $selectedCity),
                     fn ($query) => $query->when(
                         $selectedDate,
                         function ($query) use (
@@ -441,19 +459,9 @@ class LeadQueueController extends Controller
             'timezoneOffset' => $timezoneOffset,
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company']),
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
-            'cities' => Lead::query()
-                ->when($status !== null, fn ($query) => $query->whereIn('status', (array) $status))
-                ->when($projectStatus, fn ($query) => $query->whereHas(
-                    'project',
-                    fn ($project) => $project->whereIn('status', (array) $projectStatus),
-                ))
-                ->whereNotNull('city')
-                ->where('city', '!=', '')
-                ->distinct()
-                ->orderBy('city')
-                ->pluck('city'),
+            'cities' => CaliforniaServiceAreas::counties(),
             'agents' => Agent::query()->orderBy('agent_name')->get(['agent_id', 'agent_name']),
-            'salesmen' => Salesman::query()->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
+            'salesmen' => Salesman::query()->whereNull('inactive_at')->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
         ]);
     }
 }

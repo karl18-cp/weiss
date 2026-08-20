@@ -1,7 +1,64 @@
 .crm-sidebar [data-sidebar='sidebar'] {
+    position: relative;
     border-right: 1px solid #8bd8ef;
     color: #d7e2f3;
     background: linear-gradient(180deg, #142852 0%, #0a1327 42%, #07101f 100%);
+}
+
+.crm-app-content {
+    --page-tint: #74839a;
+    --page-tint-soft: #f2f4f7;
+    background:
+        radial-gradient(circle at 96% 3%, color-mix(in srgb, var(--page-tint) 10%, transparent), transparent 28rem),
+        linear-gradient(145deg, color-mix(in srgb, var(--page-tint-soft) 74%, #fff), #f7f8fa 62%);
+}
+
+.crm-app-content > main,
+.crm-app-content > section {
+    background-color: color-mix(in srgb, var(--page-tint) 9%, #f3f1ee) !important;
+}
+
+.crm-app-content[data-page-theme='dashboard'] { --page-tint: #5575a3; --page-tint-soft: #e8edf4; }
+.crm-app-content[data-page-theme='team-dashboard'] { --page-tint: #646c98; --page-tint-soft: #ececf4; }
+.crm-app-content[data-page-theme='lead-card'] { --page-tint: #547e86; --page-tint-soft: #e9f0ef; }
+.crm-app-content[data-page-theme='leads-shop'] { --page-tint: #765c91; --page-tint-soft: #eee9f2; }
+.crm-app-content[data-page-theme='confirm'] { --page-tint: #527660; --page-tint-soft: #eaf0ec; }
+.crm-app-content[data-page-theme='dispatch'] { --page-tint: #9a6748; --page-tint-soft: #f3ece7; }
+.crm-app-content[data-page-theme='sag'] { --page-tint: #705d82; --page-tint-soft: #eeeaf1; }
+.crm-app-content[data-page-theme='reschedule'] { --page-tint: #8a7047; --page-tint-soft: #f2eee7; }
+.crm-app-content[data-page-theme='rehash'] { --page-tint: #68717f; --page-tint-soft: #eceef0; }
+.crm-app-content[data-page-theme='five-five-five'] { --page-tint: #4e7774; --page-tint-soft: #e8f0ef; }
+.crm-app-content[data-page-theme='his'] { --page-tint: #59688a; --page-tint-soft: #eaecf2; }
+.crm-app-content[data-page-theme='keep-in-touch'] { --page-tint: #855f68; --page-tint-soft: #f1e9eb; }
+.crm-app-content[data-page-theme='data'] { --page-tint: #566f82; --page-tint-soft: #e9eef1; }
+.crm-app-content[data-page-theme='booking-board'] { --page-tint: #7d6954; --page-tint-soft: #f0ece8; }
+.crm-app-content[data-page-theme='tele-hours'] { --page-tint: #815c7f; --page-tint-soft: #f1e9f0; }
+.crm-app-content[data-page-theme='manager-activity'] { --page-tint: #5e6d7f; --page-tint-soft: #eaedf0; }
+.crm-app-content[data-page-theme='tasks'] { --page-tint: #70577e; --page-tint-soft: #eee9f1; }
+.crm-app-content[data-page-theme='agent-schedules'] { --page-tint: #587365; --page-tint-soft: #e9efeb; }
+.crm-app-content[data-page-theme='quality-control'] { --page-tint: #837044; --page-tint-soft: #f1eee6; }
+.crm-app-content[data-page-theme='projects'] { --page-tint: #74648d; --page-tint-soft: #eee9f5; }
+.crm-app-content[data-page-theme='directory'] { --page-tint: #746274; --page-tint-soft: #efeaf0; }
+
+.crm-sidebar__toggle {
+    position: absolute;
+    z-index: 40;
+    top: 0.85rem;
+    right: 0.65rem;
+}
+
+.crm-sidebar__toggle button {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid rgb(183 202 231 / 35%);
+    border-radius: 0.55rem;
+    color: #d7e2f3;
+    background: rgb(255 255 255 / 8%);
+}
+
+.crm-sidebar__toggle button:hover {
+    color: #fff;
+    background: rgb(255 255 255 / 16%);
 }
 
 .crm-sidebar__identity {
@@ -112,24 +169,49 @@
     color: #d4dfef;
     font-size: 0.9rem;
     font-weight: 600;
+    border-left: 2px solid color-mix(in srgb, var(--item-accent, #5277a8) 46%, transparent);
+    background: color-mix(in srgb, var(--item-accent, #5277a8) 10%, transparent);
 }
 
 .crm-sidebar__item svg {
     width: 1.1rem !important;
     height: 1.1rem !important;
-    color: #ccdaed;
+    color: color-mix(in srgb, var(--item-accent, #b7c8df) 62%, #d5e0ef);
 }
 
 .crm-sidebar__item:hover,
 .crm-sidebar__item[data-active='true'] {
     color: #fff;
-    background: linear-gradient(100deg, #2f6cf2, #2860df);
+    border-left-color: color-mix(in srgb, var(--item-accent, #5277a8) 70%, #fff);
+    background: linear-gradient(100deg, color-mix(in srgb, var(--item-accent, #5277a8) 72%, #17243a), color-mix(in srgb, var(--item-accent, #5277a8) 48%, #101b2e));
 }
 
 .crm-sidebar__item:hover svg,
 .crm-sidebar__item[data-active='true'] svg {
     color: #fff;
 }
+
+.crm-sidebar__item--dashboard { --item-accent: #5575a3; }
+.crm-sidebar__item--team_dashboard { --item-accent: #6b658f; }
+.crm-sidebar__item--lead_card { --item-accent: #547e86; }
+.crm-sidebar__item--leads_shop { --item-accent: #765c91; }
+.crm-sidebar__item--confirm_leads { --item-accent: #527660; }
+.crm-sidebar__item--dispatch_leads { --item-accent: #9a6748; }
+.crm-sidebar__item--sag { --item-accent: #705d82; }
+.crm-sidebar__item--reschedule { --item-accent: #8a7047; }
+.crm-sidebar__item--rehash { --item-accent: #68717f; }
+.crm-sidebar__item--555 { --item-accent: #4e7774; }
+.crm-sidebar__item--his { --item-accent: #59688a; }
+.crm-sidebar__item--keep_in_touch { --item-accent: #855f68; }
+.crm-sidebar__item--data { --item-accent: #566f82; }
+.crm-sidebar__item--booking_board { --item-accent: #7d6954; }
+.crm-sidebar__item--tele_hours { --item-accent: #815c7f; }
+.crm-sidebar__item--manager_activity { --item-accent: #5e6d7f; }
+.crm-sidebar__item--tasks { --item-accent: #70577e; }
+.crm-sidebar__item--agent_schedules { --item-accent: #587365; }
+.crm-sidebar__item--quality_control { --item-accent: #837044; }
+.crm-sidebar__item--projects { --item-accent: #536c82; }
+.crm-sidebar__item--contacts_users { --item-accent: #746274; }
 
 .crm-sidebar__count {
     min-width: 1.45rem;
@@ -155,6 +237,22 @@
     animation: crm-new-lead-pulse 1.15s ease-in-out infinite;
 }
 
+.crm-sidebar__count--urgent {
+    border-color: #ffb45f;
+    color: #281300;
+    background: #f6a94f;
+    box-shadow: 0 0 1rem rgb(246 169 79 / 85%);
+    animation: crm-new-lead-pulse 1.15s ease-in-out infinite;
+}
+
+.crm-sidebar__count--critical {
+    border-color: #ff8b8b;
+    color: #fff;
+    background: #cf3f4f;
+    box-shadow: 0 0 1.1rem rgb(207 63 79 / 90%);
+    animation: crm-new-lead-pulse .9s ease-in-out infinite;
+}
+
 @keyframes crm-new-lead-pulse {
     0%, 100% {
         transform: scale(1);
@@ -171,7 +269,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .crm-sidebar__count--new-lead {
+    .crm-sidebar__count--new-lead,
+    .crm-sidebar__count--urgent,
+    .crm-sidebar__count--critical {
         animation: none;
     }
 }
@@ -219,4 +319,48 @@
 
 .group[data-collapsible='icon'] .crm-sidebar__identity {
     display: none;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__toggle {
+    top: 0.55rem;
+    right: 0.5rem;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__search {
+    margin-top: 3.1rem;
+}
+
+/* The base sidebar component hides overflow while collapsed. Keep the compact
+   icon rail scrollable so every navigation destination remains reachable. */
+.group[data-collapsible='icon'] .crm-sidebar__content {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    padding-inline: 0.35rem;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__group {
+    padding-inline: 0.25rem;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__menu {
+    align-items: center;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__item {
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+    margin-inline: auto;
+    padding: 0.58rem !important;
+    border-left-width: 1px;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__content::-webkit-scrollbar {
+    width: 0.2rem;
+}
+
+.group[data-collapsible='icon'] .crm-sidebar__content::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgb(151 169 201 / 35%);
 }

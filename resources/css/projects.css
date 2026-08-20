@@ -4,73 +4,250 @@
     min-height: 0;
     flex-direction: column;
     overflow: hidden;
-    padding: 1.5rem;
+    padding: 0.45rem 1rem 0.75rem;
     color: #172036;
     background: #f2f5f8;
 }
 
 .projects-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    display: grid;
+    grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr);
+    grid-template-areas:
+        'title actions'
+        'filters filters';
+    align-items: center;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+.projects-header > div:first-child {
+    grid-area: title;
 }
 
 .projects-header > div:first-child > span {
     color: #2d65e5;
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
 }
 
 .projects-header h1 {
-    margin-top: 0.2rem;
-    font-size: clamp(1.65rem, 3vw, 2.2rem);
+    margin-top: 0.05rem;
+    font-size: clamp(1.25rem, 2vw, 1.55rem);
     font-weight: 850;
     letter-spacing: -0.04em;
 }
 
 .projects-header p {
-    margin-top: 0.25rem;
+    margin-top: 0.1rem;
     color: #718096;
-    font-size: 0.86rem;
+    font-size: 0.66rem;
+    white-space: nowrap;
 }
 
 .projects-summary {
     display: flex;
     align-items: center;
     gap: 0.65rem;
-    padding: 0.7rem 0.85rem;
+    min-height: 2.05rem;
+    padding: 0.3rem 0.55rem;
     border: 1px solid #dbe4ef;
     border-radius: 0.85rem;
     background: #fff;
 }
 
 .projects-header-actions {
+    grid-area: actions;
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    justify-content: flex-end;
+    gap: 0.45rem;
+}
+
+.projects-balance-button {
+    display: inline-flex;
+    min-height: 2.05rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 0.5rem;
+    border: 1px solid #b9d2fa;
+    border-radius: 0.65rem;
+    color: #2458ba;
+    background: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.projects-balance-button:hover {
+    border-color: #2868e8;
+    background: #eff5ff;
+}
+
+.projects-balance-button strong {
+    display: grid;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    place-items: center;
+    padding: 0 0.25rem;
+    border-radius: 999px;
+    color: #fff;
+    background: #2868e8;
+    font-size: 0.58rem;
+}
+
+.projects-balance-modal {
+    width: min(68rem, calc(100vw - 2rem));
+    max-width: 68rem;
+}
+
+.projects-balance-table-wrap {
+    max-height: min(62vh, 36rem);
+    overflow: auto;
+    border: 1px solid #dbe4ef;
+    border-radius: 0.75rem;
+}
+
+.projects-balance-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.72rem;
+}
+
+.projects-balance-table-wrap th,
+.projects-balance-table-wrap td {
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid #e6edf5;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.projects-balance-table-wrap th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    color: #60708c;
+    background: #f5f8fc;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+}
+
+.projects-balance-table-wrap tbody tr:not(:only-child) {
+    cursor: pointer;
+}
+
+.projects-balance-table-wrap tbody tr:hover {
+    background: #f0f6ff;
+}
+
+.projects-balance-table-wrap td:last-child strong {
+    color: #166534;
 }
 
 .projects-header-status-filter {
-    flex: 1 1 auto;
-    justify-content: center;
-    padding-inline: 0.5rem;
+    grid-area: filters;
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0;
+    overflow: visible;
+}
+
+.projects-header-status-filter button {
+    min-height: 1.9rem;
+    gap: 0.4rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 0.6rem;
+}
+
+.projects-header-status-filter button strong {
+    min-width: 1.15rem;
+    height: 1.15rem;
+    font-size: 0.56rem;
+}
+
+.projects-header-entity-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+}
+
+.projects-header-entity-filters label {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.projects-header-entity-filters label > span {
+    color: #718096;
+    font-size: 0.5rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.projects-header-entity-filters select {
+    width: 10rem;
+    min-height: 1.9rem;
+    padding: 0 1.7rem 0 0.55rem;
+    border: 1px solid #cbd8e8;
+    border-radius: 0.6rem;
+    color: #253858;
+    background: #fff;
+    font-size: 0.66rem;
+    font-weight: 750;
+}
+
+.projects-header-entity-filters select:focus {
+    border-color: #2868e8;
+    outline: 2px solid rgb(40 104 232 / 14%);
+}
+
+.projects-header-search > div {
+    display: flex;
+    width: 15rem;
+    min-height: 1.9rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding-inline: 0.55rem;
+    border: 1px solid #cbd8e8;
+    border-radius: 0.6rem;
+    background: #fff;
+}
+
+.projects-header-search svg {
+    width: 0.8rem;
+    flex: none;
+    color: #718096;
+}
+
+.projects-header-search input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    color: #253858;
+    background: transparent;
+    font-size: 0.66rem;
+    font-weight: 650;
+}
+
+.projects-header-search > div:focus-within {
+    border-color: #2868e8;
+    outline: 2px solid rgb(40 104 232 / 14%);
 }
 .projects-add-project {
     display: inline-flex;
-    min-height: 2.85rem;
+    min-height: 2.05rem;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0 1rem;
+    padding: 0 0.75rem;
     border: 1px solid #2868e8;
-    border-radius: 0.85rem;
+    border-radius: 0.65rem;
     color: #fff;
     background: #2868e8;
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     font-weight: 850;
     white-space: nowrap;
 }
@@ -83,16 +260,16 @@
 }
 .projects-drive-sync {
     display: inline-flex;
-    min-height: 2.85rem;
+    min-height: 2.05rem;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0 0.9rem;
+    padding: 0 0.65rem;
     border: 1px solid #b9d2fa;
-    border-radius: 0.85rem;
+    border-radius: 0.65rem;
     color: #1765d8;
     background: #fff;
-    font-size: 0.78rem;
+    font-size: 0.68rem;
     font-weight: 800;
     text-decoration: none;
     white-space: nowrap;
@@ -109,7 +286,7 @@
 }
 
 .projects-summary > svg {
-    width: 1.4rem;
+    width: 1.1rem;
     color: #2470eb;
 }
 
@@ -119,13 +296,13 @@
 }
 
 .projects-summary strong {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
 }
 
 .projects-summary span {
     margin-top: 0.1rem;
     color: #8190a5;
-    font-size: 0.68rem;
+    font-size: 0.58rem;
 }
 
 .project-context-bar {
@@ -134,7 +311,7 @@
     flex: none;
     grid-template-columns: 1.05fr 0.82fr 0.92fr 1.35fr 0.9fr;
     gap: 0;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
     overflow: hidden;
     border: 1px solid #d9e3f0;
     border-radius: 0.85rem;
@@ -144,7 +321,7 @@
 
 .project-context-bar > div {
     min-width: 0;
-    padding: 0.82rem 1rem;
+    padding: 0.5rem 0.8rem;
     border-right: 1px solid #edf1f6;
 }
 
@@ -163,15 +340,15 @@
 
 .project-context-bar small {
     color: #7e8ca1;
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     font-weight: 800;
     text-transform: uppercase;
 }
 
 .project-context-bar strong {
-    margin-top: 0.18rem;
+    margin-top: 0.08rem;
     color: #8a96a8;
-    font-size: 0.9rem;
+    font-size: 0.78rem;
     font-weight: 850;
 }
 
@@ -180,9 +357,9 @@
 }
 
 .project-context-bar span {
-    margin-top: 0.35rem;
+    margin-top: 0.18rem;
     color: #3e4b60;
-    font-size: 0.76rem;
+    font-size: 0.68rem;
     font-weight: 750;
 }
 
@@ -311,6 +488,85 @@
 .projects-status-filter button.is-active strong {
     color: #1768e7;
     background: #fff;
+}
+
+.projects-record-type {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.projects-record-type.is-lead {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.projects-record-type.is-project-only {
+    border-color: #ddd6fe;
+    color: #6d28d9;
+    background: #f5f3ff;
+}
+
+.projects-sale-status-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.projects-sale-status-cell > strong {
+    color: #172554;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.projects-sale-status-cell button {
+    display: grid;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border: 1px solid #1e3a8a;
+    border-radius: 999px;
+    color: #1e3a8a;
+    background: #fff;
+    cursor: pointer;
+}
+
+.projects-sale-status-cell button svg {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+.projects-sale-breakdown-row > td {
+    padding: 0.35rem 1rem 0.8rem !important;
+    background: #f5f9ff;
+}
+
+.projects-sale-breakdown {
+    display: grid;
+    gap: 0.45rem;
+    padding-left: 5rem;
+}
+
+.projects-sale-breakdown > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.7fr) minmax(8rem, 0.8fr) minmax(7rem, 0.7fr) minmax(14rem, 2fr);
+    align-items: center;
+    gap: 1rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid #d7e5fb;
+    border-radius: 0.65rem;
+    color: #172554;
+    background: #fff;
+}
+
+.projects-sale-breakdown > div strong {
+    color: #1746c7;
 }
 
 .projects-project-only-actions {
@@ -618,6 +874,18 @@
 .project-schedule-linked-status.is-paid {
     color: #18794e;
     background: #effaf4;
+}
+
+.project-schedule-linked-status.is-deposit {
+    color: #18794e;
+    background: #effaf4;
+}
+
+.project-accounting-qb {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+    accent-color: #245bd9;
 }
 
 .project-schedule-linked-empty {
@@ -988,8 +1256,10 @@
 }
 
 .project-invoice-status {
+    display: inline-block;
     min-width: 6rem;
-    padding: 0.38rem 1.45rem 0.38rem 0.55rem;
+    padding: 0.38rem 0.65rem;
+    text-align: center;
     border: 1px solid transparent;
     border-radius: 999px;
     font-size: 0.58rem;
@@ -1208,6 +1478,44 @@
     background: #edf3ff;
     font-size: 0.62rem;
 }
+
+.project-documents-upload-area {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end;
+    gap: 0.5rem !important;
+}
+
+.project-documents-upload-area form {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.project-documents-upload-area select,
+.project-documents-upload-area label,
+.project-documents-upload-area button {
+    min-height: 2rem;
+    border: 1px solid #cfd9e8;
+    border-radius: 0.55rem;
+    background: #fff;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+.project-documents-upload-area label {
+    display: inline-flex;
+    cursor: pointer;
+    align-items: center;
+    gap: 0.3rem;
+    color: #245bd9;
+}
+
+.project-documents-upload-area label svg { width: 0.8rem; }
+.project-documents-upload-area label input { display: none; }
+.project-documents-upload-area button { color: #fff; background: #245bd9; border-color: #245bd9; }
+.project-documents-upload-area button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .project-documents-workspace {
     display: grid;
@@ -1887,18 +2195,19 @@
     overflow: hidden;
     border: 1px solid #dce4ef;
     border-radius: 1rem;
-    background: #fff;
-    box-shadow: 0 8px 28px rgb(35 51 79 / 5%);
+    background: #f5f7fb;
+    box-shadow: 0 8px 28px rgb(35 51 79 / 4%);
 }
 
 .project-details-header {
     display: flex;
-    min-height: 4.4rem;
+    min-height: 3.65rem;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.8rem 1rem;
-    border-bottom: 1px solid #e6ebf3;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid #dfe6f0;
+    background: #fff;
 }
 
 .project-details-header > div:first-child {
@@ -1910,8 +2219,8 @@
 
 .project-details-header > div:first-child > button {
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 1.9rem;
+    height: 1.9rem;
     flex: none;
     place-items: center;
     border-radius: 0.55rem;
@@ -1930,11 +2239,11 @@
 
 .project-details-mark {
     display: grid;
-    width: 2.6rem;
-    height: 2.6rem;
+    width: 2.25rem;
+    height: 2.25rem;
     flex: none;
     place-items: center;
-    border-radius: 0.75rem;
+    border-radius: 0.65rem;
     color: #fff;
     background: linear-gradient(135deg, #376ff0, #214dbb);
     font-size: 0.85rem;
@@ -1943,7 +2252,7 @@
 
 .project-details-header h2 {
     overflow: hidden;
-    font-size: 1rem;
+    font-size: 0.92rem;
     font-weight: 850;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1955,17 +2264,22 @@
 }
 
 .project-details-header__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     text-align: right;
 }
 
 .project-details-header__meta small {
     display: block;
-    margin-top: 0.25rem;
+    margin: 0;
+    padding-right: 0.6rem;
+    border-right: 1px solid #e2e8f0;
 }
 
 .project-details-grid {
     display: grid;
-    height: calc(100% - 4.4rem);
+    height: calc(100% - 3.65rem);
     grid-template-columns: minmax(18rem, 0.9fr) minmax(24rem, 1.35fr) minmax(
             17rem,
             0.75fr
@@ -1974,17 +2288,18 @@
         'customer overview sale'
         'team notes sale';
     grid-template-rows: auto minmax(13rem, 1fr);
-    gap: 0.7rem;
-    padding: 0.7rem;
+    gap: 0.55rem;
+    padding: 0.55rem;
     overflow: auto;
 }
 
 .project-detail-card {
     min-width: 0;
-    padding: 0.85rem;
-    border: 1px solid #e3e9f2;
-    border-radius: 0.8rem;
-    background: #fbfcfe;
+    padding: 0.72rem;
+    border: 1px solid #dfe6ef;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 2px 8px rgb(35 51 79 / 3%);
 }
 
 .project-detail-card--customer {
@@ -2011,17 +2326,16 @@
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    margin-bottom: 0.85rem;
+    margin-bottom: 0.55rem;
 }
 
-.project-detail-card--sale > header > div:not(.project-sale-toolbar) {
+.project-detail-card--sale > header > div:not(.project-sale-summary) {
     min-width: 0;
     flex: 1;
 }
 
 .project-detail-card--sale > header {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: center;
 }
 
 .project-add-sale {
@@ -2042,13 +2356,12 @@
     width: 0.7rem !important;
 }
 
-.project-detail-card--sale > header > .project-sale-toolbar {
+.project-detail-card--sale > .project-sale-toolbar {
     display: grid;
     width: 100%;
-    flex: 0 0 100%;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    margin-top: 4px;
+    margin-top: 8px;
 }
 
 .project-sale-toolbar > button {
@@ -2089,13 +2402,41 @@
     background: #245bd9;
 }
 
+.project-sale-toolbar > button:nth-child(2):not(:disabled) {
+    color: #8a5a00;
+    background: #fff4d8;
+}
+
+.project-sale-summary {
+    display: grid;
+    min-width: 7.5rem;
+    justify-items: end;
+    padding-left: 0.75rem;
+    border-left: 1px solid #e4eaf3;
+}
+
+.project-sale-summary small,
+.project-sale-summary span {
+    color: #8793a6;
+    font-size: 0.6rem;
+    font-weight: 800;
+}
+
+.project-sale-summary strong {
+    margin-block: 0.08rem;
+    color: #1f55ca;
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1.1;
+}
+
 .project-detail-card > header > span {
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
     flex: none;
     place-items: center;
-    border-radius: 0.58rem;
+    border-radius: 0.5rem;
     color: #2d65e5;
     background: #edf3ff;
 }
@@ -2106,31 +2447,34 @@
 
 .project-detail-card h3 {
     color: #27344b;
-    font-size: 0.75rem;
-    font-weight: 850;
+    font-size: 0.82rem;
+    font-weight: 900;
 }
 
 .project-detail-card > header p {
     margin-top: 0.08rem;
     color: #8995a7;
-    font-size: 0.58rem;
+    font-size: 0.66rem;
+    font-weight: 650;
 }
 
 .project-detail-fields {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
+    gap: 0 0.75rem;
 }
 
 .project-detail-fields > div {
     display: flex;
     min-width: 0;
     align-items: flex-start;
-    gap: 0.45rem;
-    padding: 0.65rem;
-    border: 1px solid #e6ebf3;
-    border-radius: 0.65rem;
-    background: #fff;
+    gap: 0.4rem;
+    min-height: 3.25rem;
+    padding: 0.55rem 0.15rem;
+    border: 0;
+    border-bottom: 1px solid #edf1f6;
+    border-radius: 0;
+    background: transparent;
 }
 
 .project-detail-fields > div.is-wide {
@@ -2179,8 +2523,8 @@
 .project-sale-total small {
     display: block;
     color: #8a96a8;
-    font-size: 0.55rem;
-    font-weight: 750;
+    font-size: 0.62rem;
+    font-weight: 800;
     text-transform: uppercase;
 }
 
@@ -2190,14 +2534,16 @@
     margin-top: 0.15rem;
     overflow: hidden;
     color: #27344b;
-    font-size: 0.67rem;
+    font-size: 0.76rem;
+    font-weight: 700;
     font-style: normal;
     text-overflow: ellipsis;
 }
 
 .project-detail-fields em {
     color: #718096;
-    font-size: 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 650;
 }
 
 .project-call-row {
@@ -2247,16 +2593,18 @@
 .project-team-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem;
+    gap: 0 0.8rem;
 }
 
 .project-overview-grid > div,
 .project-team-list > div {
     min-width: 0;
-    padding: 0.65rem;
-    border: 1px solid #e6ebf3;
-    border-radius: 0.62rem;
-    background: #fff;
+    min-height: 3.2rem;
+    padding: 0.55rem 0.15rem;
+    border: 0;
+    border-bottom: 1px solid #edf1f6;
+    border-radius: 0;
+    background: transparent;
 }
 
 .project-overview-grid strong,
@@ -2265,7 +2613,8 @@
     margin-top: 0.2rem;
     overflow: hidden;
     color: #27344b;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
+    font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -2273,6 +2622,121 @@
 .project-overview-grid strong.is-blue {
     color: #245bd9;
     text-transform: capitalize;
+}
+
+.project-overview-ownership {
+    grid-column: 1 / -1;
+    padding-top: 0.65rem !important;
+    border-bottom: 0 !important;
+}
+
+.project-overview-ownership > div {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin-top: 0.45rem;
+}
+
+.project-overview-ownership > div > span {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid #e5ebf4;
+    border-radius: 0.55rem;
+    background: #f8faff;
+}
+
+.project-overview-ownership select {
+    width: 100%;
+    min-height: 2.25rem;
+    border: 1px solid #d9e2f0;
+    border-radius: 0.5rem;
+    padding: 0 0.55rem;
+    color: #27344b;
+    background: #fff;
+    font-size: 0.76rem;
+    font-weight: 750;
+}
+
+.project-overview-ownership > em {
+    display: block;
+    margin-top: 0.45rem;
+    color: #c62828;
+    font-size: 0.72rem;
+    font-style: normal;
+    font-weight: 750;
+}
+
+.project-contractor-assignments {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0;
+}
+
+.project-contractor-assignments > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.project-contractor-assignments label {
+    display: grid;
+    gap: 0.35rem;
+    color: #667085;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.project-contractor-assignments select {
+    width: 100%;
+    min-height: 2.5rem;
+    border: 1px solid #d9e2f0;
+    border-radius: 0.55rem;
+    padding: 0 0.65rem;
+    color: #27344b;
+    background: #fff;
+    font-size: 0.78rem;
+    font-weight: 750;
+    text-transform: none;
+}
+
+.project-contractor-assignments > button {
+    display: inline-flex;
+    min-height: 2.45rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border: 0;
+    border-radius: 0.55rem;
+    color: #fff;
+    background: #2563eb;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.project-contractor-assignments > button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.project-contractor-assignments > button svg {
+    width: 1rem;
+}
+
+@media (max-width: 900px) {
+    .project-overview-ownership > div,
+    .project-contractor-assignments > div {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .project-overview-ownership > div,
+    .project-contractor-assignments > div {
+        grid-template-columns: 1fr;
+    }
 }
 
 .project-sale-total {
@@ -2301,8 +2765,7 @@
 }
 
 .project-sales-table-wrap {
-    max-height: 18rem;
-    margin-top: 0.65rem;
+    max-height: 15rem;
     overflow: auto;
     border: 1px solid #e3e9f2;
     border-radius: 0.65rem;
@@ -2311,9 +2774,26 @@
 
 .project-sales-table {
     width: 100%;
-    min-width: 30rem;
+    table-layout: fixed;
     border-collapse: collapse;
-    font-size: 0.62rem;
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.project-sales-table th:nth-child(1) {
+    width: 23%;
+}
+
+.project-sales-table th:nth-child(2) {
+    width: 22%;
+}
+
+.project-sales-table th:nth-child(3) {
+    width: 23%;
+}
+
+.project-sales-table th:nth-child(4) {
+    width: 32%;
 }
 
 .project-sales-table th {
@@ -2323,8 +2803,8 @@
     padding: 0.55rem;
     color: #758297;
     background: #f7f9fc;
-    font-size: 0.53rem;
-    font-weight: 850;
+    font-size: 0.6rem;
+    font-weight: 900;
     text-align: left;
     text-transform: uppercase;
 }
@@ -2334,6 +2814,10 @@
     border-top: 1px solid #e8edf4;
     color: #536177;
     vertical-align: middle;
+}
+
+.project-sales-table td:nth-child(-n + 3) {
+    white-space: nowrap;
 }
 
 .project-sales-table tbody tr {
@@ -2354,6 +2838,16 @@
     box-shadow: inset 3px 0 #326cf0;
 }
 
+.project-sales-table tbody tr.is-original:not(.is-selected) td {
+    background: #f7faff;
+}
+
+.project-sales-table tbody tr.project-sales-empty td {
+    height: 5rem;
+    color: #8793a6;
+    text-align: center;
+}
+
 .project-sales-table td strong {
     color: #27344b;
 }
@@ -2364,9 +2858,18 @@
     border-radius: 999px;
     color: #596579;
     background: #edf0f5;
-    font-size: 0.52rem;
-    font-weight: 850;
+    font-size: 0.57rem;
+    font-weight: 900;
     text-transform: capitalize;
+}
+
+.project-sale-product {
+    display: block;
+    overflow: hidden;
+    color: #245bd9 !important;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .project-sale-type--original {
@@ -2394,9 +2897,12 @@
 }
 
 .project-sale-hint {
-    margin-top: 0.65rem;
+    margin-top: 0.5rem;
+    padding: 0.45rem 0.55rem;
+    border-radius: 0.5rem;
     color: #8290a5;
-    font-size: 0.6rem;
+    background: #f7f9fc;
+    font-size: 0.56rem;
     line-height: 1.45;
 }
 
@@ -2642,6 +3148,22 @@
     opacity: 0.55;
 }
 
+.project-payment-confirm-modal {
+    width: min(540px, calc(100vw - 32px));
+}
+.project-qb-confirm-summary { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 16px 22px 0; padding: 12px 14px; border: 1px solid #dce4ef; border-radius: 10px; background: #f8fafc; }
+.project-qb-confirm-summary span { color: #718096; font-size: 11px; }
+.project-qb-confirm-summary strong { color: #1d2940; font-size: 12px; text-align: right; }
+
+.project-payment-confirm-modal .project-accounting-form-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.project-payment-confirm-modal .project-accounting-reference input {
+    min-width: 0;
+}
+
 .project-schedule-modal {
     width: min(620px, calc(100vw - 32px));
     gap: 0;
@@ -2828,6 +3350,48 @@
     padding: 18px 22px;
 }
 
+.project-accounting-unassigned {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 14px 22px 0;
+    padding: 12px 14px;
+    border: 1px solid #cbd9f3;
+    border-radius: 10px;
+    color: #31415d;
+    background: #f3f7ff;
+    cursor: pointer;
+}
+
+.project-accounting-unassigned input {
+    width: 17px;
+    height: 17px;
+    flex: none;
+    margin-top: 2px;
+    accent-color: #245bd9;
+}
+
+.project-accounting-unassigned span,
+.project-accounting-unassigned small {
+    display: block;
+}
+
+.project-accounting-form-body.is-unassigned {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.project-accounting-unassigned strong {
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.project-accounting-unassigned small {
+    margin-top: 2px;
+    color: #718096;
+    font-size: 10px;
+    font-weight: 650;
+}
+
 .project-accounting-form-top label,
 .project-accounting-payable-fields label,
 .project-accounting-notes-field {
@@ -2881,6 +3445,50 @@
     cursor: default;
 }
 
+.project-accounting-file-picker {
+    display: grid;
+    min-height: 92px;
+    place-items: center;
+    padding: 14px;
+    border: 1px dashed #aebfda;
+    border-radius: 10px;
+    color: #718096;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+    transition:
+        border-color 150ms ease,
+        background 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.project-accounting-file-picker input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+
+.project-accounting-file-picker svg {
+    width: 21px;
+    color: #2d65e5;
+}
+
+.project-accounting-file-picker strong {
+    max-width: 100%;
+    overflow: hidden;
+    color: #3c4b62;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.project-accounting-file-picker small {
+    color: #8290a5;
+    font-size: 10px;
+}
+
 .project-accounting-reference,
 .project-accounting-amount {
     display: flex;
@@ -2891,6 +3499,17 @@
     border: 1px solid #dce4ef;
     border-radius: 10px;
     background: #fff;
+}
+
+.project-generate-payment-code {
+    align-self: flex-start;
+    margin-top: 0.4rem;
+    border: 1px solid #2563eb;
+    border-radius: 0.55rem;
+    background: #eff6ff;
+    color: #1d4ed8;
+    padding: 0.45rem 0.7rem;
+    font-weight: 700;
 }
 
 .project-accounting-reference > strong,
@@ -3192,6 +3811,11 @@
     outline: none;
 }
 
+.project-invoice-contractor-picker {
+    display: grid;
+    gap: 0.45rem;
+}
+
 .project-invoice-number-input {
     display: flex;
     width: 100%;
@@ -3306,6 +3930,17 @@
     background: #fff;
     cursor: pointer;
     text-align: center;
+    transition:
+        border-color 150ms ease,
+        background 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.project-accounting-file-picker.is-dragging,
+.project-invoice-file-picker.is-dragging {
+    border-color: #2d65e5;
+    background: #edf4ff;
+    box-shadow: 0 0 0 3px rgb(45 101 229 / 12%);
 }
 
 .project-invoice-file-picker input {
@@ -3372,16 +4007,16 @@
     display: grid;
     height: calc(100% - 2.85rem);
     grid-template-columns: 1fr 1fr;
-    gap: 0.55rem;
+    gap: 0.45rem;
 }
 
 .project-notes-grid > div {
     min-height: 5rem;
-    padding: 0.65rem;
+    padding: 0.58rem;
     overflow: hidden;
     border: 1px solid #e6ebf3;
-    border-radius: 0.62rem;
-    background: #fff;
+    border-radius: 0.55rem;
+    background: #fbfcfe;
 }
 
 .project-salesman-history {
@@ -3430,7 +4065,8 @@
     margin-top: 0.35rem;
     overflow: hidden;
     color: #536177;
-    font-size: 0.64rem;
+    font-size: 0.74rem;
+    font-weight: 600;
     line-height: 1.5;
     white-space: pre-wrap;
     -webkit-box-orient: vertical;
@@ -3488,9 +4124,8 @@
         grid-template-columns: repeat(2, minmax(20rem, 1fr));
         grid-template-areas:
             'customer overview'
-            'team overview'
-            'sale sale'
-            'notes notes';
+            'team notes'
+            'sale sale';
         grid-template-rows: auto;
     }
 }
@@ -3504,8 +4139,17 @@
     }
 
     .projects-header {
+        display: flex;
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .projects-header-status-filter {
+        overflow-x: auto;
+    }
+
+    .projects-header-entity-filters {
+        margin-left: 0;
     }
 
     .projects-header-actions {
@@ -3662,4 +4306,50 @@
     .project-invoice-form > label.is-wide {
         grid-column: auto;
     }
+}
+.project-details-save-errors {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.75rem 1rem 0;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid #f0b4b4;
+    border-radius: 0.75rem;
+    background: #fff1f1;
+    color: #9b2424;
+    font-size: 0.82rem;
+}
+
+.project-details-save-errors span {
+    color: #713636;
+}
+
+.project-accounting-reference-link { padding: 0; border: 0; background: transparent; color: #245bd9; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.project-accounting-reference-link:hover { color: #1742a5; }
+.project-accounting-attachment-modal { width: min(520px, calc(100vw - 32px)); max-width: 520px; gap: 16px; padding: 24px; border-radius: 16px; }
+.project-accounting-attachment-modal form { display: grid; gap: 14px; }
+.project-accounting-attachment-list { display: grid; max-height: 15rem; gap: 7px; overflow-y: auto; }
+.project-accounting-attachment-list a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #dbe4f2; border-radius: 9px; background: #f8faff; color: #24344d; text-decoration: none; }
+.project-accounting-attachment-list a:hover { border-color: #8faeed; background: #f0f5ff; }
+.project-accounting-attachment-list svg { width: 17px; color: #2964db; }
+.project-accounting-attachment-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-accounting-attachment-list strong { color: #245bd9; font-size: 0.78rem; }
+.project-accounting-attachment-list p { margin: 0; padding: 14px; border-radius: 9px; background: #f5f7fb; color: #6e7d94; text-align: center; }
+.project-accounting-attachment-upload { position: relative; display: grid; min-height: 7rem; place-items: center; gap: 4px; padding: 16px; border: 1px dashed #aebfda; border-radius: 10px; background: #f5f8ff; cursor: pointer; text-align: center; }
+.project-accounting-attachment-upload:hover { border-color: #5f86db; background: #eef4ff; }
+.project-accounting-attachment-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.project-accounting-attachment-upload svg { width: 22px; color: #2765df; }
+.project-accounting-attachment-upload strong { color: #263a58; }
+.project-accounting-attachment-upload small { color: #72819a; }
+
+.project-sale-files {
+    grid-column: 1 / -1;
+    padding: 12px;
+    border: 1px dashed #aebfda;
+    border-radius: 10px;
+    background: #f7f9fe;
+}
+
+.project-sale-files input {
+    width: 100%;
 }

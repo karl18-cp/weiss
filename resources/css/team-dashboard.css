@@ -209,6 +209,28 @@
     outline: 0;
 }
 
+.team-custom-range {
+    display: flex;
+    min-width: 0;
+    gap: .45rem;
+}
+
+.team-custom-range label {
+    gap: .35rem;
+}
+
+.team-custom-range label > span {
+    color: #dce8ff;
+    font-size: .58rem;
+    font-weight: 850;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.team-custom-range input {
+    width: 7.5rem;
+}
+
 .team-date-navigation strong {
     min-width: 12rem;
     text-align: center;
@@ -340,7 +362,10 @@
     background: #eef3fb;
 }
 
-.team-dashboard-page.is-score-fullscreen > .team-dashboard-hero,
+.team-dashboard-page.is-score-fullscreen > .team-dashboard-hero {
+    display: none;
+}
+
 .team-dashboard-page.is-score-fullscreen > .team-dashboard-controls,
 .team-dashboard-page.is-score-fullscreen > .team-dashboard-summary,
 .team-dashboard-page.is-score-fullscreen > .team-dashboard-timezone,
@@ -681,6 +706,21 @@
         grid-column: 1 / -1;
         grid-row: 1;
         justify-content: center;
+    }
+
+    .team-custom-range {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .team-custom-range label {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    .team-custom-range input {
+        width: 100%;
     }
 
     .team-date-navigation > button:first-of-type {

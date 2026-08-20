@@ -453,6 +453,7 @@ const workflowLocation = (status: string | null) => {
         kit_toss: 'Keep in Touch / TOSS',
         kit_cb: 'Keep in Touch / Call Back',
         la: 'LA',
+        ora: 'ORA',
         his: 'HIS',
         project: 'Projects',
     };
@@ -479,6 +480,7 @@ const duplicateOriginalDestination = (lead: Lead['duplicate_of']) => {
             case 'rehash_cb':
                 return ['Rehash', '/lead-workflow/rehash'];
             case '555':
+            case 'ora':
                 return ['555', '/lead-workflow/555'];
             case 'la':
                 return ['LA', '/lead-workflow/la'];
@@ -991,9 +993,6 @@ export default function LeadsShop({
     const [companyFilter, setCompanyFilter] = useState('all');
     const [sourceFilter, setSourceFilter] = useState('all');
     const [cityFilter, setCityFilter] = useState(selectedCity);
-    const [citySearch, setCitySearch] = useState(
-        selectedCity === 'all' ? '' : formatCity(selectedCity),
-    );
     const [productFilter, setProductFilter] = useState('all');
     const [agentFilter, setAgentFilter] = useState('all');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1004,8 +1003,37 @@ export default function LeadsShop({
     const [appointmentDateDraft, setAppointmentDateDraft] = useState(
         appointmentInputValue(requestedLead?.appointment_at ?? ''),
     );
+    const [productDraft, setProductDraft] = useState(
+        String(requestedLead?.product?.prod_id ?? ''),
+    );
+    const [appointmentTimePickerOpen, setAppointmentTimePickerOpen] = useState(false);
+    const [appointmentTimeHour, setAppointmentTimeHour] = useState('09');
+    const [appointmentTimeMinute, setAppointmentTimeMinute] = useState('00');
+    const [appointmentTimePeriod, setAppointmentTimePeriod] = useState<'AM' | 'PM'>('AM');
     const appointmentDraftDate = appointmentDateDraft.slice(0, 10);
     const appointmentDraftTime = appointmentDateDraft.slice(11, 16);
+    const appointmentDraftTimeLabel = (() => {
+        const [hourValue = '09', minuteValue = '00'] = (appointmentDraftTime || '09:00').split(':');
+        const hour24 = Number(hourValue);
+
+        return `${hour24 % 12 || 12}:${minuteValue} ${hour24 >= 12 ? 'PM' : 'AM'}`;
+    })();
+
+    const openAppointmentTimePicker = () => {
+        const [hourValue = '09', minuteValue = '00'] = (appointmentDraftTime || '09:00').split(':');
+        const hour24 = Number(hourValue);
+        setAppointmentTimeHour(String(hour24 % 12 || 12).padStart(2, '0'));
+        setAppointmentTimeMinute(['00', '15', '30', '45'].includes(minuteValue) ? minuteValue : String(Math.min(45, Math.floor(Number(minuteValue) / 15) * 15)).padStart(2, '0'));
+        setAppointmentTimePeriod(hour24 >= 12 ? 'PM' : 'AM');
+        setAppointmentTimePickerOpen(true);
+    };
+
+    const confirmAppointmentTime = () => {
+        let hour24 = Number(appointmentTimeHour) % 12;
+        if (appointmentTimePeriod === 'PM') hour24 += 12;
+        setAppointmentDateDraft(`${appointmentDraftDate}T${String(hour24).padStart(2, '0')}:${appointmentTimeMinute}`);
+        setAppointmentTimePickerOpen(false);
+    };
     const currentPermissionModule = permissionModuleForPath(
         window.location.pathname,
     );
@@ -1065,7 +1093,12 @@ export default function LeadsShop({
     const [salesmanOneDraft, setSalesmanOneDraft] = useState('');
     const [salesmanTwoDraft, setSalesmanTwoDraft] = useState('');
     const [savingAssignment, setSavingAssignment] = useState<
-        'appointment_date' | 'appointment' | 'salesman_1' | 'salesman_2' | null
+        | 'product'
+        | 'appointment_date'
+        | 'appointment'
+        | 'salesman_1'
+        | 'salesman_2'
+        | null
     >(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
@@ -1325,7 +1358,6 @@ export default function LeadsShop({
         nextDateField: DateField = effectiveDateField,
     ) => {
         setCityFilter('all');
-        setCitySearch('');
         if (activeShopStatus) setSelectedStatus('fresh');
         router.get(
             window.location.pathname,
@@ -1365,26 +1397,6 @@ export default function LeadsShop({
                 ],
             },
         );
-    };
-
-    const searchForCity = (value: string) => {
-        setCitySearch(value);
-        const normalized = value.trim().toLocaleLowerCase();
-
-        if (normalized === '') {
-            if (cityFilter !== 'all') filterByCity('all');
-            return;
-        }
-
-        const exactCity = filterOptions.cities.find(
-            (city) =>
-                city.toLocaleLowerCase() === normalized ||
-                formatCity(city).toLocaleLowerCase() === normalized,
-        );
-        if (exactCity && exactCity !== cityFilter) {
-            setCitySearch(formatCity(exactCity));
-            filterByCity(exactCity);
-        }
     };
 
     const filterOptions = useMemo(
@@ -1449,7 +1461,6 @@ export default function LeadsShop({
                         ['raw', 'Raw'],
                         ['cb', 'CB'],
                         ['verify', 'Verify'],
-                        ['ng', 'NG'],
                     ] as const),
         [queue],
     );
@@ -1463,18 +1474,16 @@ export default function LeadsShop({
                         ? leads.length
                         : status === 'verify'
                         ? verifyCount
-                        : status === 'ng'
-                          ? ngCount
                         : leads.filter(
                               (lead) => (lead.status || 'fresh') === status,
                           ).length,
                 ]),
             ),
-        [isProjectQueue, leads, ngCount, statusFilters, verifyCount],
+        [isProjectQueue, leads, statusFilters, verifyCount],
     );
 
     const selectStatus = (status: string) => {
-        if (queue || status === selectedStatus) return;
+        if (status === selectedStatus) return;
 
         setSelectedId(null);
         setSelectedStatus(status);
@@ -1539,8 +1548,9 @@ export default function LeadsShop({
                 const matchesSource =
                     sourceFilter === 'all' ||
                     leadSourceGroup === sourceFilter;
-                const matchesCity =
-                    cityFilter === 'all' || lead.city === cityFilter;
+                // County filtering is performed by the server from the
+                // maintained California city-to-county service map.
+                const matchesCity = true;
                 const matchesProduct =
                     productFilter === 'all' ||
                     String(lead.product?.prod_id) === productFilter;
@@ -1639,7 +1649,6 @@ export default function LeadsShop({
         setCompanyFilter('all');
         setSourceFilter('all');
         setCityFilter('all');
-        setCitySearch('');
         setProductFilter('all');
         setAgentFilter('all');
         setIsRefreshing(true);
@@ -1818,6 +1827,7 @@ export default function LeadsShop({
         setAppointmentDateDraft(
             appointmentInputValue(lead.appointment_at ?? ''),
         );
+        setProductDraft(String(lead.product?.prod_id ?? ''));
         setAppointmentResultDraft(lead.appointment_result ?? '');
         setSalesmanOneDraft(String(lead.salesman_one?.salesman_id ?? ''));
         setSalesmanTwoDraft(String(lead.salesman_two?.salesman_id ?? ''));
@@ -2056,7 +2066,11 @@ export default function LeadsShop({
 
     const requestStatusUpdate = (status: string) => {
         if (
-            window.location.pathname === '/lead-workflow/leads-shop' &&
+            [
+                '/lead-workflow/leads-shop',
+                '/lead-workflow/confirm-leads',
+                '/lead-workflow/dispatch-leads',
+            ].includes(window.location.pathname) &&
             status === '555'
         ) {
             setFiveFiveFiveModalOpen(true);
@@ -2187,6 +2201,32 @@ export default function LeadsShop({
             },
         );
     };
+
+    const saveProduct = () => {
+        if (!selected || !productDraft) {
+            return;
+        }
+
+        setSavingAssignment('product');
+        router.patch(
+            `/lead-workflow/leads-shop/${selected.id}/product`,
+            { product_id: Number(productDraft) },
+            {
+                preserveScroll: true,
+                onSuccess: () => router.flushAll(),
+                onError: (errors) =>
+                    notify({
+                        tone: 'error',
+                        message: String(
+                            errors.product_id ??
+                                'The product could not be updated.',
+                        ),
+                    }),
+                onFinish: () => setSavingAssignment(null),
+            },
+        );
+    };
+
     const saveAppointmentResult = () => {
         if (!selected) {
             return;
@@ -2323,10 +2363,15 @@ export default function LeadsShop({
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
         ['555', '555', Phone, '555'],
         ['kit', 'KIT', MessageCircle, 'kit'],
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
         ['raw', 'Raw', Archive, 'raw'],
         ['cb', 'Call Back', PhoneCall, 'callback'],
         ['verify', 'Verify', BadgeCheck, 'confirm'],
         ['ng', 'NG', Ban, 'naov'],
+        ['history', 'History', History, 'history'],
+    ] as const;
+    const verifyWorkflowActions = [
+        ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
     const confirmWorkflowActions = [
@@ -2371,19 +2416,8 @@ export default function LeadsShop({
         ['history', 'History', History, 'history'],
     ] as const;
     const hisWorkflowActions = [
-        ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
-        ['dispatched', 'Dispatch', Truck, 'dispatch'],
         ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
-        ['la', 'LA', MapPin, '555'],
-        ['555', '555', Phone, '555'],
-        ['kit', 'KIT', MessageCircle, 'kit'],
-        ['raw', 'Raw', Archive, 'raw'],
-        ['cb', 'Call Back', PhoneCall, 'callback'],
-        ['naov', 'NAOV', Ban, 'naov'],
-        ['verify', 'Verify', BadgeCheck, 'confirm'],
-        ['toss', 'TOSS', Trash2, 'toss'],
         ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
-        ['history', 'History', History, 'history'],
     ] as const;
     const projectWorkflowActions = [
         ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
@@ -2393,9 +2427,12 @@ export default function LeadsShop({
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
         ['verify', 'Verify', BadgeCheck, 'confirm'],
+        ['history', 'History', History, 'history'],
     ] as const;
     const workflowActions =
-        queue?.status === 'confirmed'
+        activeShopStatus === 'verify'
+            ? verifyWorkflowActions
+            : queue?.status === 'confirmed'
             ? confirmWorkflowActions
             : queue?.status === 'dispatched'
               ? dispatchWorkflowActions
@@ -2403,7 +2440,7 @@ export default function LeadsShop({
                 ? rescheduleWorkflowActions
                 : queue?.status === 'rehash'
                   ? rehashWorkflowActions
-                  : ['555', 'la'].includes(queue?.status ?? '')
+                  : ['555', 'ora', 'la'].includes(queue?.status ?? '')
                     ? fiveFiveFiveWorkflowActions
                     : queue?.status === 'his'
                       ? hisWorkflowActions
@@ -2753,26 +2790,25 @@ export default function LeadsShop({
                                         ))}
                                     </select>
                                 </label>
-                                <label className="lead-city-search">
+                                <label>
                                     <MapPin />
-                                    <input
-                                        type="search"
-                                        list="lead-city-options"
-                                        value={citySearch}
-                                        placeholder="Search cities"
-                                        aria-label="Search cities"
+                                    <select
+                                        value={cityFilter}
+                                        aria-label="Filter by county"
                                         onChange={(event) =>
-                                            searchForCity(event.target.value)
+                                            filterByCity(event.target.value)
                                         }
-                                    />
-                                    <datalist id="lead-city-options">
+                                    >
+                                        <option value="all">All counties</option>
                                         {filterOptions.cities.map((city) => (
                                             <option
                                                 key={city}
                                                 value={formatCity(city)}
-                                            />
+                                            >
+                                                {formatCity(city)}
+                                            </option>
                                         ))}
-                                    </datalist>
+                                    </select>
                                 </label>
                                 <label>
                                     <Package />
@@ -4032,6 +4068,27 @@ export default function LeadsShop({
                                                                 >
                                                                     <Save />
                                                                 </button>
+                                                                {queue?.status ===
+                                                                    'dispatched' &&
+                                                                    selected
+                                                                        .salesman_one
+                                                                        ?.phone && (
+                                                                        <RingCentralCallButton
+                                                                            className="lead-inline-save lead-inline-sms"
+                                                                            leadId={
+                                                                                selected.id
+                                                                            }
+                                                                            phone={
+                                                                                selected
+                                                                                    .salesman_one
+                                                                                    .phone
+                                                                            }
+                                                                            phoneSlot="salesman_1"
+                                                                            title={`Call ${selected.salesman_one.salesman_name}`}
+                                                                        >
+                                                                            <PhoneCall />
+                                                                        </RingCentralCallButton>
+                                                                    )}
                                                             </div>
                                                         </label>
                                                         <label>
@@ -4105,6 +4162,27 @@ export default function LeadsShop({
                                                                 >
                                                                     <Save />
                                                                 </button>
+                                                                {queue?.status ===
+                                                                    'dispatched' &&
+                                                                    selected
+                                                                        .salesman_two
+                                                                        ?.phone && (
+                                                                        <RingCentralCallButton
+                                                                            className="lead-inline-save lead-inline-sms"
+                                                                            leadId={
+                                                                                selected.id
+                                                                            }
+                                                                            phone={
+                                                                                selected
+                                                                                    .salesman_two
+                                                                                    .phone
+                                                                            }
+                                                                            phoneSlot="salesman_2"
+                                                                            title={`Call ${selected.salesman_two.salesman_name}`}
+                                                                        >
+                                                                            <PhoneCall />
+                                                                        </RingCentralCallButton>
+                                                                    )}
                                                             </div>
                                                         </label>
                                                     </div>
@@ -4127,6 +4205,51 @@ export default function LeadsShop({
                                                                 ?.product_name ??
                                                                 '—'}
                                                         </strong>
+                                                        <div className="lead-inline-save-field">
+                                                            <select
+                                                                className="lead-inline-assignment"
+                                                                value={productDraft}
+                                                                disabled={!canEditCurrentTab}
+                                                                onChange={(event) =>
+                                                                    setProductDraft(
+                                                                        event.target.value,
+                                                                    )
+                                                                }
+                                                                aria-label="Product"
+                                                            >
+                                                                <option value="">
+                                                                    Select product
+                                                                </option>
+                                                                {products.map(
+                                                                    (product) => (
+                                                                        <option
+                                                                            key={product.prod_id}
+                                                                            value={product.prod_id}
+                                                                        >
+                                                                            {product.product_name}
+                                                                        </option>
+                                                                    ),
+                                                                )}
+                                                            </select>
+                                                            <button
+                                                                type="button"
+                                                                className="lead-inline-save"
+                                                                onClick={saveProduct}
+                                                                disabled={
+                                                                    !canEditCurrentTab ||
+                                                                    !productDraft ||
+                                                                    savingAssignment !== null ||
+                                                                    productDraft ===
+                                                                        String(
+                                                                            selected.product
+                                                                                ?.prod_id ?? '',
+                                                                        )
+                                                                }
+                                                            >
+                                                                <Save />
+                                                                <span>Save product</span>
+                                                            </button>
+                                                        </div>
                                                     </span>
                                                 </div>
                                                 <div>
@@ -4161,25 +4284,19 @@ export default function LeadsShop({
                                                                     }}
                                                                     aria-label="Appointment date"
                                                                 />
-                                                                <input
-                                                                    type="time"
-                                                                    className="lead-inline-assignment"
-                                                                    value={
-                                                                        appointmentDraftTime
-                                                                    }
+                                                                <button
+                                                                    type="button"
+                                                                    className="lead-inline-assignment lead-inline-time-trigger"
                                                                     disabled={
                                                                         !canEditCurrentTab ||
                                                                         !appointmentDraftDate
                                                                     }
-                                                                    onChange={(
-                                                                        event,
-                                                                    ) =>
-                                                                        setAppointmentDateDraft(
-                                                                            `${appointmentDraftDate}T${event.target.value}`,
-                                                                        )
-                                                                    }
+                                                                    onClick={openAppointmentTimePicker}
                                                                     aria-label="Appointment time"
-                                                                />
+                                                                >
+                                                                    <span>{appointmentDraftTimeLabel}</span>
+                                                                    <Clock3 />
+                                                                </button>
                                                             </div>
                                                             <button
                                                                 type="button"
@@ -4201,6 +4318,7 @@ export default function LeadsShop({
                                                                 title="Save appointment"
                                                             >
                                                                 <Save />
+                                                                <span>Save appointment</span>
                                                             </button>
                                                         </div>
                                                     </span>
@@ -4771,10 +4889,21 @@ export default function LeadsShop({
                                                             </button>
                                                         </div>
                                                         <textarea
-                                                            readOnly
-                                                            value={loadedDispatchNote}
+                                                            readOnly={!isKeepInTouchQueue}
+                                                            value={isKeepInTouchQueue ? dispatchNoteForm.data.body || loadedDispatchNote : loadedDispatchNote}
+                                                            onChange={(event) => {
+                                                                if (isKeepInTouchQueue) dispatchNoteForm.setData('body', event.target.value);
+                                                            }}
                                                             placeholder="Expand to add a dispatch note…"
                                                         />
+                                                        {isKeepInTouchQueue && (
+                                                            <div className="lead-note-actions">
+                                                                {dispatchNoteForm.errors.body && <em>{dispatchNoteForm.errors.body}</em>}
+                                                                <button type="button" disabled={dispatchNoteForm.processing || !dispatchNoteForm.data.body.trim() || dispatchNoteForm.data.body.trim() === loadedDispatchNote.trim()} onClick={saveDispatchNote}>
+                                                                    <Save /> {dispatchNoteForm.processing ? 'Saving...' : 'Save note'}
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </article>
                                                     {Boolean(queue) && (
                                                         <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--appointment-result">
@@ -4813,10 +4942,21 @@ export default function LeadsShop({
                                                                 </button>
                                                             </div>
                                                             <textarea
-                                                                readOnly
-                                                                value={loadedAppointmentResultNote}
+                                                                readOnly={!isKeepInTouchQueue}
+                                                                value={isKeepInTouchQueue ? appointmentResultNoteForm.data.body || loadedAppointmentResultNote : loadedAppointmentResultNote}
+                                                                onChange={(event) => {
+                                                                    if (isKeepInTouchQueue) appointmentResultNoteForm.setData('body', event.target.value);
+                                                                }}
                                                                 placeholder="Expand to add an appointment result note…"
                                                             />
+                                                            {isKeepInTouchQueue && (
+                                                                <div className="lead-note-actions">
+                                                                    {appointmentResultNoteForm.errors.body && <em>{appointmentResultNoteForm.errors.body}</em>}
+                                                                    <button type="button" disabled={appointmentResultNoteForm.processing || !appointmentResultNoteForm.data.body.trim() || appointmentResultNoteForm.data.body.trim() === loadedAppointmentResultNote.trim()} onClick={saveAppointmentResultNote}>
+                                                                        <Save /> {appointmentResultNoteForm.processing ? 'Saving...' : 'Save note'}
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </article>
                                                     )}
                                                 </>
@@ -5264,6 +5404,111 @@ export default function LeadsShop({
                                     </button>
                                 </div>
                             </form>
+                        </section>
+                    </div>
+                )}
+
+                {appointmentTimePickerOpen && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="appointment-time-picker-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setAppointmentTimePickerOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-time-picker__card">
+                            <header>
+                                <div>
+                                    <span><Clock3 /></span>
+                                    <div>
+                                        <h2 id="appointment-time-picker-title">Select appointment time</h2>
+                                        <p>Choose a time in 15-minute intervals.</p>
+                                    </div>
+                                </div>
+                                <button type="button" onClick={() => setAppointmentTimePickerOpen(false)} aria-label="Close time selection"><X /></button>
+                            </header>
+                            <div className="lead-time-picker__fields">
+                                <label>Hour<select value={appointmentTimeHour} onChange={(event) => setAppointmentTimeHour(event.target.value)}>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0')).map((hour) => <option key={hour} value={hour}>{hour}</option>)}</select></label>
+                                <label>Minute<select value={appointmentTimeMinute} onChange={(event) => setAppointmentTimeMinute(event.target.value)}>{['00', '15', '30', '45'].map((minute) => <option key={minute} value={minute}>{minute}</option>)}</select></label>
+                                <label>Period<select value={appointmentTimePeriod} onChange={(event) => setAppointmentTimePeriod(event.target.value as 'AM' | 'PM')}><option value="AM">AM</option><option value="PM">PM</option></select></label>
+                            </div>
+                            <div className="lead-time-picker__actions">
+                                <button type="button" onClick={() => setAppointmentTimePickerOpen(false)}>Cancel</button>
+                                <button type="button" onClick={confirmAppointmentTime}>OK</button>
+                            </div>
+                        </section>
+                    </div>
+                )}
+
+                {fiveFiveFiveModalOpen && selected && (
+                    <div
+                        className="lead-note-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="lead-555-destination-title"
+                        onMouseDown={(event) => {
+                            if (
+                                event.target === event.currentTarget &&
+                                !followUpProcessing
+                            ) {
+                                setFiveFiveFiveModalOpen(false);
+                            }
+                        }}
+                    >
+                        <section className="lead-note-modal__card lead-sale-modal__card">
+                            <header>
+                                <div>
+                                    <span>
+                                        <Phone />
+                                    </span>
+                                    <div>
+                                        <h2 id="lead-555-destination-title">
+                                            Send to 555 workflow
+                                        </h2>
+                                        <p>
+                                            Choose the queue for{' '}
+                                            {selected.customer_name}.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    disabled={followUpProcessing}
+                                    onClick={() =>
+                                        setFiveFiveFiveModalOpen(false)
+                                    }
+                                    aria-label="Close 555 destination modal"
+                                >
+                                    <X />
+                                </button>
+                            </header>
+
+                            <div className="lead-sale-modal__form">
+                                <div className="lead-555-destination-grid">
+                                    {[
+                                        ['ora', 'ORA', Phone],
+                                        ['la', 'LA', MapPin],
+                                        ['ng', 'NG', Ban],
+                                        ['toss', 'TOSS', Trash2],
+                                    ].map(([status, label, Icon]) => (
+                                        <button
+                                            type="button"
+                                            key={String(status)}
+                                            disabled={followUpProcessing}
+                                            onClick={() =>
+                                                updateLeadStatus(String(status))
+                                            }
+                                        >
+                                            <Icon />
+                                            <strong>{String(label)}</strong>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </section>
                     </div>
                 )}

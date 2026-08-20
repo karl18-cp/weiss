@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\AgentAttendanceSession;
 use App\Models\Lead;
 use App\Services\CallToolsReportingSync;
+use App\Support\AgentAttendanceHours;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +21,7 @@ class TeleHoursController extends Controller
     public function __invoke(
         Request $request,
         CallToolsReportingSync $reportingSync,
+        AgentAttendanceHours $attendanceHours,
     ): Response {
         $this->refreshLoginShiftsIfStale($reportingSync);
 
@@ -179,6 +182,24 @@ class TeleHoursController extends Controller
                 })
                 ->values();
 
+        }
+
+        if (Schema::hasTable('agent_attendance_sessions')) {
+            $portalRows = AgentAttendanceSession::query()
+                ->with('agent:agent_id,agent_name,calltools_user_id')
+                ->whereBetween('work_date', [$selectedFrom->toDateString(), $selectedTo->toDateString()])
+                ->when($agentId, fn ($query) => $query->where('agent_id', $agentId))
+                ->get()
+                ->groupBy('agent_id')
+                ->map(function ($sessions) use ($selectedFrom, $selectedTo, $isRange, $leadCounts, $attendanceHours, $timezone): object {
+                    $first = $sessions->sortBy('clocked_in_at')->first();
+                    $hasOpen = $sessions->contains(fn ($session) => $session->clocked_out_at === null);
+                    $now = CarbonImmutable::now($timezone);
+                    $gross = $sessions->sum(fn (AgentAttendanceSession $session): int => $attendanceHours->grossSeconds($session, $now));
+                    $lunch = $sessions->sum(fn (AgentAttendanceSession $session): int => $attendanceHours->lunchSeconds($session, $now));
+                    return (object) ['app_user_id'=>$first->agent?->calltools_user_id,'agent_id'=>$first->agent_id,'agent_name'=>$first->agent?->agent_name,'shift_date'=>$isRange?$selectedFrom->toDateString().' - '.$selectedTo->toDateString():($first->work_date?->toDateString()??$selectedFrom->toDateString()),'first_login_at'=>$sessions->min('clocked_in_at')?->toIso8601String(),'last_logout_at'=>$hasOpen?null:$sessions->max('clocked_out_at')?->toIso8601String(),'logged_seconds'=>(int)$gross,'lunch_seconds'=>(int)$lunch,'sessions'=>$sessions->count(),'leads_sent'=>(int)($leadCounts[$first->agent_id]??0),'attendance_source'=>'Agent portal'];
+                });
+            $loginDays = $loginDays->map(fn ($row) => $portalRows->get($row->agent_id) ?? $row);
         }
 
         return Inertia::render('lead-workflow/tele-hours', [

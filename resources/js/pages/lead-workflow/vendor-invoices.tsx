@@ -1,5 +1,6 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
+    ArrowLeft,
     ChevronLeft,
     ChevronRight,
     FileText,
@@ -12,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import '@/../css/vendor-invoices.css';
-import DataSectionTabs from '@/components/data-section-tabs';
 import { useSystemModal } from '@/components/system-modal-provider';
 import { crmDateKey } from '@/lib/crm-time';
 import {
@@ -25,9 +25,16 @@ import {
 } from '@/components/ui/dialog';
 
 type Contractor = { con_id: number; contractor: string };
+type Vendor = { vendor_id: number; vendor: string };
 
 type ProjectOption = {
     id: number;
+    project_number: string | null;
+    customer_name: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zip_code: string | null;
     lead: {
         customer_name: string;
         address: string;
@@ -35,7 +42,13 @@ type ProjectOption = {
         state: string;
         zip_code: string;
         company: { prefix: string } | null;
-    };
+    } | null;
+    documents: Array<{
+        id: number;
+        file_name: string;
+        file_mime: string | null;
+        category: string;
+    }>;
 };
 
 type VendorInvoice = {
@@ -44,15 +57,18 @@ type VendorInvoice = {
     project_number: string;
     company_prefix: string;
     customer: string;
-    contractor: Contractor;
+    rep: string;
+    contractor: Contractor | null;
+    vendor: Vendor | null;
     invoice_number: string;
-    invoice_date: string;
+    invoice_date: string | null;
     amount: string;
     balance: string;
     notes: string | null;
     status: 'pending' | 'ok_to_pay' | 'paid';
     file_name: string | null;
     file_mime: string | null;
+    documents: Array<{ id: number; file_name: string; file_mime: string | null }>;
 };
 
 type PaginatedInvoices = {
@@ -64,16 +80,33 @@ type PaginatedInvoices = {
     next_page_url: string | null;
 };
 
+const emptyInvoices: PaginatedInvoices = {
+    data: [],
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+    prev_page_url: null,
+    next_page_url: null,
+};
+
 const currency = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
 });
 
-const date = new Intl.DateTimeFormat('en-US', {
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
     month: '2-digit',
     day: '2-digit',
     year: 'numeric',
 });
+
+const formatInvoiceDate = (value: string | null | undefined) => {
+    if (!value) return '—';
+
+    const parsed = new Date(value);
+
+    return Number.isNaN(parsed.getTime()) ? value : dateFormatter.format(parsed);
+};
 
 const statusLabels: Record<VendorInvoice['status'], string> = {
     pending: 'Pending',
@@ -90,25 +123,39 @@ const withInvoicePrefix = (value: string) => {
 const invoiceSuffix = (value: string) => withInvoicePrefix(value).slice(4);
 
 const projectNumber = (project: ProjectOption) =>
-    `${project.lead.company?.prefix || 'PROJECT'}-${String(project.id).padStart(5, '0')}`;
+    project.project_number || 'Not assigned';
+
+const projectCustomer = (project: ProjectOption) =>
+    project.lead?.customer_name || project.customer_name || 'Unnamed project';
 
 const projectAddress = (project: ProjectOption) =>
-    `${project.lead.address}, ${project.lead.city}, ${project.lead.state} ${project.lead.zip_code}`;
+    [
+        project.lead?.address || project.address,
+        project.lead?.city || project.city,
+        project.lead?.state || project.state,
+        project.lead?.zip_code || project.zip_code,
+    ].filter(Boolean).join(', ') || 'No address';
 
 export default function VendorInvoices({
-    invoices,
-    filters,
-    totalInvoices,
-    totalAmount,
-    projects,
-    contractors,
+    invoices = emptyInvoices,
+    filters = { search: '', show_all: false },
+    totalInvoices = 0,
+    totalAmount = 0,
+    totalBalance = 0,
+    outstandingInvoiceCount = 0,
+    projects = [],
+    contractors = [],
+    vendors = [],
 }: {
     invoices: PaginatedInvoices;
-    filters: { search: string };
+    filters: { search: string; show_all: boolean };
     totalInvoices: number;
     totalAmount: string | number;
+    totalBalance: string | number;
+    outstandingInvoiceCount: number;
     projects: ProjectOption[];
     contractors: Contractor[];
+    vendors: Vendor[];
 }) {
     const { confirm } = useSystemModal();
     const searchInput = useRef<HTMLInputElement>(null);
@@ -117,35 +164,47 @@ export default function VendorInvoices({
         mode: 'create' | 'edit';
         invoice: VendorInvoice | null;
     } | null>(null);
+    const [actionInvoice, setActionInvoice] =
+        useState<VendorInvoice | null>(null);
+    const [attachmentInvoice, setAttachmentInvoice] = useState<VendorInvoice | null>(null);
+    const attachmentForm = useForm<{ files: File[]; target_type: 'invoice'; target_id: string }>({ files: [], target_type: 'invoice', target_id: '' });
     const [preview, setPreview] = useState<{
         url: string;
         mime: string;
     } | null>(null);
     const [projectAddressSearch, setProjectAddressSearch] = useState('');
+    const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
+    const [projectSearchField, setProjectSearchField] = useState<'customer' | 'address'>('customer');
     const [showProjectSuggestions, setShowProjectSuggestions] = useState(false);
     const form = useForm<{
         project_id: string;
         invoice_number: string;
         invoice_date: string;
         contractor_id: string;
+        vendor_id: string;
         amount: string;
         notes: string;
         file: File | null;
+        project_document_id: string;
     }>({
         project_id: '',
         invoice_number: 'INV#',
         invoice_date: '',
         contractor_id: '',
+        vendor_id: '',
         amount: '',
         notes: '',
         file: null,
+        project_document_id: '',
     });
 
     const selectedProject = projects.find(
         (project) => project.id === Number(form.data.project_id),
     );
     const projectSuggestions = useMemo(() => {
-        const query = projectAddressSearch.trim().toLowerCase();
+        const query = (projectSearchField === 'customer' ? projectCustomerSearch : projectAddressSearch)
+            .trim()
+            .toLowerCase();
 
         return projects
             .filter((project) => {
@@ -156,18 +215,18 @@ export default function VendorInvoices({
                 return [
                     projectAddress(project),
                     projectNumber(project),
-                    project.lead.customer_name,
+                    projectCustomer(project),
                 ].some((value) => value.toLowerCase().includes(query));
             })
             .slice(0, 8);
-    }, [projectAddressSearch, projects]);
+    }, [projectAddressSearch, projectCustomerSearch, projectSearchField, projects]);
 
     const fileUrl = (invoice: VendorInvoice) =>
         `/management/projects/${invoice.project_id}/invoices/${invoice.id}/file`;
 
     const runSearch = (value: string) => {
         router.get(
-            '/lead-workflow/data/vendor-invoices',
+            '/management/invoices',
             { search: value || undefined },
             {
                 preserveState: true,
@@ -183,12 +242,15 @@ export default function VendorInvoices({
             invoice_number: 'INV#',
             invoice_date: crmDateKey(),
             contractor_id: '',
+            vendor_id: '',
             amount: '',
             notes: '',
             file: null,
+            project_document_id: '',
         });
         form.clearErrors();
         setProjectAddressSearch('');
+        setProjectCustomerSearch('');
         setShowProjectSuggestions(false);
         setPreview(null);
         setModal({ mode: 'create', invoice: null });
@@ -198,11 +260,15 @@ export default function VendorInvoices({
         form.setData({
             project_id: String(invoice.project_id),
             invoice_number: withInvoicePrefix(invoice.invoice_number),
-            invoice_date: invoice.invoice_date.slice(0, 10),
-            contractor_id: String(invoice.contractor.con_id),
+            invoice_date: invoice.invoice_date?.slice(0, 10) ?? crmDateKey(),
+            contractor_id: invoice.contractor
+                ? String(invoice.contractor.con_id)
+                : '',
+            vendor_id: invoice.vendor ? String(invoice.vendor.vendor_id) : '',
             amount: invoice.amount,
             notes: invoice.notes ?? '',
             file: null,
+            project_document_id: '',
         });
         form.clearErrors();
         const invoiceProject = projects.find(
@@ -211,6 +277,7 @@ export default function VendorInvoices({
         setProjectAddressSearch(
             invoiceProject ? projectAddress(invoiceProject) : '',
         );
+        setProjectCustomerSearch(invoiceProject ? projectCustomer(invoiceProject) : '');
         setShowProjectSuggestions(false);
         setPreview(
             invoice.file_name && invoice.file_mime
@@ -221,15 +288,16 @@ export default function VendorInvoices({
     };
 
     const chooseFile = (file: File | null) => {
-        form.setData('file', file);
+        form.setData((data) => ({ ...data, file, project_document_id: file ? '' : data.project_document_id }));
         setPreview(
             file ? { url: URL.createObjectURL(file), mime: file.type } : null,
         );
     };
 
     const selectProjectAddress = (project: ProjectOption) => {
-        form.setData('project_id', String(project.id));
+        form.setData((data) => ({ ...data, project_id: String(project.id), project_document_id: '' }));
         setProjectAddressSearch(projectAddress(project));
+        setProjectCustomerSearch(projectCustomer(project));
         setShowProjectSuggestions(false);
     };
 
@@ -257,20 +325,9 @@ export default function VendorInvoices({
         });
     };
 
-    const updateStatus = (
-        invoice: VendorInvoice,
-        status: VendorInvoice['status'],
-    ) => {
-        router.patch(
-            `/management/projects/${invoice.project_id}/invoices/${invoice.id}/status`,
-            { status },
-            { preserveScroll: true },
-        );
-    };
-
     const remove = async (invoice: VendorInvoice) => {
         const accepted = await confirm({
-            title: 'Delete vendor invoice?',
+            title: 'Delete vendor payment?',
             message: `${invoice.invoice_number} and its attached file will be permanently deleted.`,
             confirmLabel: 'Delete invoice',
             tone: 'danger',
@@ -284,35 +341,61 @@ export default function VendorInvoices({
         }
     };
 
+    const afterActionChooserCloses = (action: () => void) => {
+        setActionInvoice(null);
+        window.setTimeout(action, 180);
+    };
+
     return (
         <>
-            <Head title="Vendor Invoices" />
+            <Head title="Vendor Payments" />
             <main className="vendor-data-page">
                 <header className="vendor-data-header">
                     <div>
                         <span>Data</span>
-                        <h1>Vendor Invoices</h1>
+                        <h1>Vendor Payments</h1>
                         <p>
-                            Every vendor invoice recorded across all projects.
+                            Every vendor payment recorded across all projects.
                         </p>
                     </div>
-                    <div className="vendor-data-summary">
-                        <strong>{totalInvoices.toLocaleString()}</strong>
-                        <span>
-                            invoices · {currency.format(Number(totalAmount))}
-                        </span>
+                    <div className="vendor-data-header-actions">
+                        <nav className="vendor-register-tabs">
+                            <a href="/management/receivables">Receivables</a>
+                            <a href="/management/payables">Payables</a>
+                            <a className="is-active" href="/management/invoices">Invoices</a>
+                        </nav>
+                        <div className="vendor-data-summaries">
+                            <div className="vendor-data-summary">
+                                <strong>{currency.format(Number(totalAmount))}</strong>
+                                <span>{totalInvoices.toLocaleString()} unpaid invoices</span>
+                            </div>
+                            <div className="vendor-data-summary is-balance">
+                                <strong>{currency.format(Number(totalBalance))}</strong>
+                                <span>{outstandingInvoiceCount.toLocaleString()} balances</span>
+                                <button
+                                    type="button"
+                                    onClick={() => router.get('/management/invoices', {
+                                        search: search || undefined,
+                                        show_all: filters.show_all ? undefined : 1,
+                                    })}
+                                >
+                                    {filters.show_all ? 'Show balances only' : 'See all invoices'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </header>
 
-                <DataSectionTabs
-                    active="Vendor Invoices"
-                    onSearch={() => searchInput.current?.focus()}
-                />
+                <nav className="vendor-register-navigation">
+                    <a href="/management/projects">
+                        <ArrowLeft /> Back to Projects
+                    </a>
+                </nav>
 
                 <section className="vendor-data-panel">
                     <header className="vendor-data-toolbar">
                         <div>
-                            <h2>Vendor invoice register</h2>
+                            <h2>Vendor payment register</h2>
                             <span>{invoices.total} matching invoices</span>
                         </div>
                         <form
@@ -349,7 +432,7 @@ export default function VendorInvoices({
                             className="vendor-data-add"
                             onClick={openNew}
                         >
-                            <Plus /> Add vendor invoice
+                            <Plus /> Add Invoice
                         </button>
                     </header>
 
@@ -360,39 +443,64 @@ export default function VendorInvoices({
                                     <th>Charged by</th>
                                     <th>Invoice number</th>
                                     <th>Project #</th>
+                                    <th>Rep</th>
                                     <th>Description</th>
                                     <th>Date</th>
                                     <th>Amount</th>
                                     <th>Balance</th>
                                     <th>Status</th>
                                     <th>File</th>
-                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {invoices.data.map((invoice) => (
-                                    <tr key={invoice.id}>
+                                    <tr
+                                        key={invoice.id}
+                                        className="vendor-data-clickable-row"
+                                        tabIndex={0}
+                                        onClick={() => setActionInvoice(invoice)}
+                                        onKeyDown={(event) => {
+                                            if (
+                                                event.key === 'Enter' ||
+                                                event.key === ' '
+                                            ) {
+                                                event.preventDefault();
+                                                setActionInvoice(invoice);
+                                            }
+                                        }}
+                                    >
                                         <td>
                                             <strong>
-                                                {invoice.contractor.contractor}
+                                                {invoice.contractor?.contractor ??
+                                                    invoice.vendor?.vendor ??
+                                                    'Unknown vendor'}
                                             </strong>
                                             <small>
                                                 {invoice.company_prefix}
                                             </small>
                                         </td>
                                         <td className="is-link">
-                                            {invoice.invoice_number}
+                                            <button className="vendor-invoice-attachment-trigger" type="button" onClick={(event) => { event.stopPropagation(); attachmentForm.setData({ files: [], target_type: 'invoice', target_id: String(invoice.id) }); attachmentForm.clearErrors(); setAttachmentInvoice(invoice); }}>
+                                                {invoice.invoice_number}
+                                            </button>
                                         </td>
-                                        <td className="is-link">
-                                            {invoice.project_number}
+                                        <td>
+                                            <a
+                                                className="vendor-project-link"
+                                                href={`/management/projects?project=${invoice.project_id}&tab=INV`}
+                                                onClick={(event) =>
+                                                    event.stopPropagation()
+                                                }
+                                            >
+                                                {invoice.project_number}
+                                            </a>
                                         </td>
+                                        <td>{invoice.rep}</td>
                                         <td title={invoice.notes || undefined}>
                                             {invoice.notes || '—'}
                                         </td>
                                         <td>
-                                            {date.format(
-                                                new Date(invoice.invoice_date),
-                                            )}
+                                            {formatInvoiceDate(invoice.invoice_date)}
                                         </td>
                                         <td>
                                             <strong>
@@ -407,28 +515,11 @@ export default function VendorInvoices({
                                             )}
                                         </td>
                                         <td>
-                                            <select
+                                            <span
                                                 className={`vendor-status is-${invoice.status}`}
-                                                value={invoice.status}
-                                                onChange={(event) =>
-                                                    updateStatus(
-                                                        invoice,
-                                                        event.target
-                                                            .value as VendorInvoice['status'],
-                                                    )
-                                                }
                                             >
-                                                {Object.entries(
-                                                    statusLabels,
-                                                ).map(([value, label]) => (
-                                                    <option
-                                                        key={value}
-                                                        value={value}
-                                                    >
-                                                        {label}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                {statusLabels[invoice.status]}
+                                            </span>
                                         </td>
                                         <td>
                                             {invoice.file_name ? (
@@ -437,6 +528,9 @@ export default function VendorInvoices({
                                                     href={fileUrl(invoice)}
                                                     target="_blank"
                                                     rel="noreferrer"
+                                                    onClick={(event) =>
+                                                        event.stopPropagation()
+                                                    }
                                                 >
                                                     <FileText /> View
                                                 </a>
@@ -445,27 +539,6 @@ export default function VendorInvoices({
                                                     None
                                                 </span>
                                             )}
-                                        </td>
-                                        <td>
-                                            <div className="vendor-row-actions">
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        openEdit(invoice)
-                                                    }
-                                                >
-                                                    <Pencil /> Edit
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="is-delete"
-                                                    onClick={() =>
-                                                        void remove(invoice)
-                                                    }
-                                                >
-                                                    <Trash2 /> Delete
-                                                </button>
-                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -477,7 +550,7 @@ export default function VendorInvoices({
                                         >
                                             <FileText />
                                             <strong>
-                                                No vendor invoices found
+                                                No vendor payments found
                                             </strong>
                                             <span>
                                                 Invoices created inside projects
@@ -524,6 +597,92 @@ export default function VendorInvoices({
                 </section>
 
                 <Dialog
+                    open={actionInvoice !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setActionInvoice(null);
+                    }}
+                >
+                    {actionInvoice && (
+                        <DialogContent className="vendor-action-modal">
+                            <DialogHeader>
+                                <DialogTitle>
+                                    {actionInvoice.invoice_number}
+                                </DialogTitle>
+                                <DialogDescription>
+                                    Choose what you want to do with this invoice.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="vendor-action-choices">
+                                {Number(actionInvoice.balance) > 0 && (
+                                    <button
+                                        type="button"
+                                        className="is-pay"
+                                        onClick={() => {
+                                            const invoice = actionInvoice;
+                                            afterActionChooserCloses(() =>
+                                                router.get(
+                                                    `/management/payables?invoice=${invoice.id}`,
+                                                ),
+                                            );
+                                        }}
+                                    >
+                                        Pay invoice
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const invoice = actionInvoice;
+                                        afterActionChooserCloses(() =>
+                                            openEdit(invoice),
+                                        );
+                                    }}
+                                >
+                                    <Pencil /> Edit invoice
+                                </button>
+                                <button type="button" onClick={() => {
+                                    const invoice = actionInvoice;
+                                    afterActionChooserCloses(() => {
+                                        attachmentForm.setData({ files: [], target_type: 'invoice', target_id: String(invoice.id) });
+                                        attachmentForm.clearErrors();
+                                        setAttachmentInvoice(invoice);
+                                    });
+                                }}><Upload /> Add files or photos</button>
+                                <button
+                                    type="button"
+                                    className="is-delete"
+                                    onClick={() => {
+                                        const invoice = actionInvoice;
+                                        afterActionChooserCloses(() =>
+                                            void remove(invoice),
+                                        );
+                                    }}
+                                >
+                                    <Trash2 /> Delete invoice
+                                </button>
+                            </div>
+                        </DialogContent>
+                    )}
+                </Dialog>
+
+                <Dialog open={attachmentInvoice !== null} onOpenChange={(open) => !open && !attachmentForm.processing && setAttachmentInvoice(null)}>
+                    {attachmentInvoice && <DialogContent className="vendor-action-modal"><form onSubmit={(event) => {
+                        event.preventDefault();
+                        attachmentForm.post(`/management/projects/${attachmentInvoice.project_id}/documents`, { forceFormData: true, preserveScroll: true, onSuccess: () => { setAttachmentInvoice(null); attachmentForm.reset(); } });
+                    }}>
+                        <DialogHeader><DialogTitle>{attachmentInvoice.invoice_number}</DialogTitle><DialogDescription>View existing attachments or add PDFs, images, and photos. New files also appear in the project DOC tab and Google Drive.</DialogDescription></DialogHeader>
+                        <div className="vendor-attachment-list">
+                            {attachmentInvoice.file_name && <a href={fileUrl(attachmentInvoice)} target="_blank" rel="noreferrer"><FileText /><span>{attachmentInvoice.file_name}</span><strong>View</strong></a>}
+                            {attachmentInvoice.documents.map((document) => <a key={document.id} href={`/management/projects/${attachmentInvoice.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a>)}
+                            {!attachmentInvoice.file_name && attachmentInvoice.documents.length === 0 && <p>No files attached yet.</p>}
+                        </div>
+                        <label className="vendor-upload-panel"><span><Upload /> {attachmentForm.data.files.length ? `${attachmentForm.data.files.length} files selected` : 'Choose files or photos'}</span><input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => attachmentForm.setData('files', Array.from(event.target.files ?? []))} /></label>
+                        {attachmentForm.errors.files && <small>{attachmentForm.errors.files}</small>}
+                        <DialogFooter className="vendor-modal-footer"><button type="button" onClick={() => setAttachmentInvoice(null)}>Cancel</button><button type="submit" disabled={attachmentForm.processing || attachmentForm.data.files.length === 0}>{attachmentForm.processing ? 'Uploading…' : 'Upload files'}</button></DialogFooter>
+                    </form></DialogContent>}
+                </Dialog>
+
+                <Dialog
                     open={modal !== null}
                     onOpenChange={(open) => {
                         if (!open && !form.processing) {
@@ -538,19 +697,37 @@ export default function VendorInvoices({
                                 <DialogHeader>
                                     <DialogTitle>
                                         {modal.mode === 'create'
-                                            ? 'Add vendor invoice'
-                                            : 'Edit vendor invoice'}
+                                            ? 'Add vendor payment'
+                                            : 'Edit vendor payment'}
                                     </DialogTitle>
                                     <DialogDescription>
                                         Choose the related project and
-                                        contractor. The invoice will also appear
+                                        contractor or vendor. The invoice will also appear
                                         in that project's INV tab.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className="vendor-invoice-form-layout">
                                     <div className="vendor-invoice-form">
                                         <div className="vendor-project-address-picker is-wide">
-                                            <span>Search project address</span>
+                                            <span>Project customer and address</span>
+                                            <div className="vendor-project-address-input">
+                                                <Search />
+                                                <input
+                                                    type="text"
+                                                    autoComplete="off"
+                                                    disabled={modal.mode === 'edit'}
+                                                    value={projectCustomerSearch}
+                                                    placeholder="Start typing a project customer…"
+                                                    onFocus={() => { setProjectSearchField('customer'); setShowProjectSuggestions(true); }}
+                                                    onBlur={() => setShowProjectSuggestions(false)}
+                                                    onChange={(event) => {
+                                                        setProjectCustomerSearch(event.target.value);
+                                                        form.setData('project_id', '');
+                                                        setProjectSearchField('customer');
+                                                        setShowProjectSuggestions(true);
+                                                    }}
+                                                />
+                                            </div>
                                             <div className="vendor-project-address-input">
                                                 <Search />
                                                 <input
@@ -561,11 +738,7 @@ export default function VendorInvoices({
                                                     }
                                                     value={projectAddressSearch}
                                                     placeholder="Start typing a project street address…"
-                                                    onFocus={() =>
-                                                        setShowProjectSuggestions(
-                                                            true,
-                                                        )
-                                                    }
+                                                    onFocus={() => { setProjectSearchField('address'); setShowProjectSuggestions(true); }}
                                                     onBlur={() =>
                                                         setShowProjectSuggestions(
                                                             false,
@@ -579,6 +752,7 @@ export default function VendorInvoices({
                                                             'project_id',
                                                             '',
                                                         );
+                                                        setProjectSearchField('address');
                                                         setShowProjectSuggestions(
                                                             true,
                                                         );
@@ -615,9 +789,7 @@ export default function VendorInvoices({
                                                                         )}{' '}
                                                                         ·{' '}
                                                                         {
-                                                                            project
-                                                                                .lead
-                                                                                .customer_name
+                                                                            projectCustomer(project)
                                                                         }
                                                                     </small>
                                                                 </button>
@@ -686,38 +858,66 @@ export default function VendorInvoices({
                                         <label>
                                             <span>Charged by</span>
                                             <select
-                                                value={form.data.contractor_id}
-                                                onChange={(event) =>
-                                                    form.setData(
-                                                        'contractor_id',
-                                                        event.target.value,
-                                                    )
+                                                value={
+                                                    form.data.contractor_id
+                                                        ? `contractor:${form.data.contractor_id}`
+                                                        : form.data.vendor_id
+                                                          ? `vendor:${form.data.vendor_id}`
+                                                          : ''
                                                 }
+                                                onChange={(event) => {
+                                                    const [kind, id = ''] =
+                                                        event.target.value.split(':');
+                                                    form.setData((data) => ({
+                                                        ...data,
+                                                        contractor_id:
+                                                            kind === 'contractor'
+                                                                ? id
+                                                                : '',
+                                                        vendor_id:
+                                                            kind === 'vendor'
+                                                                ? id
+                                                                : '',
+                                                    }));
+                                                }}
                                             >
                                                 <option value="">
-                                                    Select contractor
+                                                    Select contractor or vendor
                                                 </option>
-                                                {contractors.map(
-                                                    (contractor) => (
+                                                <optgroup label="Contractors">
+                                                    {contractors.map((contractor) => (
                                                         <option
                                                             key={
-                                                                contractor.con_id
+                                                                `contractor-${contractor.con_id}`
                                                             }
                                                             value={
-                                                                contractor.con_id
+                                                                `contractor:${contractor.con_id}`
                                                             }
                                                         >
                                                             {
                                                                 contractor.contractor
                                                             }
                                                         </option>
-                                                    ),
-                                                )}
+                                                    ))}
+                                                </optgroup>
+                                                <optgroup label="Vendors">
+                                                    {vendors.map((vendor) => (
+                                                        <option
+                                                            key={`vendor-${vendor.vendor_id}`}
+                                                            value={`vendor:${vendor.vendor_id}`}
+                                                        >
+                                                            {vendor.vendor}
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
                                             </select>
                                             {form.errors.contractor_id && (
                                                 <small>
                                                     {form.errors.contractor_id}
                                                 </small>
+                                            )}
+                                            {form.errors.vendor_id && (
+                                                <small>{form.errors.vendor_id}</small>
                                             )}
                                         </label>
                                         <label>
@@ -778,6 +978,20 @@ export default function VendorInvoices({
                                                     )
                                                 }
                                             />
+                                        </label>
+                                        <label className="is-wide">
+                                            <span>Use existing project file (optional)</span>
+                                            <select
+                                                value={form.data.project_document_id}
+                                                onChange={(event) => {
+                                                    form.setData((data) => ({ ...data, project_document_id: event.target.value, file: null }));
+                                                    setPreview(null);
+                                                }}
+                                            >
+                                                <option value="">No existing file selected</option>
+                                                {selectedProject?.documents.map((document) => <option key={document.id} value={document.id}>{document.file_name} ({document.category})</option>)}
+                                            </select>
+                                            <small>Includes files uploaded by the salesman in My Sold.</small>
                                         </label>
                                     </div>
                                     <aside className="vendor-upload-panel">

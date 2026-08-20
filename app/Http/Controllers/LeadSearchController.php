@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Lead;
 use App\Support\PhoneNumberVisibility;
+use App\Support\LeadSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -57,6 +58,7 @@ class LeadSearchController extends Controller
                     ->orWhere('state', 'like', $like)->orWhere('zip_code', 'like', $like)
                     ->orWhere('email', 'like', $like)->orWhere('primary_number', 'like', $like)
                     ->orWhere('secondary_number', 'like', $like)->orWhere('mobile_number', 'like', $like);
+                LeadSearch::orWhereFullAddress($builder, $query);
                 if (strlen($digits) >= 3) {
                     foreach (['primary_number', 'secondary_number', 'mobile_number'] as $column) {
                         $builder->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE($column, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", ['%'.$digits.'%']);

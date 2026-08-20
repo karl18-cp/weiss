@@ -41,8 +41,8 @@ class PhoneNumberVisibility
         }
 
         $digits = preg_replace('/\D+/', '', $number) ?: '';
-        $visible = substr($digits, -3);
+        $visible = substr($digits, 0, 4);
 
-        return str_repeat('*', max(7, strlen($digits) - strlen($visible))).$visible;
+        return $visible.str_repeat('*', max(6, strlen($digits) - strlen($visible)));
     }
 }

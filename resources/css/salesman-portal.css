@@ -850,3 +850,48 @@
         padding-top: 0.25rem;
     }
 }
+.salesman-location-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #cad6e6;
+    border-radius: 0.7rem;
+    color: #42526a;
+    background: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.salesman-location-toggle.is-sharing {
+    border-color: #57b88a;
+    color: #12633f;
+    background: #eaf8f0;
+}
+
+.salesman-location-toggle svg { width: 1rem; }
+.salesman-sold-project { width: min(1420px, calc(100% - 48px)); margin: 28px auto 70px; color: #12203a; }
+.salesman-sold-project__back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px; color: #2864dc; font-weight: 800; }
+.salesman-sold-project__back svg { width: 18px; }
+.salesman-sold-project > header { padding: 28px 32px; border-radius: 20px; color: white; background: linear-gradient(125deg,#174aa9,#3278e8); }
+.salesman-sold-project > header span,.salesman-sold-project__panel > div:first-child > span { font-size: 12px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+.salesman-sold-project > header h1 { margin: 5px 0; font-size: 34px; }
+.salesman-sold-project__summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin: 18px 0; }
+.salesman-sold-project__summary article,.salesman-sold-project__panel { border: 1px solid #dce5f3; border-radius: 16px; background: #fff; box-shadow: 0 8px 25px rgb(25 55 100 / 6%); }
+.salesman-sold-project__summary article { padding: 18px; }
+.salesman-sold-project__summary .wide { grid-column: 1/-1; }
+.salesman-sold-project__summary small { display:block; color:#74829a; font-weight:800; text-transform:uppercase; }
+.salesman-sold-project__summary strong { display:block; margin-top:7px; font-size:17px; }
+.salesman-sold-project__panel { margin-top:18px; padding:24px; }
+.salesman-sold-project__panel h2 { margin:4px 0 6px; }
+.salesman-sold-project__sales,.salesman-sold-project__documents { display:grid; gap:10px; margin-top:18px; }
+.salesman-sold-project__sales article { display:grid; grid-template-columns:1fr 2fr 1fr 1fr; gap:16px; padding:14px; border-radius:12px; background:#f3f7fd; }
+.salesman-sold-project__drop { position:relative; display:flex; flex-direction:column; align-items:center; gap:6px; margin-top:18px; padding:28px; border:2px dashed #9ab7e8; border-radius:14px; color:#3464b5; background:#f5f9ff; cursor:pointer; }
+.salesman-sold-project__drop input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.salesman-sold-project form button { display:block; margin:12px 0 0 auto; padding:12px 20px; border:0; border-radius:10px; color:#fff; background:#2468e5; font-weight:850; }
+.salesman-sold-project form button:disabled { opacity:.5; }
+.salesman-sold-project__documents a { display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #dde6f4; border-radius:11px; color:inherit; }
+.salesman-sold-project__documents svg { width:22px; color:#2864dc; }
+.salesman-sold-project__documents span { display:flex; flex-direction:column; }
+@media (max-width:900px){.salesman-sold-project__summary{grid-template-columns:1fr 1fr}.salesman-sold-project__sales article{grid-template-columns:1fr 1fr}.salesman-sold-project{width:min(100% - 24px,1420px)}}

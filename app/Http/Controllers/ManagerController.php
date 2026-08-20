@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\Manager;
 use App\Support\ManagerAccess;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,6 +42,58 @@ class ManagerController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Manager created.']);
 
         return back();
+    }
+
+    public function report(Manager $manager): JsonResponse
+    {
+        $base = $manager->secondaryLeads();
+        $confirmedStatuses = ['confirmed', 'dispatched', 'project'];
+        $isConfirmed = fn ($query) => $query->whereIn('status', $confirmedStatuses)
+            ->orWhereHas('movements', fn ($movement) => $movement->whereIn('to_status', $confirmedStatuses));
+        $isDispatched = fn ($query) => $query->where('status', 'dispatched')
+            ->orWhereHas('movements', fn ($movement) => $movement->where('to_status', 'dispatched'));
+
+        $rows = (clone $base)
+            ->withExists('project')
+            ->with([
+                'notes:id,lead_id,note_type,body,created_at',
+                'movements:id,lead_id,to_status,created_at',
+            ])
+            ->latest('updated_at')
+            ->limit(300)
+            ->get()
+            ->map(function ($lead) use ($confirmedStatuses): array {
+                $movementStatuses = $lead->movements->pluck('to_status');
+
+                return [
+                    'id' => $lead->id,
+                    'origin_at' => $lead->created_at?->toIso8601String(),
+                    'appointment_at' => $lead->appointment_at?->toIso8601String(),
+                    'customer' => $lead->customer_name,
+                    'result' => ucwords(str_replace('_', ' ', $lead->status ?: 'fresh')),
+                    'confirmed' => in_array($lead->status, $confirmedStatuses, true)
+                        || $movementStatuses->intersect($confirmedStatuses)->isNotEmpty(),
+                    'dispatched' => $lead->status === 'dispatched'
+                        || $movementStatuses->contains('dispatched'),
+                    'sold' => (bool) $lead->project_exists,
+                    'city' => $lead->city,
+                    'notes' => $lead->notes->sortByDesc('id')->pluck('body')->filter()->take(3)->join(' | '),
+                ];
+            });
+
+        $soldQuery = (clone $base)->whereHas('project');
+
+        return response()->json([
+            'manager' => ['id' => $manager->manager_id, 'name' => $manager->manager_name],
+            'summary' => [
+                'leads' => (clone $base)->count(),
+                'confirmed' => (clone $base)->where($isConfirmed)->count(),
+                'dispatched' => (clone $base)->where($isDispatched)->count(),
+                'sold' => (clone $soldQuery)->count(),
+                'last_sale' => (clone $soldQuery)->max('appointment_at'),
+            ],
+            'rows' => $rows,
+        ]);
     }
 
     public function update(ManagerRequest $request, Manager $manager): RedirectResponse

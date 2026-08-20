@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('city');
             $table->text('state');
             $table->string('email');
-            $table->integer('phone');
+            $table->string('phone', 50);
             $table->integer('license');
             $table->date('lic_expire');
             $table->date('worker_comp');
