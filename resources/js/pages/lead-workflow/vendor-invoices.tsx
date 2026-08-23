@@ -23,6 +23,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { SearchableSelect } from '@/components/searchable-select';
 
 type Contractor = { con_id: number; contractor: string };
 type Vendor = { vendor_id: number; vendor: string };
@@ -339,6 +340,14 @@ export default function VendorInvoices({
                 { preserveScroll: true },
             );
         }
+    };
+
+    const removeAttachedFile = (url: string, fileName: string) => {
+        if (!window.confirm(`Remove ${fileName} from the CRM and Google Drive?`)) return;
+        router.delete(url, {
+            preserveScroll: true,
+            onSuccess: () => setAttachmentInvoice(null),
+        });
     };
 
     const afterActionChooserCloses = (action: () => void) => {
@@ -672,12 +681,12 @@ export default function VendorInvoices({
                     }}>
                         <DialogHeader><DialogTitle>{attachmentInvoice.invoice_number}</DialogTitle><DialogDescription>View existing attachments or add PDFs, images, and photos. New files also appear in the project DOC tab and Google Drive.</DialogDescription></DialogHeader>
                         <div className="vendor-attachment-list">
-                            {attachmentInvoice.file_name && <a href={fileUrl(attachmentInvoice)} target="_blank" rel="noreferrer"><FileText /><span>{attachmentInvoice.file_name}</span><strong>View</strong></a>}
-                            {attachmentInvoice.documents.map((document) => <a key={document.id} href={`/management/projects/${attachmentInvoice.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a>)}
+                            {attachmentInvoice.file_name && <div className="accounting-attachment-row"><a href={fileUrl(attachmentInvoice)} target="_blank" rel="noreferrer"><FileText /><span>{attachmentInvoice.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/projects/${attachmentInvoice.project_id}/invoices/${attachmentInvoice.id}/file`, attachmentInvoice.file_name!)}><Trash2 /> Remove</button></div>}
+                            {attachmentInvoice.documents.map((document) => <div className="accounting-attachment-row" key={document.id}><a href={`/management/projects/${attachmentInvoice.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/projects/${attachmentInvoice.project_id}/documents/${document.id}`, document.file_name)}><Trash2 /> Remove</button></div>)}
                             {!attachmentInvoice.file_name && attachmentInvoice.documents.length === 0 && <p>No files attached yet.</p>}
                         </div>
-                        <label className="vendor-upload-panel"><span><Upload /> {attachmentForm.data.files.length ? `${attachmentForm.data.files.length} files selected` : 'Choose files or photos'}</span><input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => attachmentForm.setData('files', Array.from(event.target.files ?? []))} /></label>
-                        {attachmentForm.errors.files && <small>{attachmentForm.errors.files}</small>}
+                        <label className="vendor-upload-panel"><span><Upload /> {attachmentForm.data.files.length ? `${attachmentForm.data.files.length} files selected` : 'Choose files or photos'}</span><input type="file" multiple accept=".pdf,.jpg,.jpeg,.jfif,.png,.webp,.heic,.heif" onChange={(event) => attachmentForm.setData('files', Array.from(event.target.files ?? []))} /></label>
+                        {Object.entries(attachmentForm.errors).map(([key, message]) => <small key={key}>{message}</small>)}
                         <DialogFooter className="vendor-modal-footer"><button type="button" onClick={() => setAttachmentInvoice(null)}>Cancel</button><button type="submit" disabled={attachmentForm.processing || attachmentForm.data.files.length === 0}>{attachmentForm.processing ? 'Uploading…' : 'Upload files'}</button></DialogFooter>
                     </form></DialogContent>}
                 </Dialog>
@@ -857,7 +866,7 @@ export default function VendorInvoices({
                                         </label>
                                         <label>
                                             <span>Charged by</span>
-                                            <select
+                                            <SearchableSelect
                                                 value={
                                                     form.data.contractor_id
                                                         ? `contractor:${form.data.contractor_id}`
@@ -865,9 +874,9 @@ export default function VendorInvoices({
                                                           ? `vendor:${form.data.vendor_id}`
                                                           : ''
                                                 }
-                                                onChange={(event) => {
+                                                onChange={(value) => {
                                                     const [kind, id = ''] =
-                                                        event.target.value.split(':');
+                                                        value.split(':');
                                                     form.setData((data) => ({
                                                         ...data,
                                                         contractor_id:
@@ -880,37 +889,13 @@ export default function VendorInvoices({
                                                                 : '',
                                                     }));
                                                 }}
-                                            >
-                                                <option value="">
-                                                    Select contractor or vendor
-                                                </option>
-                                                <optgroup label="Contractors">
-                                                    {contractors.map((contractor) => (
-                                                        <option
-                                                            key={
-                                                                `contractor-${contractor.con_id}`
-                                                            }
-                                                            value={
-                                                                `contractor:${contractor.con_id}`
-                                                            }
-                                                        >
-                                                            {
-                                                                contractor.contractor
-                                                            }
-                                                        </option>
-                                                    ))}
-                                                </optgroup>
-                                                <optgroup label="Vendors">
-                                                    {vendors.map((vendor) => (
-                                                        <option
-                                                            key={`vendor-${vendor.vendor_id}`}
-                                                            value={`vendor:${vendor.vendor_id}`}
-                                                        >
-                                                            {vendor.vendor}
-                                                        </option>
-                                                    ))}
-                                                </optgroup>
-                                            </select>
+                                                searchPlaceholder="Search contractors or vendors…"
+                                                options={[
+                                                    { value: '', label: 'Select contractor or vendor' },
+                                                    ...contractors.map((contractor) => ({ value: `contractor:${contractor.con_id}`, label: `Contractor — ${contractor.contractor}`, keywords: contractor.contractor })),
+                                                    ...vendors.map((vendor) => ({ value: `vendor:${vendor.vendor_id}`, label: `Vendor — ${vendor.vendor}`, keywords: vendor.vendor })),
+                                                ]}
+                                            />
                                             {form.errors.contractor_id && (
                                                 <small>
                                                     {form.errors.contractor_id}
@@ -981,16 +966,18 @@ export default function VendorInvoices({
                                         </label>
                                         <label className="is-wide">
                                             <span>Use existing project file (optional)</span>
-                                            <select
+                                            <SearchableSelect
                                                 value={form.data.project_document_id}
-                                                onChange={(event) => {
-                                                    form.setData((data) => ({ ...data, project_document_id: event.target.value, file: null }));
+                                                onChange={(value) => {
+                                                    form.setData((data) => ({ ...data, project_document_id: value, file: null }));
                                                     setPreview(null);
                                                 }}
-                                            >
-                                                <option value="">No existing file selected</option>
-                                                {selectedProject?.documents.map((document) => <option key={document.id} value={document.id}>{document.file_name} ({document.category})</option>)}
-                                            </select>
+                                                searchPlaceholder="Search project files…"
+                                                options={[
+                                                    { value: '', label: 'No existing file selected' },
+                                                    ...(selectedProject?.documents ?? []).map((document) => ({ value: String(document.id), label: `${document.file_name} (${document.category})` })),
+                                                ]}
+                                            />
                                             <small>Includes files uploaded by the salesman in My Sold.</small>
                                         </label>
                                     </div>

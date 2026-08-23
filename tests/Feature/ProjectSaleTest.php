@@ -7,8 +7,11 @@ use App\Models\Contractor;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Models\Project;
+use App\Models\ProjectAccountingTransaction;
+use App\Models\ProjectInvoice;
 use App\Models\Salesman;
 use App\Models\Vendor;
+use App\Services\GoogleDriveProjectStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -650,6 +653,7 @@ test('project invoices can be charged by a vendor instead of a contractor', func
         'type' => 'payable',
         'category' => 'Vendor Payment',
         'transaction_date' => '2026-08-19',
+        'vendor_id' => $vendor->vendor_id,
         'payment_method' => 'check',
         'reference_number' => 'CH#VENDOR-1',
         'amount' => 100,
@@ -657,8 +661,11 @@ test('project invoices can be charged by a vendor instead of a contractor', func
         'project_invoice_id' => $invoice->id,
     ])->assertRedirect();
 
-    expect($project->accountingTransactions()->where('type', 'payable')->firstOrFail()->counterparty)
-        ->toBe('Project Supply Vendor');
+    $vendorPayable = $project->accountingTransactions()->where('type', 'payable')->firstOrFail();
+    expect($vendorPayable->counterparty)
+        ->toBe('Project Supply Vendor')
+        ->and($vendorPayable->vendor_id)->toBe($vendor->vendor_id)
+        ->and($vendorPayable->vendor->vendor)->toBe('Project Supply Vendor');
 
     $this->get(route('management.invoices'))
         ->assertInertia(fn (Assert $page) => $page
@@ -736,7 +743,11 @@ test('project accounting supports standalone receivables optional schedules and 
         'payment_method' => 'credit_card',
         'reference_number' => 'WRONG-100',
         'status' => 'deposit',
-    ])->assertSessionHasErrors('reference_number');
+    ])->assertRedirect();
+
+    expect($project->accountingTransactions()
+        ->where('reference_number', 'CC-WRONG-100')
+        ->exists())->toBeTrue();
 
     $contractor = Contractor::query()->create([
         'contractor' => 'Project Vendor',
@@ -845,6 +856,95 @@ test('project accounting supports standalone receivables optional schedules and 
     $this->delete(route('management.projects.accounting-transactions.destroy', [$project, $transaction]))
         ->assertRedirect();
     $this->assertDatabaseMissing('project_accounting_transactions', ['id' => $transaction->id]);
+});
+
+test('invoice receivable and payable attachment uploads persist on their records', function () {
+    Storage::fake('local');
+    $drive = Mockery::mock(GoogleDriveProjectStorage::class);
+    $drive->shouldReceive('mirror')->times(3)->andReturn([
+        'id' => 'drive-file-id',
+        'webViewLink' => 'https://drive.google.com/file/test',
+    ]);
+    app()->instance(GoogleDriveProjectStorage::class, $drive);
+
+    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+    $project = Project::query()->create([
+        'lead_id' => $lead->id,
+        'project_number' => 'PC#9001',
+        'amount' => 5000,
+        'created_by' => $account->acc_id,
+    ]);
+    $invoice = ProjectInvoice::query()->create([
+        'project_id' => $project->id,
+        'invoice_number' => 'INV#UPLOAD',
+        'invoice_date' => '2026-08-21',
+        'amount' => 500,
+        'status' => 'pending',
+    ]);
+    $receivable = ProjectAccountingTransaction::query()->create([
+        'project_id' => $project->id,
+        'type' => 'receivable',
+        'category' => 'Customer Payment',
+        'transaction_date' => '2026-08-21',
+        'amount' => 250,
+        'status' => 'pending',
+    ]);
+    $payable = ProjectAccountingTransaction::query()->create([
+        'project_id' => $project->id,
+        'type' => 'payable',
+        'category' => 'Vendor Payment',
+        'transaction_date' => '2026-08-21',
+        'amount' => 100,
+        'status' => 'ok_to_pay',
+    ]);
+
+    foreach ([
+        ['invoice', $invoice->id, 'invoice.pdf', 'project_invoice_id'],
+        ['accounting', $receivable->id, 'receivable.jfif', 'project_accounting_transaction_id'],
+        ['accounting', $payable->id, 'payable.jpg', 'project_accounting_transaction_id'],
+    ] as [$targetType, $targetId, $fileName, $foreignKey]) {
+        $this->actingAs($account)
+            ->post(route('management.projects.documents.store', $project), [
+                'target_type' => $targetType,
+                'target_id' => $targetId,
+                'files' => [UploadedFile::fake()->create($fileName, 100, 'application/octet-stream')],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $document = $project->documents()->where($foreignKey, $targetId)->latest()->firstOrFail();
+        expect($document->file_name)->toBe($fileName)
+            ->and($document->drive_file_id)->toBe('drive-file-id');
+        Storage::disk('local')->assertExists($document->file_path);
+    }
+});
+
+test('an unassigned payable stores its selected company and invoice order number', function () {
+    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+
+    $this->actingAs($account)
+        ->post(route('management.accounting-transactions.store'), [
+            'type' => 'payable',
+            'project_id' => null,
+            'company_id' => $lead->company_id,
+            'transaction_date' => '2026-08-20',
+            'amount' => 10000,
+            'payment_method' => 'check',
+            'reference_number' => 'CH#1111',
+            'invoice_order_number' => 'COM',
+            'status' => 'paid',
+            'payable_for' => 'Werner Lopez',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('project_accounting_transactions', [
+        'project_id' => null,
+        'company_id' => $lead->company_id,
+        'type' => 'payable',
+        'invoice_order_number' => 'COM',
+        'payment_method' => 'check',
+    ]);
 });
 
 test('receivables require payment details only when they are moved to qb', function () {

@@ -9,6 +9,7 @@ use App\Models\Lead;
 use App\Models\Project;
 use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
+use App\Models\Salesman;
 use App\Models\Vendor;
 use App\Services\GoogleDriveProjectStorage;
 use App\Support\ManagerAccess;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -195,6 +197,8 @@ class LeadDataController extends Controller
             ->with([
                 'contractor:con_id,contractor',
                 'vendor:vendor_id,vendor',
+                'company:com_id,company,prefix',
+                'vendor:vendor_id,vendor',
                 'project:id,lead_id',
                 'project.lead:id,customer_name,address,city,state,zip_code,company_id,salesman_1_id,salesman_2_id',
                 'project.lead.company:com_id,company,prefix',
@@ -302,6 +306,8 @@ class LeadDataController extends Controller
         $search = trim((string) $request->query('search', ''));
         $showAll = $request->boolean('show_all');
         $requestedInvoiceId = $request->integer('invoice') ?: null;
+        $salesmanId = $request->integer('salesman') ?: null;
+        $contractorId = $request->integer('contractor') ?: null;
         $query = ProjectAccountingTransaction::query()
             ->addSelect([
                 'linked_project_number' => Project::query()
@@ -312,6 +318,21 @@ class LeadDataController extends Controller
             ->where('type', $type)
             ->when(! $showAll && $type === 'receivable', fn (Builder $query) => $query->where('qb', false))
             ->when(! $showAll && $type === 'payable', fn (Builder $query) => $query->where('status', '!=', 'paid'))
+            ->when($salesmanId, fn (Builder $query) => $query->whereHas('project', function (Builder $projectQuery) use ($salesmanId): void {
+                $projectQuery->where(function (Builder $projectQuery) use ($salesmanId): void {
+                    $projectQuery
+                        ->where('salesman_id', $salesmanId)
+                        ->orWhereHas('lead', fn (Builder $leadQuery) => $leadQuery
+                            ->where('salesman_1_id', $salesmanId)
+                            ->orWhere('salesman_2_id', $salesmanId));
+                });
+            }))
+            ->when($contractorId, fn (Builder $query) => $query->where(function (Builder $query) use ($contractorId): void {
+                $query
+                    ->where('contractor_id', $contractorId)
+                    ->orWhereHas('project.contractors', fn (Builder $contractorQuery) => $contractorQuery
+                        ->where('contractors.con_id', $contractorId));
+            }))
             ->with([
                 'contractor:con_id,contractor',
                 'invoice:id,project_id,contractor_id,invoice_number,amount,status',
@@ -359,11 +380,16 @@ class LeadDataController extends Controller
             ->through(function (ProjectAccountingTransaction $transaction): array {
                 $project = $transaction->project;
                 $lead = $project?->lead;
-                $company = $lead?->company;
+                $company = $lead?->company ?? $transaction->company;
 
                 return [
                     'id' => $transaction->id,
                     'project_id' => $transaction->project_id,
+                    'company_id' => $transaction->company_id,
+                    'project_invoice_id' => $transaction->project_invoice_id,
+                    'project_document_id' => $transaction->project_document_id,
+                    'contractor_id' => $transaction->contractor_id,
+                    'vendor_id' => $transaction->vendor_id,
                     'project_number' => $project
                         ? ($transaction->getAttribute('linked_project_number') ?: $project->project_number ?: 'Not assigned')
                         : 'Unassigned',
@@ -384,6 +410,7 @@ class LeadDataController extends Controller
                     'reference_number' => $transaction->reference_number,
                     'received_from' => $transaction->counterparty,
                     'contractor' => $transaction->contractor?->contractor,
+                    'vendor' => $transaction->vendor?->vendor,
                     'invoice_number' => $transaction->invoice?->invoice_number
                         ?? ($transaction->project_id === null ? $transaction->category : null),
                     'invoice_order_number' => $transaction->invoice_order_number,
@@ -407,7 +434,13 @@ class LeadDataController extends Controller
         return Inertia::render('lead-workflow/accounting-register', [
             'type' => $type,
             'transactions' => $transactions,
-            'filters' => ['search' => $search, 'invoice' => $requestedInvoiceId, 'show_all' => $showAll],
+            'filters' => [
+                'search' => $search,
+                'invoice' => $requestedInvoiceId,
+                'show_all' => $showAll,
+                'salesman' => $salesmanId,
+                'contractor' => $contractorId,
+            ],
             'totalAmount' => $totalAmount,
             'projects' => Project::query()
                 ->with([
@@ -417,7 +450,10 @@ class LeadDataController extends Controller
                 ])
                 ->latest()
                 ->get(['id', 'lead_id', 'project_number']),
+            'companies' => Company::query()->orderBy('company')->get(['com_id', 'company', 'prefix']),
+            'salesmen' => Salesman::query()->orderBy('salesman_name')->get(['salesman_id', 'salesman_name']),
             'contractors' => Contractor::query()->whereNull('moved_to_vendor_at')->orderBy('contractor')->get(['con_id', 'contractor']),
+            'vendors' => Vendor::query()->orderBy('vendor')->get(['vendor_id', 'vendor']),
             'invoices' => ProjectInvoice::query()
                 ->with(['contractor:con_id,contractor', 'vendor:vendor_id,vendor'])
                 ->withSum([
@@ -432,6 +468,7 @@ class LeadDataController extends Controller
                     'id' => $invoice->id,
                     'project_id' => $invoice->project_id,
                     'contractor_id' => $invoice->contractor_id,
+                    'vendor_id' => $invoice->vendor_id,
                     'contractor' => $invoice->contractor?->contractor,
                     'vendor' => $invoice->vendor?->vendor,
                     'invoice_number' => $invoice->invoice_number,
@@ -445,9 +482,11 @@ class LeadDataController extends Controller
         $data = $request->validate([
             'type' => ['required', Rule::in(['receivable', 'payable'])],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'company_id' => ['nullable', 'integer', 'exists:companies,com_id'],
             'project_invoice_id' => ['nullable', 'integer', 'exists:project_invoices,id'],
             'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
             'contractor_id' => ['nullable', 'integer', 'exists:contractors,con_id'],
+            'vendor_id' => ['nullable', 'integer', 'exists:vendors,vendor_id'],
             'transaction_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'payment_method' => ['nullable', Rule::in(['check', 'zelle', 'credit_card', 'wire_transfer', 'square_transfer', 'cash'])],
@@ -456,8 +495,14 @@ class LeadDataController extends Controller
             'status' => ['required', Rule::in(['pending', 'deposit', 'ok_to_pay', 'paid'])],
             'notes' => ['nullable', 'string', 'max:5000'],
             'payable_for' => ['nullable', 'string', 'max:255'],
-            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
+            'file' => ['nullable', 'file', 'extensions:pdf,jpg,jpeg,jfif,png,webp,heic,heif', 'max:20480'],
         ]);
+
+        if (filled($data['contractor_id'] ?? null) && filled($data['vendor_id'] ?? null)) {
+            throw ValidationException::withMessages([
+                'vendor_id' => 'Select either a contractor or a vendor, not both.',
+            ]);
+        }
 
         $referenceNumber = trim((string) ($data['reference_number'] ?? ''));
         $hasReferenceNumber = ! in_array($referenceNumber, ['', 'CH#', 'ZELLE', 'CC-', 'WIRE-', 'SQUARE-', 'CASH-'], true);
@@ -472,6 +517,7 @@ class LeadDataController extends Controller
             $data['payment_method'] = $data['payment_method'] ?? 'check';
             $data['project_invoice_id'] = null;
             $data['contractor_id'] = null;
+            $data['vendor_id'] = null;
         } else {
             $invoice = filled($data['project_invoice_id'] ?? null)
                 ? ProjectInvoice::query()->findOrFail($data['project_invoice_id'])
@@ -479,9 +525,7 @@ class LeadDataController extends Controller
             if ($invoice) {
                 $data['project_id'] = $invoice->project_id;
                 $data['contractor_id'] = $invoice->contractor_id;
-                if (! $invoice->contractor_id && $invoice->vendor) {
-                    $data['payable_for'] = $invoice->vendor->vendor;
-                }
+                $data['vendor_id'] = $invoice->vendor_id;
                 $paid = (float) $invoice->accountingTransactions()
                     ->where('type', 'payable')
                     ->where('status', 'paid')
@@ -494,7 +538,7 @@ class LeadDataController extends Controller
                 }
             }
 
-            if (! filled($data['contractor_id'] ?? null) && ! filled($data['payable_for'] ?? null)) {
+            if (! filled($data['contractor_id'] ?? null) && ! filled($data['vendor_id'] ?? null) && ! filled($data['payable_for'] ?? null)) {
                 throw ValidationException::withMessages([
                     'payable_for' => 'Describe what this payable is for when no contractor is selected.',
                 ]);
@@ -508,7 +552,8 @@ class LeadDataController extends Controller
             $data['reference_number'] = null;
         }
 
-        $project = filled($data['project_id'] ?? null) ? Project::query()->find($data['project_id']) : null;
+        $project = filled($data['project_id'] ?? null) ? Project::query()->with('lead')->find($data['project_id']) : null;
+        $data['company_id'] = $data['company_id'] ?? $project?->lead?->company_id ?? $project?->company_id;
         if (filled($data['project_document_id'] ?? null)) {
             if (! $project) {
                 throw ValidationException::withMessages([
@@ -538,7 +583,9 @@ class LeadDataController extends Controller
             ? ($project?->lead()->value('customer_name') ?: 'Unassigned customer')
             : (filled($data['contractor_id'] ?? null)
                 ? Contractor::query()->whereKey($data['contractor_id'])->value('contractor')
-                : trim((string) ($data['payable_for'] ?? '')));
+                : (filled($data['vendor_id'] ?? null)
+                    ? Vendor::query()->whereKey($data['vendor_id'])->value('vendor')
+                    : trim((string) ($data['payable_for'] ?? ''))));
         $data['requested_by'] = $request->user()?->manager?->manager_name ?: $request->user()?->username;
         $data['qb'] = false;
         unset($data['payable_for']);
@@ -576,6 +623,138 @@ class LeadDataController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    public function updateAccountingTransaction(
+        Request $request,
+        ProjectAccountingTransaction $accountingTransaction,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'type' => ['required', Rule::in(['receivable', 'payable'])],
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'company_id' => ['nullable', 'integer', 'exists:companies,com_id'],
+            'project_invoice_id' => ['nullable', 'integer', 'exists:project_invoices,id'],
+            'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
+            'contractor_id' => ['nullable', 'integer', 'exists:contractors,con_id'],
+            'vendor_id' => ['nullable', 'integer', 'exists:vendors,vendor_id'],
+            'transaction_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
+            'payment_method' => ['nullable', Rule::in(['check', 'zelle', 'credit_card', 'wire_transfer', 'square_transfer', 'cash'])],
+            'reference_number' => ['nullable', 'string', 'max:100'],
+            'invoice_order_number' => ['nullable', 'string', 'max:100'],
+            'status' => ['required', Rule::in(['pending', 'deposit', 'ok_to_pay', 'paid'])],
+            'notes' => ['nullable', 'string', 'max:5000'],
+            'payable_for' => ['nullable', 'string', 'max:255'],
+            'file' => ['nullable', 'file', 'extensions:pdf,jpg,jpeg,jfif,png,webp,heic,heif', 'max:20480'],
+        ]);
+
+        abort_unless($accountingTransaction->type === $data['type'], 422);
+        if (filled($data['contractor_id'] ?? null) && filled($data['vendor_id'] ?? null)) {
+            throw ValidationException::withMessages(['vendor_id' => 'Select either a contractor or a vendor, not both.']);
+        }
+
+        $project = filled($data['project_id'] ?? null)
+            ? Project::query()->with('lead')->findOrFail($data['project_id'])
+            : null;
+        $invoice = filled($data['project_invoice_id'] ?? null)
+            ? ProjectInvoice::query()->findOrFail($data['project_invoice_id'])
+            : null;
+        if ($invoice) {
+            if (! $project || $invoice->project_id !== $project->id) {
+                throw ValidationException::withMessages(['project_invoice_id' => 'The selected invoice must belong to the selected project.']);
+            }
+            $data['contractor_id'] = $invoice->contractor_id;
+            $data['vendor_id'] = $invoice->vendor_id;
+            $paid = (float) $invoice->accountingTransactions()
+                ->where('type', 'payable')->where('status', 'paid')
+                ->whereKeyNot($accountingTransaction->id)->sum('amount');
+            $balance = max(0, (float) $invoice->amount - $paid);
+            if (round((float) $data['amount'], 2) > round($balance, 2)) {
+                throw ValidationException::withMessages(['amount' => 'This payment exceeds the invoice balance of $'.number_format($balance, 2).'.']);
+            }
+        }
+
+        $reference = trim((string) ($data['reference_number'] ?? ''));
+        $hasReference = ! in_array($reference, ['', 'CH#', 'ZELLE', 'CC-', 'WIRE-', 'SQUARE-', 'CASH-'], true);
+        if ($data['type'] === 'receivable') {
+            $data['project_invoice_id'] = null;
+            $data['contractor_id'] = null;
+            $data['vendor_id'] = null;
+        } elseif ($hasReference) {
+            $data['status'] = 'paid';
+            $data['payment_method'] = $data['payment_method'] ?? 'check';
+        }
+        if ($data['type'] === 'payable' && ! filled($data['contractor_id'] ?? null) && ! filled($data['vendor_id'] ?? null) && ! filled($data['payable_for'] ?? null)) {
+            throw ValidationException::withMessages(['payable_for' => 'Describe what this payable is for when no contractor or vendor is selected.']);
+        }
+        if (in_array($data['status'], ['deposit', 'paid'], true)) {
+            $this->validatePaymentDetails($data);
+        } else {
+            $data['payment_method'] = null;
+            $data['reference_number'] = null;
+        }
+
+        $data['company_id'] = $data['company_id'] ?? $project?->lead?->company_id ?? $project?->company_id;
+        if (filled($data['project_document_id'] ?? null)) {
+            $document = $project?->documents()->find($data['project_document_id']);
+            if (! $document) {
+                throw ValidationException::withMessages(['project_document_id' => 'The selected file must belong to the selected project.']);
+            }
+            $data = [...$data, 'file_path' => $document->file_path, 'file_name' => $document->file_name, 'file_mime' => $document->file_mime, 'file_size' => $document->file_size];
+        }
+        $data['category'] = $data['type'] === 'receivable' ? 'Customer Check' : (trim((string) ($data['payable_for'] ?? '')) ?: 'Vendor Payment');
+        $data['counterparty'] = $data['type'] === 'receivable'
+            ? ($project?->lead?->customer_name ?: $accountingTransaction->counterparty ?: 'Unassigned customer')
+            : (filled($data['contractor_id'] ?? null)
+                ? Contractor::query()->whereKey($data['contractor_id'])->value('contractor')
+                : (filled($data['vendor_id'] ?? null) ? Vendor::query()->whereKey($data['vendor_id'])->value('vendor') : trim((string) ($data['payable_for'] ?? ''))));
+        unset($data['payable_for']);
+
+        $oldFilePath = $accountingTransaction->file_path;
+        $oldDocumentId = $accountingTransaction->project_document_id;
+        if ($file = $request->file('file')) {
+            $data = [...$data, 'project_document_id' => null, 'file_path' => $file->store($project ? "project-accounting/{$project->id}" : 'project-accounting/unassigned', 'local'), 'file_name' => $file->getClientOriginalName(), 'file_mime' => $file->getMimeType(), 'file_size' => $file->getSize()];
+        }
+        unset($data['file']);
+        $accountingTransaction->update($data);
+        if ($request->hasFile('file') && $oldFilePath && ! $oldDocumentId) {
+            Storage::disk('local')->delete($oldFilePath);
+        }
+
+        return back()->with('success', ucfirst($data['type']).' updated.');
+    }
+
+    public function destroyAccountingTransaction(ProjectAccountingTransaction $accountingTransaction): RedirectResponse
+    {
+        $filePath = $accountingTransaction->file_path;
+        $documentId = $accountingTransaction->project_document_id;
+        $accountingTransaction->delete();
+        if ($filePath && ! $documentId) {
+            Storage::disk('local')->delete($filePath);
+        }
+
+        return back()->with('success', 'Accounting transaction deleted.');
+    }
+
+    public function destroyAccountingTransactionFile(ProjectAccountingTransaction $accountingTransaction): RedirectResponse
+    {
+        abort_unless($accountingTransaction->file_name, 404);
+        $project = $accountingTransaction->project;
+        if ($project) {
+            $this->googleDrive->deleteMirroredFile($project, $accountingTransaction->file_name);
+        }
+        if ($accountingTransaction->file_path && ! $accountingTransaction->project_document_id) {
+            Storage::disk('local')->delete($accountingTransaction->file_path);
+        }
+        $accountingTransaction->update([
+            'project_document_id' => null,
+            'file_path' => null,
+            'file_name' => null,
+            'file_mime' => null,
+            'file_size' => null,
+        ]);
+
+        return back()->with('success', 'Attached file removed from the CRM and Google Drive.');
     }
 
     public function updateAccountingStatus(
@@ -617,11 +796,13 @@ class LeadDataController extends Controller
         return back()->with('success', ucfirst($accountingTransaction->type).' status updated.');
     }
 
-    private function validatePaymentDetails(array $data): void
+    private function validatePaymentDetails(array &$data): void
     {
         $method = $data['payment_method'] ?? null;
         $reference = trim((string) ($data['reference_number'] ?? ''));
         if ($reference === '') {
+            $data['reference_number'] = null;
+
             return;
         }
         $prefix = match ($method) {
@@ -634,11 +815,19 @@ class LeadDataController extends Controller
             default => null,
         };
 
-        if (! $prefix || ! str_starts_with($reference, $prefix)) {
-            throw ValidationException::withMessages([
-                'reference_number' => 'Enter a valid check or reference number for the selected payment method.',
-            ]);
+        if (! $prefix) {
+            return;
         }
+
+        $knownPrefixes = ['CH#', 'ZELLE', 'CC-', 'WIRE-', 'SQUARE-', 'CASH-'];
+        foreach ($knownPrefixes as $knownPrefix) {
+            if (str_starts_with(strtoupper($reference), $knownPrefix)) {
+                $reference = trim(substr($reference, strlen($knownPrefix)));
+                break;
+            }
+        }
+
+        $data['reference_number'] = $reference === '' ? null : $prefix.$reference;
     }
 
     private function leadResult(Lead $lead): string

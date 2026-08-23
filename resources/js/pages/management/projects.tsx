@@ -31,6 +31,7 @@ import '@/../css/projects.css';
 import '@/../css/projects-tab-themes.css';
 import { useSystemModal } from '@/components/system-modal-provider';
 import { RingCentralCallButton } from '@/components/ringcentral-call-button';
+import { SearchableSelect } from '@/components/searchable-select';
 import { appointmentDate, appointmentInputValue } from '@/lib/appointment-date';
 import { formatPhoneNumber } from '@/lib/phone-number';
 import type { Auth } from '@/types/auth';
@@ -108,6 +109,7 @@ type ProjectInvoice = {
     file_size: number | null;
     contractor: ContractorOption | null;
     vendor: VendorOption | null;
+    vendor: VendorOption | null;
 };
 
 type AccountingTransaction = {
@@ -122,6 +124,8 @@ type AccountingTransaction = {
     counterparty: string | null;
     requested_by: string | null;
     contractor: ContractorOption | null;
+    vendor: VendorOption | null;
+    company: CompanyOption | null;
     amount: string;
     status: 'pending' | 'deposit' | 'ok_to_pay' | 'paid';
     qb: boolean;
@@ -335,6 +339,9 @@ export default function Projects({
 }) {
     const { auth } = usePage<{ auth: Auth }>().props;
     const canGeneratePaymentCodes = auth.user.role === 'admin' || auth.permissions?.generate_payment_codes === 'edit';
+    const sbhCompanyId = String(
+        companies.find((company) => company.prefix.trim().toUpperCase() === 'SBH')?.com_id ?? '',
+    );
     const { confirm } = useSystemModal();
     const projectWorkspaceStorageKey = 'weiss.projects.workspace';
     const storedProjectWorkspace = (() => {
@@ -547,7 +554,7 @@ export default function Projects({
         vendor_id: '',
         amount: '',
         notes: '',
-        file: null,
+        files: [],
         project_document_id: '',
     });
     const [accountingModal, setAccountingModal] = useState<{
@@ -562,6 +569,7 @@ export default function Projects({
         referenceNumber: string;
         error: string;
     } | null>(null);
+    const [receivableQbDetailsOpen, setReceivableQbDetailsOpen] = useState(false);
     const [accountingFilePreview, setAccountingFilePreview] = useState<{
         url: string;
         mime: string;
@@ -572,6 +580,7 @@ export default function Projects({
     const accountingForm = useForm<{
         type: 'receivable' | 'payable';
         unassigned: boolean;
+        company_id: string;
         category: string;
         transaction_date: string;
         payment_method: 'check' | 'zelle' | 'credit_card' | 'wire_transfer' | 'square_transfer' | 'cash';
@@ -579,6 +588,7 @@ export default function Projects({
         invoice_order_number: string;
         counterparty: string;
         contractor_id: string;
+        vendor_id: string;
         requested_by: string;
         amount: string;
         status: AccountingTransaction['status'];
@@ -590,6 +600,7 @@ export default function Projects({
     }>({
         type: 'receivable',
         unassigned: false,
+        company_id: '',
         category: 'Customer Payment',
         transaction_date: '',
         payment_method: 'check',
@@ -597,6 +608,7 @@ export default function Projects({
         invoice_order_number: '',
         counterparty: '',
         contractor_id: '',
+        vendor_id: '',
         requested_by: '',
         amount: '',
         status: 'pending',
@@ -943,6 +955,24 @@ export default function Projects({
     const otherContractors = contractors.filter(
         (contractor) => !projectInvoiceContractorIds.has(contractor.con_id),
     );
+    const payableRecipientOptions = [
+        { value: '', label: 'No contractor or vendor' },
+        ...contractorsWithProjectInvoices.map((contractor) => ({
+            value: `contractor:${contractor.con_id}`,
+            label: `Contractor — ${contractor.contractor}`,
+            keywords: 'contractor invoice',
+        })),
+        ...otherContractors.map((contractor) => ({
+            value: `contractor:${contractor.con_id}`,
+            label: `Contractor — ${contractor.contractor}`,
+            keywords: 'contractor',
+        })),
+        ...vendors.map((vendor) => ({
+            value: `vendor:${vendor.vendor_id}`,
+            label: `Vendor — ${vendor.vendor}`,
+            keywords: 'vendor',
+        })),
+    ];
     const selectableContractorIds = new Set(contractors.map((contractor) => contractor.con_id));
     const assignedProjectContractors = [...(selected?.contractors ?? [])]
         .filter((contractor) => selectableContractorIds.has(contractor.con_id))
@@ -975,10 +1005,12 @@ export default function Projects({
             .includes(normalizedInvoiceContractorSearch),
     );
     const payableInvoices =
-        selected?.invoices.filter(
-            (invoice) =>
-                invoice.contractor?.con_id ===
-                Number(accountingForm.data.contractor_id),
+        selected?.invoices.filter((invoice) =>
+            accountingForm.data.contractor_id
+                ? invoice.contractor?.con_id === Number(accountingForm.data.contractor_id)
+                : accountingForm.data.vendor_id
+                  ? invoice.vendor?.vendor_id === Number(accountingForm.data.vendor_id)
+                  : false,
         ) ?? [];
     const requesterOptions = Array.from(
         new Set(
@@ -1103,7 +1135,7 @@ export default function Projects({
         projectDetailsForm.setData({
             project_number: selected.project_number ?? '',
             status: selected.status || 'new',
-            company_id: String(selected.lead.company?.com_id ?? ''),
+            company_id: sbhCompanyId,
             product_id: String(selected.lead.product?.prod_id ?? ''),
             customer_name: selected.lead.customer_name,
             primary_number: selected.lead.primary_number,
@@ -1527,6 +1559,7 @@ export default function Projects({
         accountingForm.setData({
             type: accountingMode,
             unassigned: false,
+            company_id: String(selected.lead.company?.com_id ?? ''),
             category:
                 accountingMode === 'receivable'
                     ? 'Customer Payment'
@@ -1560,6 +1593,7 @@ export default function Projects({
         accountingForm.setData({
             type: transaction.type,
             unassigned: false,
+            company_id: String(transaction.company?.com_id ?? selected?.lead.company?.com_id ?? sbhCompanyId),
             category: transaction.category,
             transaction_date: transaction.transaction_date.slice(0, 10),
             payment_method: transaction.payment_method ?? 'check',
@@ -1573,8 +1607,9 @@ export default function Projects({
             counterparty:
                 transaction.type === 'receivable'
                     ? (selected?.lead.customer_name ?? '')
-                    : (transaction.contractor?.contractor ?? ''),
+                    : (transaction.contractor?.contractor ?? transaction.vendor?.vendor ?? ''),
             contractor_id: String(transaction.contractor?.con_id ?? ''),
+            vendor_id: String(transaction.vendor?.vendor_id ?? ''),
             requested_by: transaction.requested_by ?? currentRequester ?? '',
             amount: transaction.amount,
             status: transaction.status,
@@ -1711,6 +1746,7 @@ export default function Projects({
                 (method === 'zelle' ? '' : prefix),
             error: '',
         });
+        setReceivableQbDetailsOpen(false);
     };
 
     const openReferralSale = () => {
@@ -1985,8 +2021,8 @@ export default function Projects({
                         {(
                             [
                                 ['receivable', 'Receivables'],
-                                ['payable', 'Payable balances'],
-                                ['invoice', 'Invoice balances'],
+                                ['payable', 'Payables'],
+                                ['invoice', 'Invoices'],
                             ] as const
                         ).map(([view, label]) => (
                             <button
@@ -2651,7 +2687,7 @@ export default function Projects({
                                                 <th>Proj. #</th>
                                                 <th>Pay To</th>
                                                 <th>Pay For (Invoice)</th>
-                                                <th>Invoice / Order #</th>
+                                                <th>Payment Method</th>
                                                 <th>Req. By</th>
                                                 <th>Status</th>
                                                 <th>$ Amount To Pay</th>
@@ -2723,13 +2759,15 @@ export default function Projects({
                                                                         '—'}
                                                                 </td>
                                                                 <td>
-                                                                    {transaction
+                                                                    {transaction.invoice_order_number || transaction
                                                                         .invoice
                                                                         ?.invoice_number ||
                                                                         '—'}
                                                                 </td>
                                                                 <td>
-                                                                    {transaction.invoice_order_number || '—'}
+                                                                    {transaction.payment_method
+                                                                        ? paymentMethodLabels[transaction.payment_method]
+                                                                        : '—'}
                                                                 </td>
                                                                 <td>
                                                                     {transaction.requested_by ||
@@ -5784,6 +5822,15 @@ export default function Projects({
                                 )}
 
                                 <div className="project-accounting-form-top">
+                                    {accountingForm.data.type === 'payable' && (
+                                        <label>
+                                            <span>Company</span>
+                                            <select value={accountingForm.data.company_id} onChange={(event) => accountingForm.setData('company_id', event.target.value)}>
+                                                <option value="">No company selected</option>
+                                                {companies.map((company) => <option key={company.com_id} value={company.com_id}>{company.company} ({company.prefix})</option>)}
+                                            </select>
+                                        </label>
+                                    )}
                                     <label>
                                         <span>Category</span>
                                         <select
@@ -6146,14 +6193,17 @@ export default function Projects({
                                             <div className="project-accounting-payable-fields">
                                                 <label>
                                                     <span>Company (CMP)</span>
-                                                    <input
-                                                        type="text"
-                                                        readOnly
-                                                        value={
-                                                            selected.lead
-                                                                .company
-                                                                ?.prefix ?? '—'
-                                                        }
+                                                    <SearchableSelect
+                                                        value={accountingForm.data.company_id}
+                                                        onChange={(value) => accountingForm.setData('company_id', value)}
+                                                        searchPlaceholder="Search companies…"
+                                                        options={[
+                                                            { value: '', label: 'No company selected' },
+                                                            ...companies.map((company) => ({
+                                                                value: String(company.com_id),
+                                                                label: `${company.company} (${company.prefix})`,
+                                                            })),
+                                                        ]}
                                                     />
                                                 </label>
                                                 <label>
@@ -6168,88 +6218,30 @@ export default function Projects({
                                                 </label>
                                                 <label>
                                                     <span>Pay to</span>
-                                                    <select
-                                                        value={
-                                                            accountingForm.data
-                                                                .contractor_id
-                                                        }
-                                                        onChange={(event) => {
-                                                            const contractor =
-                                                                contractors.find(
-                                                                    (item) =>
-                                                                        item.con_id ===
-                                                                        Number(
-                                                                            event
-                                                                                .target
-                                                                                .value,
-                                                                        ),
-                                                                );
-                                                            accountingForm.setData(
-                                                                (data) => ({
-                                                                    ...data,
-                                                                    contractor_id:
-                                                                        event
-                                                                            .target
-                                                                            .value,
-                                                                    counterparty:
-                                                                        contractor?.contractor ??
-                                                                        '',
-                                                                    project_invoice_id:
-                                                                        '',
-                                                                }),
-                                                            );
+                                                    <SearchableSelect
+                                                        value={accountingForm.data.contractor_id
+                                                            ? `contractor:${accountingForm.data.contractor_id}`
+                                                            : accountingForm.data.vendor_id
+                                                              ? `vendor:${accountingForm.data.vendor_id}`
+                                                              : ''}
+                                                        options={payableRecipientOptions}
+                                                        placeholder="Select contractor or vendor"
+                                                        searchPlaceholder="Search contractors or vendors…"
+                                                        onChange={(value) => {
+                                                            const contractorId = value.startsWith('contractor:') ? value.slice(11) : '';
+                                                            const vendorId = value.startsWith('vendor:') ? value.slice(7) : '';
+                                                            const counterparty = contractorId
+                                                                ? contractors.find((item) => item.con_id === Number(contractorId))?.contractor
+                                                                : vendors.find((item) => item.vendor_id === Number(vendorId))?.vendor;
+                                                            accountingForm.setData((data) => ({
+                                                                ...data,
+                                                                contractor_id: contractorId,
+                                                                vendor_id: vendorId,
+                                                                counterparty: counterparty ?? '',
+                                                                project_invoice_id: '',
+                                                            }));
                                                         }}
-                                                    >
-                                                        <option value="">
-                                                            Select contractor
-                                                        </option>
-                                                        {contractorsWithProjectInvoices.length >
-                                                            0 && (
-                                                            <optgroup label="With invoices in this project">
-                                                                {contractorsWithProjectInvoices.map(
-                                                                    (
-                                                                        contractor,
-                                                                    ) => (
-                                                                        <option
-                                                                            key={
-                                                                                contractor.con_id
-                                                                            }
-                                                                            value={
-                                                                                contractor.con_id
-                                                                            }
-                                                                        >
-                                                                            {
-                                                                                contractor.contractor
-                                                                            }
-                                                                        </option>
-                                                                    ),
-                                                                )}
-                                                            </optgroup>
-                                                        )}
-                                                        {otherContractors.length >
-                                                            0 && (
-                                                            <optgroup label="Other contractors">
-                                                                {otherContractors.map(
-                                                                    (
-                                                                        contractor,
-                                                                    ) => (
-                                                                        <option
-                                                                            key={
-                                                                                contractor.con_id
-                                                                            }
-                                                                            value={
-                                                                                contractor.con_id
-                                                                            }
-                                                                        >
-                                                                            {
-                                                                                contractor.contractor
-                                                                            }
-                                                                        </option>
-                                                                    ),
-                                                                )}
-                                                            </optgroup>
-                                                        )}
-                                                    </select>
+                                                    />
                                                 </label>
                                                 <label>
                                                     <span>Requested by</span>
@@ -6288,17 +6280,17 @@ export default function Projects({
                                             </div>
                                             <div className="project-accounting-invoice-picker">
                                                 <strong>Invoice details</strong>
-                                                {!accountingForm.data
-                                                    .contractor_id ? (
+                                                {!accountingForm.data.contractor_id &&
+                                                !accountingForm.data.vendor_id ? (
                                                     <div className="project-accounting-invoice-picker__empty">
-                                                        Select a contractor to
+                                                        Select a contractor or vendor to
                                                         show their invoices for
                                                         this project.
                                                     </div>
                                                 ) : payableInvoices.length ===
                                                   0 ? (
                                                     <div className="project-accounting-invoice-picker__empty">
-                                                        This contractor has no
+                                                        This contractor or vendor has no
                                                         invoices in the selected
                                                         project.
                                                     </div>
@@ -6768,7 +6760,16 @@ export default function Projects({
                             </DialogDescription>
                         </DialogHeader>
                         {receivableQbModal && (
-                            <><div className="project-qb-confirm-summary"><span>Received from</span><strong>{receivableQbModal.transaction.counterparty || selected?.lead?.customer_name || 'Customer'}</strong><span>Amount</span><strong>{currencyFormatter.format(Number(receivableQbModal.transaction.amount))}</strong></div><div className="project-accounting-form-top">
+                            <><div className="project-qb-confirm-summary"><span>Received from</span><strong>{receivableQbModal.transaction.counterparty || selected?.lead?.customer_name || 'Customer'}</strong><span>Amount</span><strong>{currencyFormatter.format(Number(receivableQbModal.transaction.amount))}</strong></div>{receivableQbDetailsOpen && <div className="project-qb-confirm-details">
+                                <div><span>Project</span><strong>{selected ? projectNumber(selected) : 'Unassigned'}</strong></div>
+                                <div><span>Customer</span><strong>{selected?.lead?.customer_name || '—'}</strong></div>
+                                <div><span>Date</span><strong>{receivableQbModal.transaction.transaction_date}</strong></div>
+                                <div><span>Category</span><strong>{receivableQbModal.transaction.category}</strong></div>
+                                <div><span>Status</span><strong>{receivableQbModal.transaction.status}</strong></div>
+                                <div><span>Reference</span><strong>{receivableQbModal.transaction.reference_number || '—'}</strong></div>
+                                <div className="is-wide"><span>Notes</span><strong>{receivableQbModal.transaction.notes || 'No notes'}</strong></div>
+                                <div className="is-wide"><span>Attachments</span><strong>{receivableQbModal.transaction.file_name || selected?.documents.some((document) => document.project_accounting_transaction_id === receivableQbModal.transaction.id) ? 'Files attached' : 'No files attached'}</strong></div>
+                            </div>}<div className="project-accounting-form-top">
                                 <label>
                                     <span>Payment method</span>
                                     <select
@@ -6824,6 +6825,7 @@ export default function Projects({
                         )}
                         <DialogFooter className="project-sale-modal__footer">
                             <button type="button" onClick={() => setReceivableQbModal(null)}>Cancel</button>
+                            <button type="button" className="is-secondary" onClick={() => setReceivableQbDetailsOpen((open) => !open)}><Eye /> {receivableQbDetailsOpen ? 'Hide details' : 'View details'}</button>
                             <button
                                 type="button"
                                 onClick={() =>

@@ -1,0 +1,16 @@
+.searchable-select { position: relative; width: 100%; }
+.searchable-select__trigger { align-items: center; background: #fff; border: 1px solid #d7e0ef; border-radius: .65rem; color: #24334d; display: flex; font: inherit; justify-content: space-between; min-height: 2.6rem; padding: .62rem .75rem; text-align: left; width: 100%; }
+.searchable-select__trigger:disabled { background: #f3f6fa; cursor: not-allowed; opacity: .7; }
+.searchable-select__trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.searchable-select__trigger .is-placeholder { color: #8793a8; }
+.searchable-select__trigger svg { flex: 0 0 auto; height: 1rem; width: 1rem; }
+.searchable-select__menu { background: #fff; border: 1px solid #d7e0ef; border-radius: .75rem; box-shadow: 0 16px 36px rgba(23, 39, 71, .18); left: 0; min-width: 100%; padding: .45rem; position: absolute; top: calc(100% + .3rem); z-index: 1000; }
+.searchable-select__search { align-items: center; border: 1px solid #d7e0ef; border-radius: .55rem; display: flex; gap: .4rem; padding: .48rem .58rem; }
+.searchable-select__search svg { color: #71809a; height: 1rem; width: 1rem; }
+.searchable-select__search input { border: 0 !important; box-shadow: none !important; min-height: 0 !important; outline: 0; padding: 0 !important; width: 100%; }
+.searchable-select__search button { background: transparent; border: 0; display: grid; padding: 0; place-items: center; }
+.searchable-select__options { margin-top: .35rem; max-height: 15rem; overflow: auto; }
+.searchable-select__options > button { align-items: center; background: transparent; border: 0; border-radius: .45rem; color: #273650; display: flex; font: inherit; justify-content: space-between; padding: .58rem .65rem; text-align: left; width: 100%; }
+.searchable-select__options > button:hover, .searchable-select__options > button.is-selected { background: #edf3ff; color: #1f5eea; }
+.searchable-select__options > button svg { height: .95rem; width: .95rem; }
+.searchable-select__options p { color: #8793a8; margin: 0; padding: .8rem; text-align: center; }

@@ -49,6 +49,37 @@ class GoogleDriveProjectStorage
         }
     }
 
+    /** Delete a mirrored attachment from the project's Google Drive folder. */
+    public function deleteMirroredFile(Project $project, string $fileName): void
+    {
+        if (! $this->configured()) {
+            throw new RuntimeException('Google Drive is not configured.');
+        }
+
+        $project->loadMissing('lead:id,customer_name');
+        $rootFolderId = (string) config('services.google_drive.root_folder_id');
+        $folderId = $this->findFileId($rootFolderId, $this->projectFolderName($project), self::FOLDER_MIME);
+        if ($folderId === null) {
+            return;
+        }
+
+        $fileId = $this->findFileId($folderId, $fileName);
+        if ($fileId === null) {
+            return;
+        }
+
+        try {
+            $this->driveRequest()
+                ->delete("https://www.googleapis.com/drive/v3/files/{$fileId}?supportsAllDrives=true")
+                ->throw();
+        } catch (Throwable $exception) {
+            Cache::forget(self::ACCESS_TOKEN_CACHE_KEY);
+            $this->driveRequest()
+                ->delete("https://www.googleapis.com/drive/v3/files/{$fileId}?supportsAllDrives=true")
+                ->throw();
+        }
+    }
+
     /** @return array{id: string, name: string, webViewLink?: string} */
     private function mirrorOnce(Project $project, string $path, string $fileName, ?string $mimeType): array
     {

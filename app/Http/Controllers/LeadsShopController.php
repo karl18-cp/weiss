@@ -245,6 +245,7 @@ class LeadsShopController extends Controller
                 'la',
                 'his',
                 'project',
+                'verify',
             ])
             ->whereBetween('created_at', [$createdFrom, $createdTo])
             ->whereHas('mover', fn ($account) => $account->where('role', 'manager'));

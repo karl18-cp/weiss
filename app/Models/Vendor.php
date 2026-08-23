@@ -18,4 +18,9 @@ class Vendor extends Model
     {
         return $this->hasMany(ProjectInvoice::class, 'vendor_id', 'vendor_id');
     }
+
+    public function accountingTransactions(): HasMany
+    {
+        return $this->hasMany(ProjectAccountingTransaction::class, 'vendor_id', 'vendor_id');
+    }
 }

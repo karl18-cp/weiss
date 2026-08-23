@@ -4,10 +4,13 @@ import {
     ChevronLeft,
     ChevronRight,
     FileText,
+    Eye,
     Landmark,
+    Pencil,
     Plus,
     Search,
     Upload,
+    Trash2,
     X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -22,12 +25,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { SearchableSelect } from '@/components/searchable-select';
 
 type RegisterType = 'receivable' | 'payable';
 
 type AccountingRow = {
     id: number;
     project_id: number | null;
+    company_id: number | null;
+    project_invoice_id: number | null;
+    project_document_id: number | null;
+    contractor_id: number | null;
+    vendor_id: number | null;
     project_number: string;
     company_prefix: string;
     customer: string;
@@ -38,6 +47,7 @@ type AccountingRow = {
     payment_method: 'check' | 'zelle' | 'credit_card' | 'wire_transfer' | 'square_transfer' | 'cash' | null;
     received_from: string | null;
     contractor: string | null;
+    vendor: string | null;
     invoice_number: string | null;
     invoice_order_number: string | null;
     requested_by: string | null;
@@ -69,7 +79,7 @@ type ProjectOption = {
         city: string;
         state: string;
         zip_code: string;
-        company: { prefix: string } | null;
+        company: { com_id: number; prefix: string } | null;
     } | null;
     documents: Array<{
         id: number;
@@ -79,7 +89,10 @@ type ProjectOption = {
     }>;
 };
 type ContractorOption = { con_id: number; contractor: string };
-type InvoiceOption = { id: number; project_id: number; contractor_id: number | null; contractor: string | null; vendor: string | null; invoice_number: string; balance: string | number };
+type SalesmanOption = { salesman_id: number; salesman_name: string };
+type VendorOption = { vendor_id: number; vendor: string };
+type CompanyOption = { com_id: number; company: string; prefix: string };
+type InvoiceOption = { id: number; project_id: number; contractor_id: number | null; vendor_id: number | null; contractor: string | null; vendor: string | null; invoice_number: string; balance: string | number };
 
 const currency = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -131,26 +144,37 @@ export default function AccountingRegister({
     filters,
     totalAmount,
     projects,
+    companies,
     contractors,
+    vendors,
+    salesmen,
     invoices,
 }: {
     type: RegisterType;
     transactions: PaginatedTransactions;
-    filters: { search: string; invoice: number | null; show_all: boolean };
+    filters: { search: string; invoice: number | null; show_all: boolean; salesman: number | null; contractor: number | null };
     totalAmount: string | number;
     projects: ProjectOption[];
+    companies: CompanyOption[];
     contractors: ContractorOption[];
+    vendors: VendorOption[];
+    salesmen: SalesmanOption[];
     invoices: InvoiceOption[];
 }) {
     const { auth } = usePage<{ auth: Auth }>().props;
     const canGeneratePaymentCodes = auth.user.role === 'admin' || auth.permissions?.generate_payment_codes === 'edit';
+    const sbhCompanyId = String(
+        companies.find((company) => company.prefix.trim().toUpperCase() === 'SBH')?.com_id ?? '',
+    );
     const [search, setSearch] = useState(filters.search);
     const [qbModalRow, setQbModalRow] = useState<AccountingRow | null>(null);
     const [qbPaymentMethod, setQbPaymentMethod] =
         useState<keyof typeof paymentPrefixes>('check');
     const [qbReferenceNumber, setQbReferenceNumber] = useState('CH#');
     const [qbError, setQbError] = useState('');
+    const [qbDetailsOpen, setQbDetailsOpen] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
+    const [editingRow, setEditingRow] = useState<AccountingRow | null>(null);
     const [attachmentRow, setAttachmentRow] = useState<AccountingRow | null>(null);
     const attachmentForm = useForm<{ files: File[]; target_type: 'accounting'; target_id: string }>({ files: [], target_type: 'accounting', target_id: '' });
     const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
@@ -169,9 +193,11 @@ export default function AccountingRegister({
     const createForm = useForm({
         type,
         project_id: '',
+        company_id: sbhCompanyId,
         project_invoice_id: '',
         project_document_id: '',
         contractor_id: '',
+        vendor_id: '',
         transaction_date: crmDateKey(new Date()),
         amount: '',
         payment_method: type === 'receivable' ? 'check' : '',
@@ -237,6 +263,7 @@ export default function AccountingRegister({
             project_invoice_id: invoiceId,
             project_id: invoice ? String(invoice.project_id) : data.project_id,
             contractor_id: invoice?.contractor_id ? String(invoice.contractor_id) : data.contractor_id,
+            vendor_id: invoice?.vendor_id ? String(invoice.vendor_id) : data.vendor_id,
             payable_for: invoice?.vendor ?? data.payable_for,
             amount: invoice ? String(invoice.balance) : data.amount,
             status: payNow ? 'paid' : data.status,
@@ -303,13 +330,24 @@ export default function AccountingRegister({
                 (method === 'zelle' ? '' : paymentPrefixes[method]),
         );
         setQbError('');
+        setQbDetailsOpen(false);
         setQbModalRow(transaction);
     };
 
-    const visit = (value: string, showAll = filters.show_all) => {
+    const visit = (
+        value: string,
+        showAll = filters.show_all,
+        salesman = filters.salesman,
+        contractor = filters.contractor,
+    ) => {
         router.get(
             baseUrl,
-            { search: value || undefined, show_all: showAll ? 1 : undefined },
+            {
+                search: value || undefined,
+                show_all: showAll ? 1 : undefined,
+                salesman: salesman || undefined,
+                contractor: contractor || undefined,
+            },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -352,15 +390,70 @@ export default function AccountingRegister({
 
     const submitCreate = (event: React.FormEvent) => {
         event.preventDefault();
-        createForm.post('/management/accounting-transactions', {
+        createForm.post(editingRow
+            ? `/management/accounting-transactions/${editingRow.id}`
+            : '/management/accounting-transactions', {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () => {
                 setCreateOpen(false);
+                setEditingRow(null);
                 createForm.reset();
                 setProjectCustomerSearch('');
                 setProjectAddressSearch('');
             },
+        });
+    };
+
+    const openCreate = () => {
+        createForm.reset();
+        createForm.setData('company_id', sbhCompanyId);
+        createForm.clearErrors();
+        setEditingRow(null);
+        setProjectCustomerSearch('');
+        setProjectAddressSearch('');
+        setShowProjectSuggestions(false);
+        setCreateOpen(true);
+    };
+
+    const openEdit = (transaction: AccountingRow) => {
+        const project = projects.find((item) => item.id === transaction.project_id);
+        createForm.setData({
+            type,
+            project_id: transaction.project_id ? String(transaction.project_id) : '',
+            company_id: transaction.company_id ? String(transaction.company_id) : sbhCompanyId,
+            project_invoice_id: transaction.project_invoice_id ? String(transaction.project_invoice_id) : '',
+            project_document_id: transaction.project_document_id ? String(transaction.project_document_id) : '',
+            contractor_id: transaction.contractor_id ? String(transaction.contractor_id) : '',
+            vendor_id: transaction.vendor_id ? String(transaction.vendor_id) : '',
+            transaction_date: transaction.transaction_date.slice(0, 10),
+            amount: transaction.amount,
+            payment_method: transaction.payment_method ?? 'check',
+            reference_number: transaction.reference_number ?? '',
+            invoice_order_number: transaction.invoice_order_number ?? '',
+            status: transaction.status,
+            notes: transaction.notes ?? '',
+            payable_for: transaction.contractor_id || transaction.vendor_id ? '' : transaction.category,
+            file: null,
+        });
+        createForm.clearErrors();
+        setProjectCustomerSearch(project?.lead?.customer_name ?? transaction.customer ?? '');
+        setProjectAddressSearch(project ? projectAddress(project) : '');
+        setShowProjectSuggestions(false);
+        setEditingRow(transaction);
+        setCreateOpen(true);
+    };
+
+    const removeRow = (transaction: AccountingRow) => {
+        if (!window.confirm(`Delete this ${type}? This action cannot be undone.`)) return;
+        router.delete(`/management/accounting-transactions/${transaction.id}`, { preserveScroll: true });
+    };
+
+    const removeAttachedFile = (url: string, fileName: string) => {
+        if (!window.confirm(`Remove ${fileName} from the CRM and Google Drive?`)) return;
+        router.delete(url, {
+            preserveScroll: true,
+            onSuccess: () => setAttachmentRow(null),
         });
     };
 
@@ -424,6 +517,7 @@ export default function AccountingRegister({
                             <h2>All {title}</h2>
                             <span>Manage every {type}, including unassigned records.</span>
                         </div>
+                        <div className="accounting-register-filters">
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();
@@ -452,7 +546,22 @@ export default function AccountingRegister({
                                 </button>
                             )}
                         </form>
-                        <button className="accounting-register-add" type="button" onClick={() => { setProjectCustomerSearch(''); setProjectAddressSearch(''); setShowProjectSuggestions(false); setCreateOpen(true); }}>
+                        <SearchableSelect
+                            value={filters.salesman ? String(filters.salesman) : ''}
+                            onChange={(value) => visit(search.trim(), filters.show_all, value ? Number(value) : null, filters.contractor)}
+                            placeholder="All salesmen"
+                            searchPlaceholder="Search salesmen…"
+                            options={[{ value: '', label: 'All salesmen' }, ...salesmen.map((salesman) => ({ value: String(salesman.salesman_id), label: salesman.salesman_name }))]}
+                        />
+                        <SearchableSelect
+                            value={filters.contractor ? String(filters.contractor) : ''}
+                            onChange={(value) => visit(search.trim(), filters.show_all, filters.salesman, value ? Number(value) : null)}
+                            placeholder="All contractors"
+                            searchPlaceholder="Search contractors…"
+                            options={[{ value: '', label: 'All contractors' }, ...contractors.map((contractor) => ({ value: String(contractor.con_id), label: contractor.contractor }))]}
+                        />
+                        </div>
+                        <button className="accounting-register-add" type="button" onClick={openCreate}>
                             <Plus /> {isPayable ? 'Add Payable' : 'Add Receivable'}
                         </button>
                     </header>
@@ -472,7 +581,7 @@ export default function AccountingRegister({
                                         <th>Rep</th>
                                         <th>Pay To</th>
                                         <th>Pay For (Invoice)</th>
-                                        <th>Invoice / Order #</th>
+                                        <th>Payment Method</th>
                                         <th>Req. By</th>
                                         <th>Status</th>
                                         <th>$ Amount To Pay</th>
@@ -480,6 +589,7 @@ export default function AccountingRegister({
                                         <th>Category</th>
                                         <th>Notes</th>
                                         <th>File</th>
+                                        <th>Payment</th>
                                         <th>Actions</th>
                                     </tr>
                                 ) : (
@@ -495,6 +605,7 @@ export default function AccountingRegister({
                                         <th>QB</th>
                                         <th>Category</th>
                                         <th>File</th>
+                                        <th>Actions</th>
                                     </tr>
                                 )}
                             </thead>
@@ -540,11 +651,14 @@ export default function AccountingRegister({
                                                             '—'}
                                                     </td>
                                                     <td>
-                                                        {transaction.invoice_number ||
+                                                        {transaction.invoice_order_number ||
+                                                            transaction.invoice_number ||
                                                             '—'}
                                                     </td>
                                                     <td>
-                                                        {transaction.invoice_order_number || '—'}
+                                                        {transaction.payment_method
+                                                            ? paymentLabels[transaction.payment_method]
+                                                            : '—'}
                                                     </td>
                                                     <td>
                                                         {transaction.requested_by ||
@@ -685,13 +799,19 @@ export default function AccountingRegister({
                                                     <button className="accounting-register-pay" type="button" onClick={() => requestStatus(transaction, 'paid')}>Pay</button>
                                                 ) : <span>Paid</span>}
                                             </td>}
+                                            <td>
+                                                <div className="accounting-register-row-actions">
+                                                    <button type="button" onClick={() => openEdit(transaction)}><Pencil /> Edit</button>
+                                                    <button className="is-danger" type="button" onClick={() => removeRow(transaction)}><Trash2 /> Delete</button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     );
                                 })}
                                 {transactions.data.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={isPayable ? 15 : 11}
+                                            colSpan={isPayable ? 16 : 12}
                                             className="accounting-register-empty"
                                         >
                                             <Landmark />
@@ -746,15 +866,15 @@ export default function AccountingRegister({
                     </footer>
                 </section>
 
-                <Dialog open={createOpen} onOpenChange={(open) => !createForm.processing && setCreateOpen(open)}>
+                <Dialog open={createOpen} onOpenChange={(open) => { if (!createForm.processing) { setCreateOpen(open); if (!open) setEditingRow(null); } }}>
                     <DialogContent className="accounting-register-transaction-modal">
                         <form onSubmit={submitCreate}>
                             <DialogHeader>
-                                <DialogTitle>{isPayable ? 'New Payable' : 'New Receivable'}</DialogTitle>
+                                <DialogTitle>{editingRow ? `Edit ${isPayable ? 'Payable' : 'Receivable'}` : (isPayable ? 'New Payable' : 'New Receivable')}</DialogTitle>
                                 <DialogDescription>{isPayable ? 'Record a project payable. Linking a vendor payment is optional.' : 'Record a project receivable. Linking a scheduled payment is optional.'}</DialogDescription>
                             </DialogHeader>
                             <label className="accounting-register-unassigned">
-                                <input type="checkbox" checked={!createForm.data.project_id} onChange={(event) => { if (event.target.checked) { createForm.setData((data) => ({ ...data, project_id: '', project_invoice_id: '', project_document_id: '', contractor_id: '' })); setProjectCustomerSearch(''); setProjectAddressSearch(''); } else { setProjectSearchField('customer'); setShowProjectSuggestions(true); } }} />
+                                <input type="checkbox" checked={!createForm.data.project_id} onChange={(event) => { if (event.target.checked) { createForm.setData((data) => ({ ...data, project_id: '', project_invoice_id: '', project_document_id: '', contractor_id: '', vendor_id: '' })); setProjectCustomerSearch(''); setProjectAddressSearch(''); } else { setProjectSearchField('customer'); setShowProjectSuggestions(true); } }} />
                                 <span><strong>Unassigned / not related to a project</strong><small>Save this record in the global receivables or payables register without connecting it to a project.</small></span>
                             </label>
                             <div className="accounting-register-form-top">
@@ -769,23 +889,24 @@ export default function AccountingRegister({
                               <section>
                                 <header><strong>{isPayable ? 'Vendor payment' : 'Project & customer'}</strong><small>Optionally connect this record to an existing project{isPayable ? ' and invoice' : ''}.</small></header>
                                 <div className="accounting-register-form-grid">
+                                {isPayable && <label className="is-wide"><span>Company</span><SearchableSelect value={createForm.data.company_id} onChange={(value) => createForm.setData('company_id', value)} searchPlaceholder="Search companies…" options={[{ value: '', label: 'No company selected' }, ...companies.map((company) => ({ value: String(company.com_id), label: `${company.company} (${company.prefix})` }))]} /></label>}
                                 <div className="accounting-project-picker is-wide">
                                     <label><span>Customer name</span><input autoComplete="off" placeholder="Start typing a project customer…" value={projectCustomerSearch} onFocus={() => { setProjectSearchField('customer'); setShowProjectSuggestions(true); }} onBlur={() => setShowProjectSuggestions(false)} onChange={(e) => clearSelectedProject('customer', e.target.value)} /></label>
                                     <label><span>Project address</span><input autoComplete="off" placeholder="Start typing a project address…" value={projectAddressSearch} onFocus={() => { setProjectSearchField('address'); setShowProjectSuggestions(true); }} onBlur={() => setShowProjectSuggestions(false)} onChange={(e) => clearSelectedProject('address', e.target.value)} /></label>
                                     {showProjectSuggestions && <div className="accounting-project-suggestions">{projectSuggestions.map((project) => <button type="button" key={project.id} onMouseDown={(event) => { event.preventDefault(); selectProject(project); }}><strong>{project.lead?.customer_name}</strong><span>{projectAddress(project)}</span><small>{project.project_number || 'Project number not assigned'}</small></button>)}{projectSuggestions.length === 0 && <p>No project customers or addresses match.</p>}</div>}
                                     {(projectCustomerSearch || projectAddressSearch) && !createForm.data.project_id && <small>Select a suggestion to link this record to its project.</small>}
                                 </div>
-                                <label><span>Project (optional)</span><select value={createForm.data.project_id} onChange={(e) => { const project = projects.find((item) => String(item.id) === e.target.value); if (project) selectProject(project); else { createForm.setData((data) => ({...data, project_id: '', project_invoice_id: '', project_document_id: ''})); setProjectCustomerSearch(''); setProjectAddressSearch(''); } }}><option value="">Unassigned / not project related</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.project_number || 'Not assigned'} - {project.lead?.customer_name || 'Standalone project'}</option>)}</select></label>
-                                <label className="is-wide"><span>Use existing project file (optional)</span><select disabled={!createForm.data.project_id} value={createForm.data.project_document_id} onChange={(e) => createForm.setData('project_document_id', e.target.value)}><option value="">{!createForm.data.project_id ? 'Select a project first' : 'No existing file selected'}</option>{projects.find((project) => String(project.id) === createForm.data.project_id)?.documents.map((document) => <option key={document.id} value={document.id}>{document.file_name} ({document.category})</option>)}</select><small>Files uploaded by the salesman in My Sold are available here.</small></label>
-                                {isPayable && <label><span>Invoice for selected project (optional)</span><select disabled={!createForm.data.project_id} value={createForm.data.project_invoice_id} onChange={(e) => selectInvoice(e.target.value)}><option value="">{!createForm.data.project_id ? 'Select a project customer first' : selectedProjectInvoices.length === 0 ? 'No unpaid invoices for this project' : 'Choose an invoice'}</option>{selectedProjectInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_number} - Balance {currency.format(Number(invoice.balance))}</option>)}</select>{createForm.data.project_id && selectedProjectInvoices.length > 0 && <small>Selecting an invoice fills its remaining balance and contractor.</small>}</label>}
-                                {isPayable && <label><span>Contractor (optional)</span><select value={createForm.data.contractor_id} onChange={(e) => createForm.setData('contractor_id', e.target.value)}><option value="">No contractor</option>{contractors.map((contractor) => <option key={contractor.con_id} value={contractor.con_id}>{contractor.contractor}</option>)}</select></label>}
-                                {isPayable && !createForm.data.contractor_id && <label className="is-wide"><span>What is this payable for? *</span><input required placeholder="Example: Vendor payment, office rent, utilities, supplies..." value={createForm.data.payable_for} onChange={(e) => createForm.setData('payable_for', e.target.value)} /></label>}
+                                <label><span>Project (optional)</span><SearchableSelect value={createForm.data.project_id} onChange={(value) => { const project = projects.find((item) => String(item.id) === value); if (project) selectProject(project); else { createForm.setData((data) => ({...data, project_id: '', project_invoice_id: '', project_document_id: ''})); setProjectCustomerSearch(''); setProjectAddressSearch(''); } }} searchPlaceholder="Search project or customer…" options={[{ value: '', label: 'Unassigned / not project related' }, ...projects.map((project) => ({ value: String(project.id), label: `${project.project_number || 'Not assigned'} - ${project.lead?.customer_name || 'Standalone project'}`, keywords: projectAddress(project) }))]} /></label>
+                                <label className="is-wide"><span>Use existing project file (optional)</span><SearchableSelect disabled={!createForm.data.project_id} value={createForm.data.project_document_id} onChange={(value) => createForm.setData('project_document_id', value)} searchPlaceholder="Search project files…" options={[{ value: '', label: !createForm.data.project_id ? 'Select a project first' : 'No existing file selected' }, ...(projects.find((project) => String(project.id) === createForm.data.project_id)?.documents ?? []).map((document) => ({ value: String(document.id), label: `${document.file_name} (${document.category})` }))]} /><small>Files uploaded by the salesman in My Sold are available here.</small></label>
+                                {isPayable && <label><span>Invoice for selected project (optional)</span><SearchableSelect disabled={!createForm.data.project_id} value={createForm.data.project_invoice_id} onChange={selectInvoice} searchPlaceholder="Search invoice numbers…" options={[{ value: '', label: !createForm.data.project_id ? 'Select a project customer first' : selectedProjectInvoices.length === 0 ? 'No unpaid invoices for this project' : 'Choose an invoice' }, ...selectedProjectInvoices.map((invoice) => ({ value: String(invoice.id), label: `${invoice.invoice_number} - Balance ${currency.format(Number(invoice.balance))}` }))]} />{createForm.data.project_id && selectedProjectInvoices.length > 0 && <small>Selecting an invoice fills its remaining balance and contractor.</small>}</label>}
+                                {isPayable && <label><span>Contractor or vendor (optional)</span><SearchableSelect value={createForm.data.contractor_id ? `contractor:${createForm.data.contractor_id}` : createForm.data.vendor_id ? `vendor:${createForm.data.vendor_id}` : ''} onChange={(value) => createForm.setData((data) => ({ ...data, contractor_id: value.startsWith('contractor:') ? value.slice(11) : '', vendor_id: value.startsWith('vendor:') ? value.slice(7) : '', project_invoice_id: '' }))} searchPlaceholder="Search contractors or vendors…" options={[{ value: '', label: 'No contractor or vendor' }, ...contractors.map((contractor) => ({ value: `contractor:${contractor.con_id}`, label: `Contractor — ${contractor.contractor}` })), ...vendors.map((vendor) => ({ value: `vendor:${vendor.vendor_id}`, label: `Vendor — ${vendor.vendor}` }))]} /></label>}
+                                {isPayable && !createForm.data.contractor_id && !createForm.data.vendor_id && <label className="is-wide"><span>What is this payable for? *</span><input required placeholder="Example: Vendor payment, office rent, utilities, supplies..." value={createForm.data.payable_for} onChange={(e) => createForm.setData('payable_for', e.target.value)} /></label>}
                                 </div>
                               </section>
                               <section>
                                 <header><strong>Transaction details</strong><small>Add an attachment and optional notes.</small></header>
                                 <div className="accounting-register-details">
-                                  <label><span>{isPayable ? 'Paid to' : 'Received from'}</span><input readOnly value={isPayable ? (contractors.find((item) => String(item.con_id) === createForm.data.contractor_id)?.contractor || createForm.data.payable_for) : projectCustomerSearch} /></label>
+                                  <label><span>{isPayable ? 'Paid to' : 'Received from'}</span><input readOnly value={isPayable ? (contractors.find((item) => String(item.con_id) === createForm.data.contractor_id)?.contractor || vendors.find((item) => String(item.vendor_id) === createForm.data.vendor_id)?.vendor || createForm.data.payable_for) : projectCustomerSearch} /></label>
                                   <label><span>Attachment</span><span className="accounting-register-create-upload"><Upload /><strong>{createForm.data.file?.name || 'Drop PDF or image here'}</strong><small>or click to browse</small><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => createForm.setData('file', event.target.files?.[0] ?? null)} /></span></label>
                                   <label><span>Notes</span><textarea rows={5} placeholder="Accounting notes..." value={createForm.data.notes} onChange={(e) => createForm.setData('notes', e.target.value)} /></label>
                                 </div>
@@ -805,12 +926,12 @@ export default function AccountingRegister({
                     }}>
                         <DialogHeader><DialogTitle>{attachmentRow.reference_number || `Files for this ${attachmentRow.type}`}</DialogTitle><DialogDescription>View existing attachments or add PDFs, images, and photos. New files also appear in the project DOC tab and Google Drive.</DialogDescription></DialogHeader>
                         <div className="accounting-register-attachment-list">
-                            {attachmentRow.file_name && <a href={`/management/projects/${attachmentRow.project_id}/accounting-transactions/${attachmentRow.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{attachmentRow.file_name}</span><strong>View</strong></a>}
-                            {attachmentRow.documents.map((document) => <a key={document.id} href={`/management/projects/${attachmentRow.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a>)}
+                            {attachmentRow.file_name && <div className="accounting-attachment-row"><a href={`/management/projects/${attachmentRow.project_id}/accounting-transactions/${attachmentRow.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{attachmentRow.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/accounting-transactions/${attachmentRow.id}/file`, attachmentRow.file_name!)}><Trash2 /> Remove</button></div>}
+                            {attachmentRow.documents.map((document) => <div className="accounting-attachment-row" key={document.id}><a href={`/management/projects/${attachmentRow.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/projects/${attachmentRow.project_id}/documents/${document.id}`, document.file_name)}><Trash2 /> Remove</button></div>)}
                             {!attachmentRow.file_name && attachmentRow.documents.length === 0 && <p>No files attached yet.</p>}
                         </div>
-                        <label className="accounting-register-multi-upload"><Upload /><strong>{attachmentForm.data.files.length ? `${attachmentForm.data.files.length} files selected` : 'Choose files or photos'}</strong><input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => attachmentForm.setData('files', Array.from(event.target.files ?? []))} /></label>
-                        {attachmentForm.errors.files && <small>{attachmentForm.errors.files}</small>}
+                        <label className="accounting-register-multi-upload"><Upload /><strong>{attachmentForm.data.files.length ? `${attachmentForm.data.files.length} files selected` : 'Choose files or photos'}</strong><input type="file" multiple accept=".pdf,.jpg,.jpeg,.jfif,.png,.webp,.heic,.heif" onChange={(event) => attachmentForm.setData('files', Array.from(event.target.files ?? []))} /></label>
+                        {Object.entries(attachmentForm.errors).map(([key, message]) => <small key={key}>{message}</small>)}
                         <DialogFooter className="accounting-register-modal-actions"><button className="is-secondary" type="button" onClick={() => setAttachmentRow(null)}>Cancel</button><button className="is-primary" type="submit" disabled={attachmentForm.processing || attachmentForm.data.files.length === 0}>{attachmentForm.processing ? 'Uploading…' : 'Upload files'}</button></DialogFooter>
                     </form></DialogContent>}
                 </Dialog>
@@ -837,6 +958,16 @@ export default function AccountingRegister({
                             </DialogDescription>
                         </DialogHeader>
                         {qbModalRow && <div className="accounting-register-qb-summary"><span>Received from</span><strong>{qbModalRow.received_from || qbModalRow.customer}</strong><span>Amount</span><strong>{currency.format(Number(qbModalRow.amount))}</strong></div>}
+                        {qbModalRow && qbDetailsOpen && <div className="accounting-register-qb-details">
+                            <div><span>Project</span><strong>{qbModalRow.project_number || 'Unassigned'}</strong></div>
+                            <div><span>Address</span><strong>{qbModalRow.address || '—'}</strong></div>
+                            <div><span>Date</span><strong>{date.format(new Date(`${qbModalRow.transaction_date}T12:00:00`))}</strong></div>
+                            <div><span>Category</span><strong>{qbModalRow.category}</strong></div>
+                            <div><span>Status</span><strong>{statusLabels[qbModalRow.status]}</strong></div>
+                            <div><span>Reference</span><strong>{qbModalRow.reference_number || '—'}</strong></div>
+                            <div className="is-wide"><span>Notes</span><strong>{qbModalRow.notes || 'No notes'}</strong></div>
+                            <div className="is-wide"><span>Attachments</span><strong>{qbModalRow.file_name || qbModalRow.documents.length ? `${(qbModalRow.file_name ? 1 : 0) + qbModalRow.documents.length} file(s) attached` : 'No files attached'}</strong></div>
+                        </div>}
                         <label>
                             <span>Payment method</span>
                             <select
@@ -871,6 +1002,7 @@ export default function AccountingRegister({
                         {qbError && <small>{qbError}</small>}
                         <DialogFooter className="accounting-register-modal-actions">
                             <button className="is-secondary" type="button" onClick={() => setQbModalRow(null)}>Cancel</button>
+                            <button className="is-secondary" type="button" onClick={() => setQbDetailsOpen((open) => !open)}><Eye /> {qbDetailsOpen ? 'Hide details' : 'View details'}</button>
                             <button
                                 className="is-primary"
                                 type="button"

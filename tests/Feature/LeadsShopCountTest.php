@@ -103,6 +103,7 @@ test('leads shop header counts manager returns from restricted workflow tabs', f
     $agent = Agent::query()->create(['agent_name' => 'Return Counter Agent']);
     $firstLead = createOwnedCallbackLead($admin, $firstManager, $agent, 'First Returned Lead');
     $secondLead = createOwnedCallbackLead($admin, $secondManager, $agent, 'Second Returned Lead');
+    $verifyLead = createOwnedCallbackLead($admin, $firstManager, $agent, 'Verify Returned Lead');
 
     LeadMovement::query()->create([
         'lead_id' => $firstLead->id,
@@ -116,14 +117,20 @@ test('leads shop header counts manager returns from restricted workflow tabs', f
         'to_status' => 'fresh',
         'moved_by' => $secondManager->acc_id,
     ]);
+    LeadMovement::query()->create([
+        'lead_id' => $verifyLead->id,
+        'from_status' => 'verify',
+        'to_status' => 'fresh',
+        'moved_by' => $firstManager->acc_id,
+    ]);
 
     $this->actingAs($admin)
         ->get(route('lead-workflow.leads-shop'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('agentDayTotal', 0)
-            ->where('overallDayTotal', 2)
-            ->where('managerReturns.leads', 2)
+            ->where('overallDayTotal', 3)
+            ->where('managerReturns.leads', 3)
             ->where('managerReturns.managers', 2));
 });
 

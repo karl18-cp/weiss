@@ -10,9 +10,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'project_id',
+    'company_id',
     'project_document_id',
     'project_invoice_id',
     'contractor_id',
+    'vendor_id',
     'type',
     'category',
     'transaction_date',
@@ -58,6 +60,11 @@ class ProjectAccountingTransaction extends Model
         return $this->belongsTo(Project::class);
     }
 
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'company_id', 'com_id');
+    }
+
     public function document(): BelongsTo
     {
         return $this->belongsTo(ProjectDocument::class, 'project_document_id');
@@ -71,6 +78,11 @@ class ProjectAccountingTransaction extends Model
     public function contractor(): BelongsTo
     {
         return $this->belongsTo(Contractor::class, 'contractor_id', 'con_id');
+    }
+
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class, 'vendor_id', 'vendor_id');
     }
 
     public function scheduledPayments(): BelongsToMany

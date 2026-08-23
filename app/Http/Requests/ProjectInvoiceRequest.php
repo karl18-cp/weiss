@@ -36,7 +36,7 @@ class ProjectInvoiceRequest extends FormRequest
             ],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'notes' => ['nullable', 'string', 'max:5000'],
-            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'file' => ['nullable', 'file', 'extensions:pdf,jpg,jpeg,jfif,png,webp,heic,heif', 'max:20480'],
             'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
         ];
     }

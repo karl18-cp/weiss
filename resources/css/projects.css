@@ -3154,6 +3154,12 @@
 .project-qb-confirm-summary { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 16px 22px 0; padding: 12px 14px; border: 1px solid #dce4ef; border-radius: 10px; background: #f8fafc; }
 .project-qb-confirm-summary span { color: #718096; font-size: 11px; }
 .project-qb-confirm-summary strong { color: #1d2940; font-size: 12px; text-align: right; }
+.project-qb-confirm-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 12px 22px 0; padding: 12px 14px; border: 1px solid #dce4ef; border-radius: 10px; background: #fff; }
+.project-qb-confirm-details > div { display: grid; gap: 3px; min-width: 0; }
+.project-qb-confirm-details .is-wide { grid-column: 1 / -1; }
+.project-qb-confirm-details span { color: #718096; font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.project-qb-confirm-details strong { color: #1d2940; font-size: 12px; overflow-wrap: anywhere; }
+.project-sale-modal__footer button svg { width: 15px; height: 15px; vertical-align: middle; }
 
 .project-payment-confirm-modal .project-accounting-form-top {
     grid-template-columns: repeat(2, minmax(0, 1fr));

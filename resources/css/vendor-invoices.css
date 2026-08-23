@@ -436,6 +436,11 @@
 .vendor-attachment-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vendor-attachment-list strong { color: #245bd9; font-size: 11px; }
 .vendor-attachment-list p { margin: 0; padding: 12px; color: #718096; text-align: center; }
+.accounting-attachment-row { display: flex; min-width: 0; align-items: center; gap: 7px; }
+.accounting-attachment-row > a { min-width: 0; flex: 1; }
+.accounting-attachment-row > button { display: inline-flex; min-height: 41px; align-items: center; gap: 5px; padding: 9px 11px; border: 1px solid #fecaca; border-radius: 10px; background: #fff7f7; color: #dc2626; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.accounting-attachment-row > button:hover { background: #fee2e2; }
+.accounting-attachment-row > button svg { width: 14px; height: 14px; color: currentColor; }
 .vendor-action-modal > form { display: grid; gap: 16px; }
 .vendor-action-modal > form > .vendor-upload-panel { min-height: 7rem; cursor: pointer; align-items: center; justify-content: center; border-style: dashed; background: #f5f8ff; }
 .vendor-action-modal > form > .vendor-upload-panel input { display: none; }

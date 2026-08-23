@@ -2065,14 +2065,7 @@ export default function LeadsShop({
     };
 
     const requestStatusUpdate = (status: string) => {
-        if (
-            [
-                '/lead-workflow/leads-shop',
-                '/lead-workflow/confirm-leads',
-                '/lead-workflow/dispatch-leads',
-            ].includes(window.location.pathname) &&
-            status === '555'
-        ) {
+        if (status === '555') {
             setFiveFiveFiveModalOpen(true);
 
             return;
@@ -2417,6 +2410,7 @@ export default function LeadsShop({
     ] as const;
     const hisWorkflowActions = [
         ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
+        ['555', '555', Phone, '555'],
         ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
     ] as const;
     const projectWorkflowActions = [
@@ -5490,6 +5484,7 @@ export default function LeadsShop({
                             <div className="lead-sale-modal__form">
                                 <div className="lead-555-destination-grid">
                                     {[
+                                        ['555', '555', PhoneCall],
                                         ['ora', 'ORA', Phone],
                                         ['la', 'LA', MapPin],
                                         ['ng', 'NG', Ban],

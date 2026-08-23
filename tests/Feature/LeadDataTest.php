@@ -3,6 +3,7 @@
 use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Company;
+use App\Models\Contractor;
 use App\Models\Lead;
 use App\Models\LeadNote;
 use App\Models\Product;
@@ -222,6 +223,47 @@ test('data accounting registers aggregate receivables and payables from all proj
             ->where('transactions.data.0.company_prefix', 'TC')
             ->where('transactions.data.0.requested_by', 'Project Manager')
             ->where('transactions.data.0.reference_number', 'CH#200'));
+});
+
+test('accounting registers filter by salesman and contractor', function () {
+    $admin = dataAdmin();
+    $salesman = Salesman::query()->create(['salesman_name' => 'Filtered Salesman']);
+    $otherSalesman = Salesman::query()->create(['salesman_name' => 'Other Salesman']);
+    $contractorData = ['address' => '', 'zip' => 0, 'city' => '', 'state' => '', 'email' => '', 'phone' => '0'];
+    $contractor = Contractor::query()->create([...$contractorData, 'contractor' => 'Filtered Contractor']);
+    $otherContractor = Contractor::query()->create([...$contractorData, 'contractor' => 'Other Contractor']);
+
+    $lead = dataLead(['status' => 'project', 'salesman_1_id' => $salesman->salesman_id]);
+    $otherLead = $lead->replicate();
+    $otherLead->customer_name = 'Other Accounting Customer';
+    $otherLead->salesman_1_id = $otherSalesman->salesman_id;
+    $otherLead->save();
+
+    $project = Project::query()->create(['lead_id' => $lead->id, 'amount' => 1000, 'created_by' => $admin->acc_id]);
+    $otherProject = Project::query()->create(['lead_id' => $otherLead->id, 'amount' => 1000, 'created_by' => $admin->acc_id]);
+    $project->contractors()->attach($contractor->con_id, ['position' => 1]);
+    $otherProject->contractors()->attach($otherContractor->con_id, ['position' => 1]);
+
+    foreach ([[$project, $contractor, 'Matching Payable'], [$otherProject, $otherContractor, 'Other Payable']] as [$linkedProject, $linkedContractor, $note]) {
+        ProjectAccountingTransaction::query()->create([
+            'project_id' => $linkedProject->id,
+            'contractor_id' => $linkedContractor->con_id,
+            'type' => 'payable',
+            'category' => 'Vendor Payment',
+            'transaction_date' => '2026-08-21',
+            'amount' => 100,
+            'status' => 'ok_to_pay',
+            'notes' => $note,
+        ]);
+    }
+
+    $this->actingAs($admin)
+        ->get(route('management.payables', ['salesman' => $salesman->salesman_id, 'contractor' => $contractor->con_id]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('transactions.data', 1)
+            ->where('transactions.data.0.notes', 'Matching Payable')
+            ->where('filters.salesman', $salesman->salesman_id)
+            ->where('filters.contractor', $contractor->con_id));
 });
 
 test('booking board contains only dispatched leads', function () {

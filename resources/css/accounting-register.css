@@ -173,6 +173,18 @@
     border-bottom: 1px solid #e6ecf4;
 }
 
+.accounting-register-filters {
+    display: grid;
+    min-width: min(48rem, 60vw);
+    grid-template-columns: minmax(14rem, 1fr) minmax(10rem, 0.55fr) minmax(11rem, 0.65fr);
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.accounting-register-filters > .searchable-select {
+    min-width: 0;
+}
+
 .accounting-register-panel h2 {
     font-size: 0.9rem;
     font-weight: 850;
@@ -195,6 +207,10 @@
     border: 1px solid #d7e1ee;
     border-radius: 0.7rem;
     background: #f9fbfd;
+}
+
+.accounting-register-filters form {
+    width: 100%;
 }
 
 .accounting-register-panel form > svg {
@@ -390,6 +406,12 @@
 .accounting-register-qb-summary { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 1rem; padding: 0.75rem; border: 1px solid #dce4ef; border-radius: 0.65rem; background: #f8fafc; }
 .accounting-register-qb-summary span { color: #718096; font-size: 0.68rem; }
 .accounting-register-qb-summary strong { color: #1d2940; font-size: 0.72rem; text-align: right; }
+.accounting-register-qb-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; padding: 0.75rem; border: 1px solid #dce4ef; border-radius: 0.65rem; background: #fff; }
+.accounting-register-qb-details > div { display: grid; gap: 0.2rem; min-width: 0; }
+.accounting-register-qb-details .is-wide { grid-column: 1 / -1; }
+.accounting-register-qb-details span { color: #718096; font-size: 0.66rem; font-weight: 750; text-transform: uppercase; }
+.accounting-register-qb-details strong { color: #1d2940; font-size: 0.72rem; overflow-wrap: anywhere; }
+.accounting-register-modal-actions button svg { width: 0.9rem; height: 0.9rem; vertical-align: middle; }
 
 .accounting-register-modal-actions {
     display: flex;
@@ -439,6 +461,10 @@
 .accounting-register-file-actions { display: flex; align-items: center; gap: 0.4rem; }
 .accounting-register-file-actions button { display: inline-flex; align-items: center; gap: 0.2rem; color: #245bd9; font-size: 0.65rem; font-weight: 800; white-space: nowrap; }
 .accounting-register-file-actions svg { width: 0.75rem; }
+.accounting-register-row-actions { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.accounting-register-row-actions button { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 2rem; padding: 0.4rem 0.65rem; border: 1px solid #bfd0ee; border-radius: 0.55rem; background: #fff; color: #175cd3; font: inherit; font-weight: 700; cursor: pointer; }
+.accounting-register-row-actions button.is-danger { border-color: #fecaca; color: #dc2626; }
+.accounting-register-row-actions svg { width: 0.9rem; height: 0.9rem; }
 .accounting-register-attachment-trigger, .vendor-invoice-attachment-trigger { color: #245bd9; font-weight: 850; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .accounting-register-attachment-list, .vendor-attachment-list { display: grid; max-height: 15rem; gap: 0.45rem; overflow-y: auto; }
 .accounting-register-attachment-list a, .vendor-attachment-list a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; padding: 0.65rem 0.75rem; border: 1px solid #dce4ef; border-radius: 0.65rem; color: #334155; background: #f8fafc; }
@@ -446,6 +472,11 @@
 .accounting-register-attachment-list span, .vendor-attachment-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accounting-register-attachment-list strong, .vendor-attachment-list strong { color: #245bd9; font-size: 0.7rem; }
 .accounting-register-attachment-list p, .vendor-attachment-list p { margin: 0; padding: 0.75rem; color: #718096; text-align: center; }
+.accounting-attachment-row { display: flex; min-width: 0; align-items: center; gap: 0.45rem; }
+.accounting-attachment-row > a { min-width: 0; flex: 1; }
+.accounting-attachment-row > button { display: inline-flex; min-height: 2.55rem; align-items: center; gap: 0.3rem; padding: 0.55rem 0.7rem; border: 1px solid #fecaca; border-radius: 0.65rem; background: #fff7f7; color: #dc2626; font: inherit; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
+.accounting-attachment-row > button:hover { background: #fee2e2; }
+.accounting-attachment-row > button svg { width: 0.9rem; height: 0.9rem; color: currentColor; }
 .accounting-register-multi-upload { display: flex; min-height: 7rem; cursor: pointer; align-items: center; justify-content: center; gap: 0.5rem; border: 1px dashed #9db5df; border-radius: 0.75rem; color: #245bd9; background: #f5f8ff; }
 .accounting-register-multi-upload input { display: none; }
 .accounting-register-multi-upload svg { width: 1rem; }
@@ -617,6 +648,12 @@
     .accounting-register-summary,
     .accounting-register-panel form {
         width: 100%;
+    }
+
+    .accounting-register-filters {
+        width: 100%;
+        min-width: 0;
+        grid-template-columns: 1fr;
     }
 
     .accounting-register-table-wrap {

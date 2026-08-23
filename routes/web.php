@@ -145,6 +145,9 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('receivables', [LeadDataController::class, 'receivables'])->name('receivables');
         Route::get('payables', [LeadDataController::class, 'payables'])->name('payables');
         Route::post('accounting-transactions', [LeadDataController::class, 'storeAccountingTransaction'])->name('accounting-transactions.store');
+        Route::match(['post', 'put'], 'accounting-transactions/{accountingTransaction}', [LeadDataController::class, 'updateAccountingTransaction'])->name('accounting-transactions.update');
+        Route::delete('accounting-transactions/{accountingTransaction}', [LeadDataController::class, 'destroyAccountingTransaction'])->name('accounting-transactions.destroy');
+        Route::delete('accounting-transactions/{accountingTransaction}/file', [LeadDataController::class, 'destroyAccountingTransactionFile'])->name('accounting-transactions.file.destroy');
         Route::patch('accounting-transactions/{accountingTransaction}/status', [LeadDataController::class, 'updateAccountingStatus'])->name('accounting-transactions.status');
         Route::redirect('manager-history', '/lead-workflow/call-logs')->name('manager-history');
         Route::get('quality-control', [QualityControlController::class, 'index'])->name('quality-control');
@@ -169,14 +172,17 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::post('projects/{project}/invoices/{invoice}', [ProjectController::class, 'updateInvoice'])->name('projects.invoices.update');
         Route::delete('projects/{project}/invoices/{invoice}', [ProjectController::class, 'destroyInvoice'])->name('projects.invoices.destroy');
         Route::get('projects/{project}/invoices/{invoice}/file', [ProjectController::class, 'showInvoiceFile'])->name('projects.invoices.file');
+        Route::delete('projects/{project}/invoices/{invoice}/file', [ProjectController::class, 'destroyInvoiceFile'])->name('projects.invoices.file.destroy');
         Route::get('projects/{project}/contract-file', [ProjectController::class, 'showContractFile'])->name('projects.contract-file');
         Route::get('projects/{project}/documents/{document}/file', [ProjectController::class, 'showProjectDocument'])->name('projects.documents.file');
         Route::post('projects/{project}/documents', [ProjectController::class, 'storeProjectDocuments'])->name('projects.documents.store');
+        Route::delete('projects/{project}/documents/{document}', [ProjectController::class, 'destroyProjectDocument'])->name('projects.documents.destroy');
         Route::post('projects/{project}/accounting-transactions', [ProjectController::class, 'storeAccountingTransaction'])->name('projects.accounting-transactions.store');
         Route::match(['post', 'put'], 'projects/{project}/accounting-transactions/{accountingTransaction}', [ProjectController::class, 'updateAccountingTransaction'])->name('projects.accounting-transactions.update');
         Route::patch('projects/{project}/accounting-transactions/{accountingTransaction}/qb', [ProjectController::class, 'updateReceivableQuickBooks'])->name('projects.accounting-transactions.qb');
         Route::delete('projects/{project}/accounting-transactions/{accountingTransaction}', [ProjectController::class, 'destroyAccountingTransaction'])->name('projects.accounting-transactions.destroy');
         Route::get('projects/{project}/accounting-transactions/{accountingTransaction}/file', [ProjectController::class, 'showAccountingTransactionFile'])->name('projects.accounting-transactions.file');
+        Route::delete('projects/{project}/accounting-transactions/{accountingTransaction}/file', [ProjectController::class, 'destroyAccountingTransactionFile'])->name('projects.accounting-transactions.file.destroy');
         Route::get('salesmen', [SalesmanController::class, 'index'])->name('salesmen');
         Route::get('salesmen/{salesman}/report', [SalesmanController::class, 'report'])->name('salesmen.report');
         Route::post('salesmen', [SalesmanController::class, 'store'])->name('salesmen.store');

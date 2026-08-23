@@ -61,6 +61,8 @@ class ProjectController extends Controller
                     'accountingTransactions.invoice.contractor:con_id,contractor',
                     'accountingTransactions.invoice.vendor:vendor_id,vendor',
                     'accountingTransactions.contractor:con_id,contractor',
+                    'accountingTransactions.vendor:vendor_id,vendor',
+                    'accountingTransactions.company:com_id,company,prefix',
                     'documents:id,project_id,project_invoice_id,project_accounting_transaction_id,project_sale_id,category,file_name,file_mime,file_size,created_at',
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',
@@ -579,6 +581,23 @@ class ProjectController extends Controller
         );
     }
 
+    public function destroyInvoiceFile(Project $project, ProjectInvoice $invoice): RedirectResponse
+    {
+        abort_unless($invoice->project_id === $project->id && $invoice->file_name, 404);
+        $this->deleteProjectAttachment($project, $invoice->file_path, $invoice->file_name, $invoice->project_document_id);
+        $invoice->update([
+            'project_document_id' => null,
+            'file_path' => null,
+            'file_name' => null,
+            'file_mime' => null,
+            'file_size' => null,
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Invoice file removed from the CRM and Google Drive.']);
+
+        return back();
+    }
+
     public function showContractFile(Project $project): StreamedResponse
     {
         abort_unless(
@@ -609,16 +628,18 @@ class ProjectController extends Controller
             $data['project_invoice_id'] = null;
             $data['project_document_id'] = null;
         } else {
+            $data['company_id'] = $data['company_id'] ?? $project->lead?->company_id ?? $project->company_id;
             $data = $this->withSelectedProjectDocument($project, $data);
         }
         $data['contractor_id'] = $data['type'] === 'payable' ? ($data['contractor_id'] ?? null) : null;
+        $data['vendor_id'] = $data['type'] === 'payable' ? ($data['vendor_id'] ?? null) : null;
         if ($data['type'] === 'payable' && $data['status'] !== 'paid') {
             $data['payment_method'] = null;
             $data['reference_number'] = null;
         }
         $data['counterparty'] = $unassigned && $data['type'] === 'receivable'
             ? ($data['counterparty'] ?? null)
-            : $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['project_invoice_id']);
+            : $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['vendor_id'], $data['project_invoice_id']);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         if (! $unassigned) {
             $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
@@ -662,11 +683,12 @@ class ProjectController extends Controller
         $scheduledPaymentIds = $data['type'] === 'receivable' ? $request->input('scheduled_payment_ids', []) : [];
         $data['project_invoice_id'] = $data['type'] === 'payable' ? ($data['project_invoice_id'] ?? null) : null;
         $data['contractor_id'] = $data['type'] === 'payable' ? ($data['contractor_id'] ?? null) : null;
+        $data['vendor_id'] = $data['type'] === 'payable' ? ($data['vendor_id'] ?? null) : null;
         if ($data['type'] === 'payable' && $data['status'] !== 'paid') {
             $data['payment_method'] = null;
             $data['reference_number'] = null;
         }
-        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['project_invoice_id']);
+        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['vendor_id'], $data['project_invoice_id']);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: $accountingTransaction->requested_by ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         $oldFilePath = $accountingTransaction->file_path;
         $oldDocumentId = $accountingTransaction->project_document_id;
@@ -723,6 +745,32 @@ class ProjectController extends Controller
         return Storage::disk('local')->response($document->file_path, $document->file_name, ['Content-Disposition' => 'inline']);
     }
 
+    public function destroyProjectDocument(Project $project, ProjectDocument $document): RedirectResponse
+    {
+        abort_unless($document->project_id === $project->id, 404);
+        $this->deleteProjectAttachment($project, $document->file_path, $document->file_name);
+
+        ProjectInvoice::query()->where('project_document_id', $document->id)->update([
+            'project_document_id' => null,
+            'file_path' => null,
+            'file_name' => null,
+            'file_mime' => null,
+            'file_size' => null,
+        ]);
+        ProjectAccountingTransaction::query()->where('project_document_id', $document->id)->update([
+            'project_document_id' => null,
+            'file_path' => null,
+            'file_name' => null,
+            'file_mime' => null,
+            'file_size' => null,
+        ]);
+        $document->delete();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'File removed from the CRM and Google Drive.']);
+
+        return back();
+    }
+
     public function storeProjectDocuments(
         Request $request,
         Project $project,
@@ -730,7 +778,10 @@ class ProjectController extends Controller
     ): RedirectResponse {
         $data = $request->validate([
             'files' => ['required', 'array', 'min:1', 'max:20'],
-            'files.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
+            // Validate the safe extension instead of relying on the server's MIME
+            // detector. Phone photos (especially HEIC/JFIF) are commonly reported
+            // as application/octet-stream even though they are valid uploads.
+            'files.*' => ['required', 'file', 'extensions:pdf,jpg,jpeg,jfif,png,webp,heic,heif', 'max:20480'],
             'target_type' => ['required', 'in:project,invoice,accounting,sale'],
             'target_id' => ['nullable', 'integer'],
         ]);
@@ -856,10 +907,47 @@ class ProjectController extends Controller
         );
     }
 
+    public function destroyAccountingTransactionFile(
+        Project $project,
+        ProjectAccountingTransaction $accountingTransaction,
+    ): RedirectResponse {
+        abort_unless($accountingTransaction->project_id === $project->id && $accountingTransaction->file_name, 404);
+        $this->deleteProjectAttachment(
+            $project,
+            $accountingTransaction->file_path,
+            $accountingTransaction->file_name,
+            $accountingTransaction->project_document_id,
+        );
+        $accountingTransaction->update([
+            'project_document_id' => null,
+            'file_path' => null,
+            'file_name' => null,
+            'file_mime' => null,
+            'file_size' => null,
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Accounting file removed from the CRM and Google Drive.']);
+
+        return back();
+    }
+
+    private function deleteProjectAttachment(
+        Project $project,
+        ?string $filePath,
+        string $fileName,
+        ?int $projectDocumentId = null,
+    ): void {
+        $this->googleDrive->deleteMirroredFile($project, $fileName);
+        if ($filePath && ! $projectDocumentId) {
+            Storage::disk('local')->delete($filePath);
+        }
+    }
+
     private function accountingCounterparty(
         Project $project,
         string $type,
         ?int $contractorId,
+        ?int $vendorId,
         ?int $invoiceId = null,
     ): ?string
     {
@@ -869,6 +957,10 @@ class ProjectController extends Controller
 
         if ($contractorId) {
             return Contractor::query()->whereKey($contractorId)->value('contractor');
+        }
+
+        if ($vendorId) {
+            return Vendor::query()->whereKey($vendorId)->value('vendor');
         }
 
         return $invoiceId
@@ -1143,6 +1235,20 @@ class ProjectController extends Controller
             if (! $invoiceMatchesContractor) {
                 throw ValidationException::withMessages([
                     'project_invoice_id' => 'The selected invoice must belong to the selected contractor.',
+                ]);
+            }
+        }
+
+
+        if (! empty($data['project_invoice_id']) && ! empty($data['vendor_id'])) {
+            $invoiceMatchesVendor = $project->invoices()
+                ->whereKey($data['project_invoice_id'])
+                ->where('vendor_id', $data['vendor_id'])
+                ->exists();
+
+            if (! $invoiceMatchesVendor) {
+                throw ValidationException::withMessages([
+                    'project_invoice_id' => 'The selected invoice must belong to the selected vendor.',
                 ]);
             }
         }
