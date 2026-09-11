@@ -554,3 +554,10 @@
         max-height: calc(100vh - 18rem);
     }
 }
+.tele-hours-source {
+    display: block;
+    margin-top: 0.12rem;
+    color: #8b6a99;
+    font-size: 0.62rem;
+    font-weight: 600;
+}

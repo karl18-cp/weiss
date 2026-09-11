@@ -18,6 +18,31 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Project extends Model
 {
+    protected static function booted(): void
+    {
+        static::saved(fn (self $project) => $project->syncStatusFromAccounting());
+    }
+
+    public function syncStatusFromAccounting(): void
+    {
+        if ($this->status === 'canceled') {
+            return;
+        }
+
+        $hasInvoices = $this->invoices()->exists();
+        $hasAccounting = $this->accountingTransactions()->exists();
+        $allInvoicesPaid = $hasInvoices
+            && ! $this->invoices()->where('status', '!=', 'paid')->exists();
+
+        $status = $allInvoicesPaid
+            ? 'completed'
+            : ($hasInvoices || $hasAccounting ? 'progress' : 'new');
+
+        if ($this->status !== $status) {
+            $this->updateQuietly(['status' => $status]);
+        }
+    }
+
     public function lead(): BelongsTo
     {
         return $this->belongsTo(Lead::class);
@@ -76,6 +101,11 @@ class Project extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(ProjectDocument::class)->latest();
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ProjectActivityLog::class)->latest();
     }
 
     public function contractors(): BelongsToMany

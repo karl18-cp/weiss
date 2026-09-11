@@ -12,18 +12,16 @@ type HourRow = {
     work_date: string;
     first_login_at: string | null;
     last_logout_at: string | null;
-    imported_seconds: number;
-    manual_seconds: number;
+    logged_seconds: number;
     lunch_seconds: number;
     total_seconds: number;
     manual_override: boolean;
     sessions: number;
     manual_first_login: string | null;
     manual_first_logout: string | null;
-    manual_second_login: string | null;
-    manual_second_logout: string | null;
     leads_sent: number;
     note: string | null;
+    attendance_source: string;
 };
 
 type AgentOption = { id: number; name: string };
@@ -72,11 +70,8 @@ export default function DataTeleHours({
         agent_ids: [] as number[],
         agent_id: 0,
         work_date: crmDateKey(),
-        calltools_login: '',
-        calltools_logout: '',
         first_login: '',
         first_logout: '',
-        imported_hours: '0',
         leads_sent: '0',
         lunch_hours: '0',
         note: '',
@@ -98,7 +93,7 @@ export default function DataTeleHours({
             onSuccess: () => {
                 setOpen(false);
                 setEditing(null);
-                form.reset('agent_ids', 'agent_id', 'calltools_login', 'calltools_logout', 'first_login', 'first_logout', 'imported_hours', 'leads_sent', 'lunch_hours', 'note');
+                form.reset('agent_ids', 'agent_id', 'first_login', 'first_logout', 'leads_sent', 'lunch_hours', 'note');
             },
         };
 
@@ -133,11 +128,8 @@ export default function DataTeleHours({
             agent_ids: [row.agent_id],
             agent_id: row.agent_id,
             work_date: row.work_date,
-            calltools_login: localTime(row.first_login_at),
-            calltools_logout: localTime(row.last_logout_at),
             first_login: row.manual_first_login?.slice(0, 5) || localTime(row.first_login_at),
             first_logout: row.manual_first_logout?.slice(0, 5) || localTime(row.last_logout_at),
-            imported_hours: (row.imported_seconds / 3600).toFixed(2),
             leads_sent: row.leads_sent.toString(),
             lunch_hours: (row.lunch_seconds / 3600).toString(),
             note: row.note ?? '',
@@ -146,7 +138,7 @@ export default function DataTeleHours({
     };
 
     const deleteHours = (row: HourRow) => {
-        if (!window.confirm(`Delete the entire Tele Hours row for ${row.agent_name} on ${row.work_date}? Raw CallTools history will remain preserved.`)) return;
+        if (!window.confirm(`Remove the Tele Report row for ${row.agent_name} on ${row.work_date}? The original attendance history remains preserved.`)) return;
 
         router.delete(`/lead-workflow/data/tele-hours/${row.agent_id}/${row.work_date}`, {
             preserveScroll: true,
@@ -192,23 +184,22 @@ export default function DataTeleHours({
                     </div>
                     <div className="data-hours-table-wrap">
                         <table>
-                            <thead><tr><th>Date</th><th>Agent</th><th>CallTools login</th><th>CallTools logout</th><th>Manual login</th><th>Manual logout</th><th>Leads sent</th><th>Imported</th><th>Lunch deducted</th><th>Manual</th><th>Net total</th><th>Note</th>{canManageManualHours && <th>Actions</th>}</tr></thead>
+                            <thead><tr><th>Date</th><th>Agent</th><th>First login</th><th>Final logout</th><th>Leads sent</th><th>Lunch hours</th><th>Net hours</th><th>Sessions</th><th>Note</th>{canManageManualHours && <th>Actions</th>}</tr></thead>
                             <tbody>
                                 {hours.map((row) => (
                                     <tr key={`${row.agent_id}-${row.work_date}`}>
-                                        <td>{row.work_date}</td><td><strong>{row.agent_name}</strong></td>
-                                        <td>{row.first_login_at ? time.format(attendanceDate(row.first_login_at)) : '—'}</td>
-                                        <td>{row.last_logout_at ? time.format(attendanceDate(row.last_logout_at)) : '—'}</td>
-                                        <td>{row.manual_first_login || '—'}</td><td>{row.manual_first_logout || '—'}</td>
-                                        <td><strong>{row.leads_sent}</strong></td><td>{duration(row.imported_seconds)}</td>
-                                        <td>{row.lunch_seconds ? duration(row.lunch_seconds) : '—'}</td>
-                                        <td>{row.manual_seconds ? duration(row.manual_seconds) : '—'}</td>
+                                        <td>{row.work_date}</td><td><strong>{row.agent_name}</strong><small className="data-hours-source">{row.attendance_source}</small></td>
+                                        <td>{row.first_login_at ? time.format(attendanceDate(row.first_login_at)) : 'No login recorded'}</td>
+                                        <td>{row.last_logout_at ? time.format(attendanceDate(row.last_logout_at)) : row.first_login_at ? 'Still logged in' : '—'}</td>
+                                        <td><strong>{row.leads_sent}</strong></td>
+                                        <td>{duration(row.lunch_seconds)}</td>
                                         <td className="data-hours-total">{duration(row.total_seconds)}{row.manual_override && <small className="data-hours-override">Manual</small>}</td>
+                                        <td>{row.sessions}</td>
                                         <td>{row.note || '—'}</td>
                                         {canManageManualHours && <td><div className="data-hours-row-actions"><button type="button" onClick={() => openEdit(row)} aria-label={`Edit hours for ${row.agent_name}`}><Pencil /></button><button type="button" className="is-delete" onClick={() => deleteHours(row)} aria-label={`Delete hours for ${row.agent_name}`}><Trash2 /></button></div></td>}
                                     </tr>
                                 ))}
-                                {hours.length === 0 && <tr><td className="data-hours-empty" colSpan={canManageManualHours ? 13 : 12}>No hour records are available yet.</td></tr>}
+                                {hours.length === 0 && <tr><td className="data-hours-empty" colSpan={canManageManualHours ? 10 : 9}>No Agent Portal or CallTools attendance records are available for this date.</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -239,9 +230,6 @@ export default function DataTeleHours({
                             {editing && <label>Agent<select value={form.data.agent_id} onChange={(e) => form.setData('agent_id', Number(e.target.value))} required>{editableAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><small>{form.errors.agent_id}</small></label>}
                             <label>Date<input type="date" value={form.data.work_date} onChange={(e) => form.setData('work_date', e.target.value)} required /><small>{form.errors.work_date}</small></label>
                             {editing && <div className="data-hours-fields">
-                                <label>CallTools login<input type="time" value={form.data.calltools_login} onChange={(e) => form.setData('calltools_login', e.target.value)} /><small>{form.errors.calltools_login}</small></label>
-                                <label>CallTools logout<input type="time" value={form.data.calltools_logout} onChange={(e) => form.setData('calltools_logout', e.target.value)} /><small>{form.errors.calltools_logout}</small></label>
-                                <label>Imported hours<input type="number" min="0" max="24" step="0.01" value={form.data.imported_hours} onChange={(e) => form.setData('imported_hours', e.target.value)} required /><small>{form.errors.imported_hours}</small></label>
                                 <label>Leads sent<input type="number" min="0" step="1" value={form.data.leads_sent} onChange={(e) => form.setData('leads_sent', e.target.value)} required /><small>{form.errors.leads_sent}</small></label>
                             </div>}
                             <div className="data-hours-fields">

@@ -40,7 +40,9 @@ class GoogleDriveStatusController extends Controller
                 'configured' => true,
                 'connected' => false,
                 'status' => 'error',
-                'message' => 'Google Drive could not be reached. Check the Google authorization and try again.',
+                'message' => str_contains($exception->getMessage(), 'invalid_grant')
+                    ? 'Google Drive authorization has expired or was revoked. Reconnect the Google account before syncing files.'
+                    : 'Google Drive could not be reached. Check the Google authorization and try again.',
                 'checkedAt' => now()->toIso8601String(),
             ], 503);
         }

@@ -8,13 +8,41 @@ import { useSystemModal } from '@/components/system-modal-provider';
 type Product = {
     prod_id: number;
     product_name: string;
+    price: string | null;
+    unit: string | null;
+    description: string | null;
 };
+
+const productUnits = [
+    'Bag',
+    'Cubic Foot',
+    'Cubic Yard',
+    'Each',
+    'Foot',
+    'Gallon',
+    'Hour',
+    'Linear Foot',
+    'Pallet',
+    'Pound',
+    'Roll',
+    'Sheet',
+    'Square Foot',
+    'Square Yard',
+    'Stick',
+    'Ton',
+    'Yard',
+];
 
 export default function Products({ products }: { products: Product[] }) {
     const { confirm } = useSystemModal();
     const [selected, setSelected] = useState<Product | null>(null);
     const [search, setSearch] = useState('');
-    const form = useForm({ product_name: '' });
+    const form = useForm({
+        product_name: '',
+        price: '',
+        unit: '',
+        description: '',
+    });
 
     const filteredProducts = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -28,13 +56,23 @@ export default function Products({ products }: { products: Product[] }) {
 
     const selectProduct = (product: Product) => {
         setSelected(product);
-        form.setData('product_name', product.product_name);
+        form.setData({
+            product_name: product.product_name,
+            price: product.price ?? '',
+            unit: product.unit ?? '',
+            description: product.description ?? '',
+        });
         form.clearErrors();
     };
 
     const resetForm = () => {
         setSelected(null);
-        form.setData('product_name', '');
+        form.setData({
+            product_name: '',
+            price: '',
+            unit: '',
+            description: '',
+        });
         form.clearErrors();
     };
 
@@ -149,7 +187,9 @@ export default function Products({ products }: { products: Product[] }) {
                                     <span>
                                         <strong>{product.product_name}</strong>
                                         <small>
-                                            Product #{product.prod_id}
+                                            {product.price
+                                                ? `$${Number(product.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${product.unit ? ` / ${product.unit}` : ''}`
+                                                : `Product #${product.prod_id}`}
                                         </small>
                                     </span>
                                 </button>
@@ -201,6 +241,49 @@ export default function Products({ products }: { products: Product[] }) {
                                 {form.errors.product_name && (
                                     <small>{form.errors.product_name}</small>
                                 )}
+                            </label>
+
+                            <div className="products-form__pricing">
+                                <label>
+                                    <span>Price</span>
+                                    <div className="products-price-input">
+                                        <b>$</b>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={form.data.price}
+                                            onChange={(event) => form.setData('price', event.target.value)}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                    {form.errors.price && <small>{form.errors.price}</small>}
+                                </label>
+
+                                <label>
+                                    <span>Unit</span>
+                                    <select
+                                        value={form.data.unit}
+                                        onChange={(event) => form.setData('unit', event.target.value)}
+                                    >
+                                        <option value="">Select a unit</option>
+                                        {productUnits.map((unit) => (
+                                            <option key={unit} value={unit}>{unit}</option>
+                                        ))}
+                                    </select>
+                                    {form.errors.unit && <small>{form.errors.unit}</small>}
+                                </label>
+                            </div>
+
+                            <label>
+                                <span>Description</span>
+                                <textarea
+                                    value={form.data.description}
+                                    onChange={(event) => form.setData('description', event.target.value)}
+                                    placeholder="Describe the product, scope, or pricing details"
+                                    rows={5}
+                                />
+                                {form.errors.description && <small>{form.errors.description}</small>}
                             </label>
 
                             <div className="products-form__actions">

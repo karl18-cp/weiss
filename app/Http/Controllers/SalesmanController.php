@@ -6,36 +6,50 @@ use App\Http\Requests\SalesmanRequest;
 use App\Models\Account;
 use App\Models\Company;
 use App\Models\Lead;
+use App\Models\Project;
 use App\Models\Salesman;
+use App\Services\ProjectCommissionCalculator;
 use App\Support\ManagerAccess;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SalesmanController extends Controller
 {
+    public function __construct(private readonly ProjectCommissionCalculator $commissions) {}
+
     public function index(): Response
     {
         $salesmen = Salesman::query()
             ->with(['account:acc_id,username,suspended_at', 'company:com_id,company', 'permissions'])
-            ->withCount(['projects as completed_projects_count' => fn ($query) => $query->where('status', 'completed')])
-            ->with(['projects' => fn ($query) => $query->where('status', 'completed')->with('sales:id,project_id,type,amount')])
             ->orderBy('salesman_name')
             ->get()
             ->each(function (Salesman $salesman): void {
-                $initial = $salesman->projects->sum(fn ($project) => (float) ($project->sales->firstWhere('type', 'original')?->amount ?? $project->amount ?? 0));
-                $changes = $salesman->projects->sum(fn ($project) => (float) $project->sales->where('type', '!=', 'original')->sum('amount'));
-                $total = $initial + $changes;
-                $salesman->setAttribute('completed_sales_total', round($total, 2));
-                $salesman->setAttribute('completed_cut_total', round(
-                    ($initial * (float) $salesman->initial_sale_cut_percent / 100)
-                    + ($changes * (float) $salesman->change_order_cut_percent / 100)
-                    + ($total * (float) $salesman->sale_commission_percent / 100),
-                    2,
-                ));
-                $salesman->unsetRelation('projects');
+                $projects = Project::query()
+                    ->where('status', 'completed')
+                    ->where(function ($query) use ($salesman): void {
+                        $query->where('salesman_id', $salesman->salesman_id)
+                            ->orWhereHas('lead', fn ($lead) => $lead
+                                ->where('salesman_1_id', $salesman->salesman_id)
+                                ->orWhere('salesman_2_id', $salesman->salesman_id))
+                            ->orWhereHas('sales', fn ($sales) => $sales
+                                ->where('type', 'referral')
+                                ->where('salesman_id', $salesman->salesman_id));
+                    })
+                    ->with([
+                        'lead:id,salesman_1_id',
+                        'sales:id,project_id,type,amount,salesman_id',
+                        'accountingTransactions:id,project_id,project_sale_id,salesman_id,type,category,amount,status',
+                    ])
+                    ->get();
+                $breakdowns = $projects->map(
+                    fn (Project $project): array => $this->commissions->calculate($project, $salesman),
+                );
+                $salesman->setAttribute('completed_projects_count', $projects->count());
+                $salesman->setAttribute('completed_sales_total', round($breakdowns->sum('total_sale'), 2));
+                $salesman->setAttribute('completed_cut_total', round($breakdowns->sum('commission_due'), 2));
             });
 
         return Inertia::render('management/salesmen', [
@@ -59,6 +73,7 @@ class SalesmanController extends Controller
                 'initial_sale_cut_percent' => $data['initial_sale_cut_percent'],
                 'change_order_cut_percent' => $data['change_order_cut_percent'],
                 'sale_commission_percent' => $data['sale_commission_percent'],
+                'shared_sale_commission_percent' => $data['shared_sale_commission_percent'],
             ]);
             $this->syncPermissions($salesman, $data['permissions']);
         });
@@ -72,7 +87,10 @@ class SalesmanController extends Controller
     {
         $base = Lead::query()->where(function ($query) use ($salesman): void {
             $query->where('salesman_1_id', $salesman->salesman_id)
-                ->orWhere('salesman_2_id', $salesman->salesman_id);
+                ->orWhere('salesman_2_id', $salesman->salesman_id)
+                ->orWhereHas('project.sales', fn ($sales) => $sales
+                    ->where('type', 'referral')
+                    ->where('salesman_id', $salesman->salesman_id));
         });
         $confirmedStatuses = ['confirmed', 'dispatched', 'project'];
         $isConfirmed = fn ($query) => $query->whereIn('status', $confirmedStatuses)
@@ -87,12 +105,12 @@ class SalesmanController extends Controller
                 'notes:id,lead_id,body,created_at',
                 'movements:id,lead_id,to_status,created_at',
                 'project:id,lead_id,project_number,amount',
-                'project.sales:id,project_id,amount,sale_date',
+                'project.sales:id,project_id,type,amount,sale_date,salesman_id',
             ])
             ->latest('appointment_at')
             ->limit(300)
             ->get()
-            ->map(function ($lead) use ($confirmedStatuses): array {
+            ->map(function ($lead) use ($confirmedStatuses, $salesman): array {
                 $movementStatuses = $lead->movements->pluck('to_status');
                 $project = $lead->project;
                 $projectNumber = $project
@@ -111,7 +129,17 @@ class SalesmanController extends Controller
                     'sold' => (bool) $lead->project_exists,
                     'project_id' => $project?->id,
                     'project_number' => $projectNumber,
-                    'sale_total' => $project ? (float) ($project->sales->sum('amount') ?: $project->amount) : 0,
+                    'sale_total' => $project
+                        ? (in_array((int) $salesman->salesman_id, [
+                            (int) $lead->salesman_1_id,
+                            (int) $lead->salesman_2_id,
+                        ], true)
+                            ? (float) ($project->sales->sum('amount') ?: $project->amount)
+                            : (float) $project->sales
+                                ->where('type', 'referral')
+                                ->where('salesman_id', $salesman->salesman_id)
+                                ->sum('amount'))
+                        : 0,
                     'city' => $lead->city,
                     'notes' => $lead->notes->sortByDesc('id')->pluck('body')->filter()->take(3)->join(' | '),
                 ];
@@ -120,30 +148,30 @@ class SalesmanController extends Controller
         $soldQuery = (clone $base)->whereHas('project');
         $saleTotal = $rows->where('sold', true)->sum('sale_total');
 
-        $completedProjects = $salesman->projects()
+        $completedProjects = Project::query()
             ->where('status', 'completed')
+            ->where(function ($query) use ($salesman): void {
+                $query->where('salesman_id', $salesman->salesman_id)
+                    ->orWhereHas('lead', fn ($lead) => $lead
+                        ->where('salesman_1_id', $salesman->salesman_id)
+                        ->orWhere('salesman_2_id', $salesman->salesman_id))
+                    ->orWhereHas('sales', fn ($sales) => $sales
+                        ->where('type', 'referral')
+                        ->where('salesman_id', $salesman->salesman_id));
+            })
             ->with([
-                'lead:id,customer_name,city',
+                'lead:id,customer_name,city,salesman_1_id,salesman_2_id',
                 'company:com_id,company,prefix',
-                'sales:id,project_id,type,amount,sale_date',
-                'accountingTransactions:id,project_id,type,category,amount,status,transaction_date',
+                'sales:id,project_id,type,amount,sale_date,salesman_id',
+                'accountingTransactions:id,project_id,project_sale_id,salesman_id,type,category,amount,status,transaction_date',
                 'invoices:id,project_id,amount,status',
             ])
             ->latest('updated_at')
             ->get();
 
         $commissionRows = $completedProjects->map(function ($project) use ($salesman): array {
-            $originalSale = (float) ($project->sales->firstWhere('type', 'original')?->amount ?? $project->amount ?? 0);
-            $changeOrders = (float) $project->sales->where('type', '!=', 'original')->sum('amount');
-            $totalSale = $originalSale + $changeOrders;
-            $received = (float) $project->accountingTransactions
-                ->where('type', 'receivable')->where('status', 'deposit')->sum('amount');
-            $expenses = (float) $project->accountingTransactions
-                ->where('type', 'payable')->where('status', 'paid')->sum('amount');
-            $initialCut = $originalSale * (float) $salesman->initial_sale_cut_percent / 100;
-            $changeCut = $changeOrders * (float) $salesman->change_order_cut_percent / 100;
-            $saleCommission = $totalSale * (float) $salesman->sale_commission_percent / 100;
-            $commissionDue = $initialCut + $changeCut + $saleCommission;
+            $calculation = $this->commissions->calculate($project, $salesman);
+            $received = (float) $calculation['received'];
 
             return [
                 'project_id' => $project->id,
@@ -152,16 +180,19 @@ class SalesmanController extends Controller
                 'company' => $project->company?->company ?: '—',
                 'city' => $project->city ?: $project->lead?->city ?: '—',
                 'completed_at' => $project->updated_at?->toIso8601String(),
-                'original_sale' => round($originalSale, 2),
-                'change_orders' => round($changeOrders, 2),
-                'total_sale' => round($totalSale, 2),
+                'original_sale' => round($calculation['original_sale'], 2),
+                'change_orders' => round($calculation['change_orders'], 2),
+                'total_sale' => round($calculation['total_sale'], 2),
                 'received' => round($received, 2),
-                'expenses' => round($expenses, 2),
-                'project_balance' => round($totalSale - $received, 2),
-                'initial_cut' => round($initialCut, 2),
-                'change_order_cut' => round($changeCut, 2),
-                'sale_commission' => round($saleCommission, 2),
-                'commission_due' => round($commissionDue, 2),
+                'expenses' => round($calculation['expenses'], 2),
+                'project_balance' => round($calculation['total_sale'] - $received, 2),
+                'initial_cut' => round($calculation['lead_cost'], 2),
+                'change_order_cut' => round($calculation['change_order_lead_cost'], 2),
+                'commission_base' => round($calculation['commission_base'], 2),
+                'sale_commission' => round($calculation['commission_due'], 2),
+                'commission_due' => round($calculation['commission_due'], 2),
+                'commission_paid' => round($calculation['commission_paid'], 2),
+                'commission_balance' => round($calculation['commission_balance'], 2),
             ];
         });
 
@@ -181,6 +212,7 @@ class SalesmanController extends Controller
                     'initial_sale' => (float) $salesman->initial_sale_cut_percent,
                     'change_order' => (float) $salesman->change_order_cut_percent,
                     'sale_commission' => (float) $salesman->sale_commission_percent,
+                    'shared_sale_commission' => (float) $salesman->shared_sale_commission_percent,
                 ],
                 'summary' => [
                     'projects' => $commissionRows->count(),
@@ -189,6 +221,8 @@ class SalesmanController extends Controller
                     'expenses' => round($commissionRows->sum('expenses'), 2),
                     'balance' => round($commissionRows->sum('project_balance'), 2),
                     'commission_due' => round($commissionRows->sum('commission_due'), 2),
+                    'commission_paid' => round($commissionRows->sum('commission_paid'), 2),
+                    'commission_balance' => round($commissionRows->sum('commission_balance'), 2),
                 ],
                 'rows' => $commissionRows,
             ],
@@ -211,6 +245,7 @@ class SalesmanController extends Controller
                 'initial_sale_cut_percent' => $data['initial_sale_cut_percent'],
                 'change_order_cut_percent' => $data['change_order_cut_percent'],
                 'sale_commission_percent' => $data['sale_commission_percent'],
+                'shared_sale_commission_percent' => $data['shared_sale_commission_percent'],
             ]);
             $this->syncPermissions($salesman, $data['permissions']);
         });

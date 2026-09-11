@@ -748,6 +748,100 @@
     font-size: 0.62rem;
 }
 
+/* Readability pass: the dashboard has enough open space to use comfortable
+   type without reducing the amount of information visible at once. */
+.crm-dashboard-hero h1 {
+    font-size: 1.75rem;
+}
+
+.crm-dashboard-hero p {
+    font-size: 0.88rem;
+}
+
+.crm-dashboard-search input {
+    font-size: 0.84rem;
+}
+
+.crm-dashboard-date-filter label {
+    font-size: 0.62rem;
+}
+
+.crm-dashboard-date-filter input,
+.crm-dashboard-date-filter button {
+    font-size: 0.75rem;
+}
+
+.crm-dashboard-kpis header > span {
+    font-size: 0.7rem;
+}
+
+.crm-dashboard-kpis article > strong {
+    font-size: 2rem;
+}
+
+.crm-dashboard-kpis article > small {
+    font-size: 0.74rem;
+}
+
+.crm-dashboard-card > header h2 {
+    font-size: 1rem;
+}
+
+.crm-dashboard-card > header p {
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+
+.crm-dashboard-team-row,
+.crm-dashboard-salesman-row,
+.crm-dashboard-manager-row {
+    padding-block: 0.68rem;
+    font-size: 0.76rem;
+}
+
+.crm-dashboard-team-row > strong small {
+    font-size: 0.68rem;
+}
+
+.crm-dashboard-team-row.is-heading,
+.crm-dashboard-salesman-row.is-heading,
+.crm-dashboard-manager-row.is-heading {
+    font-size: 0.62rem;
+}
+
+.crm-dashboard-team-empty,
+.crm-dashboard-no-data {
+    font-size: 0.75rem;
+}
+
+.crm-dashboard-workflow > header > span {
+    font-size: 0.7rem;
+}
+
+.crm-dashboard-workflow a > header {
+    font-size: 0.73rem;
+}
+
+.crm-dashboard-workflow a > header span {
+    font-size: 0.65rem;
+}
+
+.crm-dashboard-workflow a > div {
+    min-height: 6rem;
+}
+
+.crm-dashboard-workflow p {
+    padding-block: 0.34rem;
+    font-size: 0.7rem;
+}
+
+.crm-dashboard-health em,
+.crm-dashboard-sources strong,
+.crm-dashboard-health span > strong,
+.crm-dashboard-sources em {
+    font-size: 0.76rem;
+}
+
 @media (max-width: 1100px) {
     .crm-dashboard-kpis {
         grid-template-columns: repeat(3, minmax(0, 1fr));

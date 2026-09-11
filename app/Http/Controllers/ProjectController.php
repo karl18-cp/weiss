@@ -25,6 +25,9 @@ use App\Models\Vendor;
 use App\Models\ScheduledPayment;
 use App\Services\GoogleDriveProjectStorage;
 use App\Services\ProjectNumberAllocator;
+use App\Services\ProjectCommissionCalculator;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -39,7 +42,185 @@ use Throwable;
 
 class ProjectController extends Controller
 {
-    public function __construct(private readonly GoogleDriveProjectStorage $googleDrive) {}
+    public function __construct(
+        private readonly GoogleDriveProjectStorage $googleDrive,
+        private readonly ProjectCommissionCalculator $commissions,
+    ) {}
+
+    public function printCoverPage(Project $project): \Illuminate\Http\Response
+    {
+        $project->loadMissing([
+            'lead.company',
+            'lead.product',
+            'lead.salesmanOne',
+            'lead.salesmanTwo',
+            'lead.notes',
+            'sales.product',
+            'sales.salesman',
+            'accountingTransactions',
+            'invoices.contractor',
+            'invoices.vendor',
+            'contractors',
+            'salesman',
+            'manager',
+        ]);
+
+        $income = (float) $project->accountingTransactions
+            ->where('type', 'receivable')
+            ->sum('amount');
+        $expenses = (float) $project->accountingTransactions
+            ->where('type', 'payable')
+            ->sum('amount');
+        $saleAmount = (float) ($project->sales->sum('amount') ?: $project->amount);
+        $dateSold = $project->sales->sortBy('sale_date')->first()?->sale_date;
+        $salesRepresentatives = collect([
+            $project->salesman?->salesman_name,
+            $project->lead?->salesmanOne?->salesman_name,
+            $project->lead?->salesmanTwo?->salesman_name,
+            ...$project->sales->pluck('salesman.salesman_name')->all(),
+        ])->filter()->unique()->join(', ');
+
+        $invoiceRows = $project->invoices->map(fn (ProjectInvoice $invoice): array => [
+            'contractor' => $invoice->contractor?->contractor ?? $invoice->vendor?->vendor ?? 'Unassigned',
+            'date' => $invoice->invoice_date,
+            'bid' => (float) $invoice->amount,
+            'invoice' => $invoice->invoice_number,
+            'note' => $invoice->notes,
+        ]);
+        $invoicedContractors = $invoiceRows->pluck('contractor')->filter()->all();
+        $contractorRows = $invoiceRows->concat(
+            $project->contractors
+                ->reject(fn (Contractor $contractor): bool => in_array($contractor->contractor, $invoicedContractors, true))
+                ->map(fn (Contractor $contractor): array => [
+                    'contractor' => $contractor->contractor,
+                    'date' => null,
+                    'bid' => null,
+                    'invoice' => null,
+                    'note' => null,
+                ]),
+        )->take(10)->values();
+
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml(view('pdf.project-cover-page', [
+            'project' => $project,
+            'income' => $income,
+            'expenses' => $expenses,
+            'profitLoss' => $income - $expenses,
+            'saleAmount' => $saleAmount,
+            'finance' => max(0, $saleAmount - $income),
+            'dateSold' => $dateSold,
+            'salesRepresentatives' => $salesRepresentatives,
+            'contractorRows' => $contractorRows,
+        ])->render());
+        $dompdf->setPaper('letter', 'portrait');
+        $dompdf->render();
+
+        $fileName = preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number ?: "project-{$project->id}").'-cover-page.pdf';
+
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+        ]);
+    }
+
+    public function exportAccounting(Project $project, string $type): \Illuminate\Http\Response
+    {
+        abort_unless(in_array($type, ['receivable', 'payable'], true), 404);
+        $project->loadMissing([
+            'lead.company',
+            'sales',
+            'accountingTransactions.contractor',
+            'accountingTransactions.vendor',
+            'accountingTransactions.salesman',
+            'accountingTransactions.company',
+            'accountingTransactions.invoice',
+        ]);
+        $transactions = $project->accountingTransactions
+            ->where('type', $type)
+            ->sortBy([['transaction_date', 'asc'], ['id', 'asc']])
+            ->values();
+        $income = (float) $project->accountingTransactions->where('type', 'receivable')->sum('amount');
+        $expenses = (float) $project->accountingTransactions->where('type', 'payable')->sum('amount');
+        $saleAmount = (float) ($project->sales->sum('amount') ?: $project->amount);
+        $label = $type === 'payable' ? 'payables' : 'receivables';
+        $fileName = preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number ?: "project-{$project->id}").'-'.$label.'.pdf';
+
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml(view('pdf.project-accounting', [
+            'project' => $project,
+            'type' => $type,
+            'transactions' => $transactions,
+            'income' => $income,
+            'expenses' => $expenses,
+            'saleAmount' => $saleAmount,
+        ])->render());
+        $dompdf->setPaper('letter', 'portrait');
+        $dompdf->render();
+
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+        ]);
+    }
+
+    public function commissionBreakdown(Project $project): \Illuminate\Http\JsonResponse
+    {
+        $project->loadMissing([
+            'sales',
+            'sales.salesman',
+            'accountingTransactions',
+            'salesman',
+            'lead.salesmanOne',
+            'lead.salesmanTwo',
+        ]);
+        $salesmen = collect([
+            $project->salesman,
+            $project->lead?->salesmanOne,
+            $project->lead?->salesmanTwo,
+            ...$project->sales->pluck('salesman')->all(),
+        ])->filter()->unique('salesman_id')->values();
+        $rows = $salesmen->map(fn (Salesman $salesman): array => [
+            'salesman_id' => $salesman->salesman_id,
+            'salesman_name' => $salesman->salesman_name,
+            ...$this->commissions->calculate($project, $salesman),
+        ]);
+        $totalSale = (float) ($project->sales->sum('amount') ?: $project->amount);
+        $received = (float) $project->accountingTransactions
+            ->where('type', 'receivable')->sum('amount');
+        $expenses = (float) $project->accountingTransactions
+            ->where('type', 'payable')
+            ->reject(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
+            ->sum('amount');
+        $referralOnlySalesmanIds = $project->sales->where('type', 'referral')->pluck('salesman_id')
+            ->filter()->map(fn ($id): int => (int) $id)->unique();
+        $originalSalesmanIds = collect([$project->salesman_id, $project->lead?->salesman_1_id, $project->lead?->salesman_2_id])
+            ->filter(fn ($id): bool => ! $referralOnlySalesmanIds->contains((int) $id))
+            ->filter()->map(fn ($id): int => (int) $id)->unique();
+        $leadCosts = (float) $rows->whereIn('salesman_id', $originalSalesmanIds)
+            ->sum(fn (array $row): float => (float) $row['lead_cost'] + (float) $row['change_order_lead_cost']);
+        $commissionPaid = (float) $rows->sum('commission_paid');
+        $totalCommission = (float) $rows->sum('commission_due');
+
+        return response()->json([
+            'project_id' => $project->id,
+            'project_number' => $project->project_number,
+            'accounting' => [
+                'sale_amount' => round($totalSale, 2),
+                'received_commissionable' => round($received, 2),
+                'project_balance' => round($totalSale - $received, 2),
+                'lead_cost' => round($leadCosts, 2),
+                'expenses_commissionable' => round($expenses, 2),
+                'total_commission' => round($totalCommission, 2),
+                'total_commission_paid' => round($commissionPaid, 2),
+                'profit_net' => round($received - $expenses - $leadCosts - $totalCommission, 2),
+            ],
+            'salesmen' => $rows,
+        ]);
+    }
 
     public function index(): Response
     {
@@ -54,6 +235,7 @@ class ProjectController extends Controller
                     'lead.salesmanTwo:salesman_id,salesman_name,phone',
                     'lead.notes:id,lead_id,note_type,body,created_at',
                     'sales.product:prod_id,product_name',
+                    'sales.salesman:salesman_id,salesman_name',
                     'scheduledPayments',
                     'invoices.contractor:con_id,contractor',
                     'invoices.vendor:vendor_id,vendor',
@@ -62,8 +244,10 @@ class ProjectController extends Controller
                     'accountingTransactions.invoice.vendor:vendor_id,vendor',
                     'accountingTransactions.contractor:con_id,contractor',
                     'accountingTransactions.vendor:vendor_id,vendor',
+                    'accountingTransactions.salesman:salesman_id,salesman_name',
                     'accountingTransactions.company:com_id,company,prefix',
                     'documents:id,project_id,project_invoice_id,project_accounting_transaction_id,project_sale_id,category,file_name,file_mime,file_size,created_at',
+                    'activityLogs.actor:acc_id,username',
                     'company:com_id,company,prefix',
                     'product:prod_id,product_name',
                     'telemarketer:agent_id,agent_name',
@@ -146,6 +330,118 @@ class ProjectController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Project added successfully.']);
 
         return to_route('management.projects', ['project' => $project->id]);
+    }
+
+    public function storeCustomerProject(Request $request, Project $project, ProjectNumberAllocator $projectNumbers): RedirectResponse
+    {
+        abort_if($project->lead_id === null, 422, 'A customer-linked project is required.');
+
+        $data = $request->validate([
+            'company_id' => ['required', 'integer', 'exists:companies,com_id'],
+            'product_id' => ['required', 'integer', 'exists:products,prod_id'],
+            'appointment_at' => ['required', 'date'],
+            'salesman_1_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
+            'salesman_2_id' => ['nullable', 'integer', 'different:salesman_1_id', 'exists:salesmen,salesman_id'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
+            'notes' => ['nullable', 'string', 'max:10000'],
+        ]);
+
+        $sourceLead = $project->lead()->firstOrFail();
+        $familyId = (int) ($sourceLead->project_family_id ?: $sourceLead->id);
+
+        $newProject = DB::transaction(function () use ($request, $project, $sourceLead, $familyId, $data, $projectNumbers): Project {
+            $newLead = $sourceLead->replicate([
+                'calltools_contact_id',
+                'primary_phone_normalized',
+                'rehash_at',
+                'duplicate_of_id',
+                'project_family_id',
+            ]);
+            $newLead->forceFill([
+                'project_family_id' => $familyId,
+                'company_id' => $data['company_id'],
+                'product_id' => $data['product_id'],
+                'appointment_at' => $data['appointment_at'],
+                'salesman_1_id' => $data['salesman_1_id'] ?? null,
+                'salesman_2_id' => $data['salesman_2_id'] ?? null,
+                'telemarketer_notes' => (string) ($data['notes'] ?? ''),
+                'status' => 'sold',
+                'created_by' => $request->user()->getAuthIdentifier(),
+            ])->save();
+
+            $newProject = Project::query()->create([
+                'lead_id' => $newLead->id,
+                'project_number' => $projectNumbers->allocateChild($project),
+                'amount' => $data['amount'],
+                'status' => 'new',
+                'created_by' => $request->user()->getAuthIdentifier(),
+            ]);
+
+            $newProject->sales()->create([
+                'type' => 'original',
+                'amount' => $data['amount'],
+                'sale_date' => Carbon::parse($data['appointment_at'])->toDateString(),
+                'product_id' => $data['product_id'],
+            ]);
+
+            return $newProject;
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'A new project was added for this customer.']);
+
+        return to_route('management.projects', ['project' => $newProject->id, 'tab' => 'DTL']);
+    }
+
+    public function destroy(Project $project): RedirectResponse
+    {
+        abort_if($project->lead_id === null, 422, 'Only an additional customer project can be deleted here.');
+
+        $lead = $project->lead()->firstOrFail();
+        $familyId = (int) ($lead->project_family_id ?: $lead->id);
+        $familyLeadIds = Lead::query()
+            ->whereKey($familyId)
+            ->orWhere('project_family_id', $familyId)
+            ->pluck('id');
+        $rootProjectId = Project::query()
+            ->whereIn('lead_id', $familyLeadIds)
+            ->orderByRaw('CASE WHEN lead_id = ? THEN 0 ELSE 1 END', [$familyId])
+            ->orderBy('id')
+            ->value('id');
+
+        abort_if((int) $rootProjectId === $project->id, 422, 'The customer’s original project is protected and cannot be deleted.');
+
+        $project->loadMissing(['documents', 'invoices', 'accountingTransactions']);
+        $attachments = collect([
+            $project->contract_file_path ? [
+                'path' => $project->contract_file_path,
+                'name' => $project->contract_file_name ?: basename($project->contract_file_path),
+            ] : null,
+            ...$project->documents->map(fn (ProjectDocument $document) => [
+                'path' => $document->file_path,
+                'name' => $document->file_name,
+            ])->all(),
+            ...$project->invoices->whereNull('project_document_id')->filter(fn (ProjectInvoice $invoice) => filled($invoice->file_path))->map(fn (ProjectInvoice $invoice) => [
+                'path' => $invoice->file_path,
+                'name' => $invoice->file_name ?: basename($invoice->file_path),
+            ])->all(),
+            ...$project->accountingTransactions->whereNull('project_document_id')->filter(fn (ProjectAccountingTransaction $transaction) => filled($transaction->file_path))->map(fn (ProjectAccountingTransaction $transaction) => [
+                'path' => $transaction->file_path,
+                'name' => $transaction->file_name ?: basename($transaction->file_path),
+            ])->all(),
+        ])->filter()->unique('path');
+
+        foreach ($attachments as $attachment) {
+            $this->deleteProjectAttachment($project, $attachment['path'], $attachment['name']);
+        }
+
+        DB::transaction(function () use ($project, $lead): void {
+            $project->delete();
+            $lead->delete();
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Additional customer project deleted.']);
+
+        return to_route('management.projects');
     }
 
     public function updateContractors(Request $request, Project $project): RedirectResponse
@@ -251,16 +547,89 @@ class ProjectController extends Controller
         $project->setRelation('lead', $lead);
     }
 
-    public function storeReferral(ProjectSaleRequest $request, Project $project): RedirectResponse
+    public function storeReferral(
+        ProjectSaleRequest $request,
+        Project $project,
+        ProjectNumberAllocator $projectNumbers,
+    ): RedirectResponse
     {
-        $sale = $project->sales()->create([
-            ...$request->safe()->except('files'),
-            'type' => 'referral',
-        ]);
+        $salesmanId = $request->validated('salesman_id');
+        $this->ensureReferralSalesmanIsSecondary($project, $salesmanId);
+
+        if ($request->validated('destination') === 'new_project') {
+            abort_if($project->lead_id === null, 422, 'A customer-linked project is required to create another project number.');
+
+            $sourceLead = $project->lead()->firstOrFail();
+            $familyId = (int) ($sourceLead->project_family_id ?: $sourceLead->id);
+            $companyId = (int) $sourceLead->company_id;
+
+            [$newProject, $sale] = DB::transaction(function () use (
+                $request,
+                $project,
+                $sourceLead,
+                $familyId,
+                $companyId,
+                $salesmanId,
+                $projectNumbers,
+            ): array {
+                $newLead = $sourceLead->replicate([
+                    'calltools_contact_id',
+                    'primary_phone_normalized',
+                    'rehash_at',
+                    'duplicate_of_id',
+                    'project_family_id',
+                ]);
+                $newLead->forceFill([
+                    'project_family_id' => $familyId,
+                    'product_id' => $request->validated('product_id') ?: $sourceLead->product_id,
+                    'appointment_at' => Carbon::parse($request->validated('sale_date'))->setTime(12, 0),
+                    'salesman_1_id' => $sourceLead->salesman_1_id,
+                    'salesman_2_id' => $salesmanId,
+                    'status' => 'sold',
+                    'created_by' => $request->user()->getAuthIdentifier(),
+                ])->save();
+
+                $newProject = Project::query()->create([
+                    'lead_id' => $newLead->id,
+                    'project_number' => $projectNumbers->allocateChild($project),
+                    'amount' => $request->validated('amount'),
+                    'status' => 'new',
+                    'created_by' => $request->user()->getAuthIdentifier(),
+                ]);
+
+                $sale = $newProject->sales()->create([
+                    ...$request->safe()->except('files', 'destination', 'project_number'),
+                    'type' => 'referral',
+                ]);
+
+                return [$newProject, $sale];
+            });
+
+            $driveFailures = $this->storeSaleDocuments($request, $newProject, $sale);
+            Inertia::flash('toast', $this->driveSyncToast(
+                'Referral sale created under a separate project number.',
+                $driveFailures === 0,
+            ));
+
+            return to_route('management.projects', ['project' => $newProject->id, 'tab' => 'DTL']);
+        }
+
+        $sale = DB::transaction(function () use ($request, $project): ProjectSale {
+            $lockedProject = Project::query()->lockForUpdate()->findOrFail($project->id);
+            $prospectiveContractTotal = (float) $lockedProject->sales()->sum('amount')
+                + (float) $request->validated('amount');
+            $this->ensureContractCoversScheduledPayments($lockedProject, $prospectiveContractTotal);
+
+            return $lockedProject->sales()->create([
+                ...$request->safe()->except('files', 'destination', 'project_number'),
+                'type' => 'referral',
+            ]);
+        });
 
         $driveFailures = $this->storeSaleDocuments($request, $project, $sale);
 
-        Inertia::flash('toast', $this->driveSyncToast('Referral sale added.', $driveFailures === 0));
+        $label = (float) $sale->amount < 0 ? 'Discount added.' : 'Referral sale added.';
+        Inertia::flash('toast', $this->driveSyncToast($label, $driveFailures === 0));
 
         return back();
     }
@@ -390,6 +759,9 @@ class ProjectController extends Controller
     public function updateSale(ProjectSaleRequest $request, Project $project, ProjectSale $sale): RedirectResponse
     {
         abort_unless($sale->project_id === $project->id, 404);
+        if ($sale->type === 'referral') {
+            $this->ensureReferralSalesmanIsSecondary($project, $request->validated('salesman_id'));
+        }
 
         DB::transaction(function () use ($request, $project, $sale): void {
             $lockedProject = Project::query()->lockForUpdate()->findOrFail($project->id);
@@ -397,7 +769,11 @@ class ProjectController extends Controller
                 - (float) $sale->amount
                 + (float) $request->validated('amount');
             $this->ensureContractCoversScheduledPayments($lockedProject, $prospectiveContractTotal);
-            $sale->update($request->safe()->except('files'));
+            $saleData = $request->safe()->except('files');
+            if ($sale->type === 'original') {
+                $saleData['salesman_id'] = null;
+            }
+            $sale->update($saleData);
 
             if ($sale->type === 'original') {
                 $project->update(['amount' => $request->validated('amount')]);
@@ -584,7 +960,7 @@ class ProjectController extends Controller
     public function destroyInvoiceFile(Project $project, ProjectInvoice $invoice): RedirectResponse
     {
         abort_unless($invoice->project_id === $project->id && $invoice->file_name, 404);
-        $this->deleteProjectAttachment($project, $invoice->file_path, $invoice->file_name, $invoice->project_document_id);
+        $driveDeleted = $this->deleteProjectAttachment($project, $invoice->file_path, $invoice->file_name, $invoice->project_document_id);
         $invoice->update([
             'project_document_id' => null,
             'file_path' => null,
@@ -593,7 +969,7 @@ class ProjectController extends Controller
             'file_size' => null,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Invoice file removed from the CRM and Google Drive.']);
+        Inertia::flash('toast', $this->driveDeletionToast('Invoice file removed from the CRM.', $driveDeleted));
 
         return back();
     }
@@ -639,7 +1015,7 @@ class ProjectController extends Controller
         }
         $data['counterparty'] = $unassigned && $data['type'] === 'receivable'
             ? ($data['counterparty'] ?? null)
-            : $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['vendor_id'], $data['project_invoice_id']);
+            : $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['vendor_id'], $data['project_invoice_id'], $data['salesman_id'] ?? null);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         if (! $unassigned) {
             $this->ensureAccountingLinksBelongToProject($project, $data, $scheduledPaymentIds);
@@ -688,7 +1064,7 @@ class ProjectController extends Controller
             $data['payment_method'] = null;
             $data['reference_number'] = null;
         }
-        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['vendor_id'], $data['project_invoice_id']);
+        $data['counterparty'] = $this->accountingCounterparty($project, $data['type'], $data['contractor_id'], $data['vendor_id'], $data['project_invoice_id'], $data['salesman_id'] ?? null);
         $data['requested_by'] = ($data['requested_by'] ?? null) ?: $accountingTransaction->requested_by ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
         $oldFilePath = $accountingTransaction->file_path;
         $oldDocumentId = $accountingTransaction->project_document_id;
@@ -748,7 +1124,7 @@ class ProjectController extends Controller
     public function destroyProjectDocument(Project $project, ProjectDocument $document): RedirectResponse
     {
         abort_unless($document->project_id === $project->id, 404);
-        $this->deleteProjectAttachment($project, $document->file_path, $document->file_name);
+        $driveDeleted = $this->deleteProjectAttachment($project, $document->file_path, $document->file_name);
 
         ProjectInvoice::query()->where('project_document_id', $document->id)->update([
             'project_document_id' => null,
@@ -766,7 +1142,7 @@ class ProjectController extends Controller
         ]);
         $document->delete();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'File removed from the CRM and Google Drive.']);
+        Inertia::flash('toast', $this->driveDeletionToast('File removed from the CRM.', $driveDeleted));
 
         return back();
     }
@@ -912,7 +1288,7 @@ class ProjectController extends Controller
         ProjectAccountingTransaction $accountingTransaction,
     ): RedirectResponse {
         abort_unless($accountingTransaction->project_id === $project->id && $accountingTransaction->file_name, 404);
-        $this->deleteProjectAttachment(
+        $driveDeleted = $this->deleteProjectAttachment(
             $project,
             $accountingTransaction->file_path,
             $accountingTransaction->file_name,
@@ -926,7 +1302,7 @@ class ProjectController extends Controller
             'file_size' => null,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Accounting file removed from the CRM and Google Drive.']);
+        Inertia::flash('toast', $this->driveDeletionToast('Accounting file removed from the CRM.', $driveDeleted));
 
         return back();
     }
@@ -936,11 +1312,28 @@ class ProjectController extends Controller
         ?string $filePath,
         string $fileName,
         ?int $projectDocumentId = null,
-    ): void {
-        $this->googleDrive->deleteMirroredFile($project, $fileName);
+    ): ?bool {
+        $driveDeleted = null;
+
+        if ($this->googleDrive->configured()) {
+            try {
+                $this->googleDrive->deleteMirroredFile($project, $fileName);
+                $driveDeleted = true;
+            } catch (Throwable $exception) {
+                $driveDeleted = false;
+                Log::warning('Google Drive project file deletion failed.', [
+                    'project_id' => $project->id,
+                    'file_name' => $fileName,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
         if ($filePath && ! $projectDocumentId) {
             Storage::disk('local')->delete($filePath);
         }
+
+        return $driveDeleted;
     }
 
     private function accountingCounterparty(
@@ -949,6 +1342,7 @@ class ProjectController extends Controller
         ?int $contractorId,
         ?int $vendorId,
         ?int $invoiceId = null,
+        ?int $salesmanId = null,
     ): ?string
     {
         if ($type === 'receivable') {
@@ -961,6 +1355,10 @@ class ProjectController extends Controller
 
         if ($vendorId) {
             return Vendor::query()->whereKey($vendorId)->value('vendor');
+        }
+
+        if ($salesmanId) {
+            return Salesman::query()->whereKey($salesmanId)->value('salesman_name');
         }
 
         return $invoiceId
@@ -1039,6 +1437,16 @@ class ProjectController extends Controller
         return match ($driveSync) {
             true => ['type' => 'success', 'message' => $message.' Synced to Google Drive.'],
             false => ['type' => 'warning', 'message' => $message.' Google Drive sync failed; the CRM copy is safe.'],
+            null => ['type' => 'success', 'message' => $message],
+        };
+    }
+
+    /** @return array{type: string, message: string} */
+    private function driveDeletionToast(string $message, ?bool $driveDeleted): array
+    {
+        return match ($driveDeleted) {
+            true => ['type' => 'success', 'message' => $message.' The Google Drive copy was also removed.'],
+            false => ['type' => 'warning', 'message' => $message.' Google Drive is disconnected, so its copy could not be removed.'],
             null => ['type' => 'success', 'message' => $message],
         };
     }
@@ -1206,6 +1614,20 @@ class ProjectController extends Controller
     private function ensureInvoiceBelongsToProject(Project $project, ProjectInvoice $invoice): void
     {
         abort_unless($invoice->project_id === $project->id, 404);
+    }
+
+    private function ensureReferralSalesmanIsSecondary(Project $project, mixed $salesmanId): void
+    {
+        if (! $salesmanId) {
+            return;
+        }
+
+        $primarySalesmanId = (int) ($project->salesman_id ?: $project->lead?->salesman_1_id);
+        if ($primarySalesmanId > 0 && $primarySalesmanId === (int) $salesmanId) {
+            throw ValidationException::withMessages([
+                'salesman_id' => 'Choose a second salesman. The original salesman already shares this referral sale.',
+            ]);
+        }
     }
 
     private function ensureAccountingLinksBelongToProject(Project $project, array $data, array $scheduledPaymentIds): void

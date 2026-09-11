@@ -2,6 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Project;
+use App\Models\ProjectAccountingTransaction;
+use App\Models\Salesman;
+use App\Services\ProjectCommissionCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -79,6 +83,7 @@ class ProjectAccountingTransactionRequest extends FormRequest
             'counterparty' => ['nullable', 'string', 'max:255'],
             'contractor_id' => ['nullable', 'integer', 'exists:contractors,con_id'],
             'vendor_id' => ['nullable', 'integer', 'exists:vendors,vendor_id'],
+            'salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
             'requested_by' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'status' => ['required', Rule::in(['pending', 'deposit', 'ok_to_pay', 'paid'])],
@@ -93,6 +98,7 @@ class ProjectAccountingTransactionRequest extends FormRequest
                 'integer',
                 'exists:project_invoices,id',
             ],
+            'project_sale_id' => ['nullable', 'integer', 'exists:project_sales,id'],
             'scheduled_payment_ids' => ['nullable', 'array'],
             'scheduled_payment_ids.*' => ['integer', 'distinct', 'exists:scheduled_payments,id'],
         ];
@@ -115,6 +121,66 @@ class ProjectAccountingTransactionRequest extends FormRequest
 
                 if ($this->filled('contractor_id') && $this->filled('vendor_id')) {
                     $validator->errors()->add('vendor_id', 'Select either a contractor or a vendor, not both.');
+                }
+
+                $isCommission = $type === 'payable'
+                    && str_contains(strtolower((string) $this->input('category')), 'commission');
+
+                if ($isCommission && ! $this->filled('salesman_id')) {
+                    $validator->errors()->add('salesman_id', 'Select a salesman assigned to this project.');
+                }
+
+                $project = $this->route('project');
+                if (
+                    $project instanceof Project
+                    && $this->filled('project_sale_id')
+                    && ! $project->sales()->whereKey((int) $this->input('project_sale_id'))->exists()
+                ) {
+                    $validator->errors()->add('project_sale_id', 'The selected sale does not belong to this project.');
+                }
+                if ($isCommission && $this->filled('salesman_id') && $project instanceof Project) {
+                    $salesmanId = (int) $this->input('salesman_id');
+                    $lead = $project->lead;
+                    $isAssigned = (int) $project->salesman_id === $salesmanId
+                        || (int) $lead?->salesman_1_id === $salesmanId
+                        || (int) $lead?->salesman_2_id === $salesmanId
+                        || $project->sales()->where('salesman_id', $salesmanId)->exists();
+
+                    if (! $isAssigned) {
+                        $validator->errors()->add('salesman_id', 'The selected salesman is not assigned to this project.');
+                    }
+                }
+
+                if (
+                    $isCommission
+                    && $this->filled('salesman_id')
+                    && $this->filled('amount')
+                    && $project instanceof Project
+                    && ! $validator->errors()->has('salesman_id')
+                ) {
+                    $salesman = Salesman::query()->find((int) $this->input('salesman_id'));
+                    if ($salesman) {
+                        $project->loadMissing(['sales', 'accountingTransactions', 'lead']);
+                        $available = app(ProjectCommissionCalculator::class)
+                            ->calculate($project, $salesman)['commission_balance'];
+                        $existing = $this->route('accountingTransaction');
+
+                        if (
+                            $existing instanceof ProjectAccountingTransaction
+                            && $existing->status === 'paid'
+                            && (int) $existing->salesman_id === (int) $salesman->salesman_id
+                            && str_contains(strtolower((string) $existing->category), 'commission')
+                        ) {
+                            $available += (float) $existing->amount;
+                        }
+
+                        if ((float) $this->input('amount') > $available + 0.001) {
+                            $validator->errors()->add(
+                                'amount',
+                                'Commission cannot exceed the salesman’s remaining commission balance of $'.number_format($available, 2).'.',
+                            );
+                        }
+                    }
                 }
 
             },

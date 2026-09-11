@@ -8,6 +8,23 @@ use Illuminate\Validation\Rule;
 
 class LeadRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $primary = trim((string) $this->input('primary_number', ''));
+        $secondary = trim((string) $this->input('secondary_number', ''));
+        $mobile = trim((string) $this->input('mobile_number', ''));
+
+        // The legacy schema requires a primary number, but agents may receive
+        // a CallTools lead with only a home/secondary or mobile number. Keep
+        // the submitted slots and promote the first available number so the
+        // lead is not incorrectly rejected or saved without a dialable phone.
+        $this->merge([
+            'primary_number' => $primary !== '' ? $primary : ($secondary !== '' ? $secondary : $mobile),
+            'secondary_number' => $secondary !== '' ? $secondary : null,
+            'mobile_number' => $mobile !== '' ? $mobile : null,
+        ]);
+    }
+
     public function authorize(): bool
     {
         return $this->user() !== null;
@@ -35,7 +52,7 @@ class LeadRequest extends FormRequest
         return [
             'customer_name' => ['required', 'string', 'max:255'],
             'marital_status' => [$isUpdate ? 'nullable' : 'required', 'string', 'max:50'],
-            'primary_number' => ['required', 'string', 'max:30'],
+            'primary_number' => ['required_without_all:secondary_number,mobile_number', 'string', 'max:30'],
             'secondary_number' => ['nullable', 'string', 'max:30'],
             'mobile_number' => ['nullable', 'string', 'max:30'],
             'address' => ['required', 'string', 'max:255'],
@@ -44,7 +61,7 @@ class LeadRequest extends FormRequest
             'county' => ['nullable', 'string', 'max:100'],
             'state' => ['required', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
-            'years_in_house' => [$isUpdate ? 'nullable' : 'required', 'integer', 'min:0', 'max:150'],
+            'years_in_house' => ['nullable', 'integer', 'min:0', 'max:150'],
             // Legacy leads may already be in downstream queues without these
             // newer qualification fields. Do not block an unrelated edit there;
             // updateStatus() still requires them before a Leads Shop lead moves
@@ -61,6 +78,7 @@ class LeadRequest extends FormRequest
             'company_id' => ['required', 'integer', 'exists:companies,com_id'],
             'source' => ['required', 'in:CallTools'],
             'agent_id' => ['required', 'integer', 'exists:agents,agent_id'],
+            'agent_2_id' => ['nullable', 'integer', 'different:agent_id', 'exists:agents,agent_id'],
             'salesman_1_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
             'salesman_2_id' => ['nullable', 'integer', 'different:salesman_1_id', 'exists:salesmen,salesman_id'],
             // Creation time corrections are only allowed while a transferred
@@ -72,6 +90,13 @@ class LeadRequest extends FormRequest
                 'nullable',
                 'date',
             ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'primary_number.required_without_all' => 'Enter at least one primary, secondary/home, or mobile phone number.',
         ];
     }
 }

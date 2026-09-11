@@ -17,6 +17,7 @@ use App\Http\Controllers\LeadsShopController;
 use App\Http\Controllers\ManagerActivityController;
 use App\Http\Controllers\ManagerController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\QualityControlController;
 use App\Http\Controllers\RingCentralCallController;
@@ -103,6 +104,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::post('leads-shop/{lead}/ringcentral-calls', RingCentralCallIntentController::class)->name('leads-shop.ringcentral-calls.store');
         Route::get('leads-shop/{lead}/ringcentral-calls/{ringCentralCall}/recording', RingCentralRecordingController::class)->name('leads-shop.ringcentral-calls.recording');
         Route::patch('leads-shop/{lead}/status', [LeadsShopController::class, 'updateStatus'])->name('leads-shop.status.update');
+        Route::patch('leads-shop/{lead}/re-up', [LeadsShopController::class, 'reUp'])->name('leads-shop.re-up');
         Route::patch('leads-shop/{lead}/salesmen', [LeadsShopController::class, 'assignSalesmen'])->name('leads-shop.salesmen.update');
         Route::patch('leads-shop/{lead}/appointment-result', [LeadsShopController::class, 'updateAppointmentResult'])->name('leads-shop.appointment-result.update');
         Route::patch('leads-shop/{lead}/appointment', [LeadsShopController::class, 'updateAppointment'])->name('leads-shop.appointment.update');
@@ -119,6 +121,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('toss-leads', [LeadQueueController::class, 'toss'])->name('toss-leads');
         Route::get('keep-in-touch', [LeadQueueController::class, 'keepInTouch'])->name('keep-in-touch');
         Route::get('data', [LeadDataController::class, 'index'])->name('data');
+        Route::get('data/projects', [LeadDataController::class, 'projects'])->name('data.projects');
         Route::redirect('data/vendor-invoices', '/management/invoices');
         Route::redirect('data/receivables', '/management/receivables');
         Route::redirect('data/payables', '/management/payables');
@@ -153,8 +156,20 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('quality-control', [QualityControlController::class, 'index'])->name('quality-control');
         Route::patch('quality-control/{project}/return-to-dispatch', [QualityControlController::class, 'returnToDispatch'])
             ->name('quality-control.return-to-dispatch');
+        Route::get('proposals', [ProposalController::class, 'index'])->name('proposals');
+        Route::post('proposals', [ProposalController::class, 'store'])->name('proposals.store');
+        Route::put('proposals/{proposal}', [ProposalController::class, 'update'])->name('proposals.update');
+        Route::delete('proposals/{proposal}', [ProposalController::class, 'destroy'])->name('proposals.destroy');
+        Route::post('proposals/{proposal}/generate', [ProposalController::class, 'generate'])->name('proposals.generate');
+        Route::get('proposals/{proposal}/versions/{version}', [ProposalController::class, 'download'])->name('proposals.versions.download');
         Route::get('projects', [ProjectController::class, 'index'])->name('projects');
+        Route::get('projects/{project}/cover-page', [ProjectController::class, 'printCoverPage'])->name('projects.cover-page');
+        Route::get('projects/{project}/accounting/export/{type}', [ProjectController::class, 'exportAccounting'])
+            ->whereIn('type', ['receivable', 'payable'])
+            ->name('projects.accounting.export');
         Route::post('projects', [ProjectController::class, 'store'])->name('projects.store');
+        Route::post('projects/{project}/customer-projects', [ProjectController::class, 'storeCustomerProject'])->name('projects.customer-projects.store');
+        Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
         Route::patch('projects/{project}/contractors', [ProjectController::class, 'updateContractors'])->name('projects.contractors.update');
         Route::patch('projects/tele-lead-visibility/bulk', [ProjectController::class, 'bulkUpdateTeleLeadVisibility'])
             ->name('projects.tele-lead-visibility.bulk-update');
@@ -182,6 +197,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::patch('projects/{project}/accounting-transactions/{accountingTransaction}/qb', [ProjectController::class, 'updateReceivableQuickBooks'])->name('projects.accounting-transactions.qb');
         Route::delete('projects/{project}/accounting-transactions/{accountingTransaction}', [ProjectController::class, 'destroyAccountingTransaction'])->name('projects.accounting-transactions.destroy');
         Route::get('projects/{project}/accounting-transactions/{accountingTransaction}/file', [ProjectController::class, 'showAccountingTransactionFile'])->name('projects.accounting-transactions.file');
+        Route::get('projects/{project}/commission-breakdown', [ProjectController::class, 'commissionBreakdown'])->name('projects.commission-breakdown');
         Route::delete('projects/{project}/accounting-transactions/{accountingTransaction}/file', [ProjectController::class, 'destroyAccountingTransactionFile'])->name('projects.accounting-transactions.file.destroy');
         Route::get('salesmen', [SalesmanController::class, 'index'])->name('salesmen');
         Route::get('salesmen/{salesman}/report', [SalesmanController::class, 'report'])->name('salesmen.report');

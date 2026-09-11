@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Lead;
 use App\Models\Manager;
 use App\Models\Product;
+use App\Models\Salesman;
 
 function secondManagerFixture(string $status): array
 {
@@ -177,6 +178,28 @@ test('manager returning a verify lead to leads shop becomes its second manager a
         ->rehash_at->not->toBeNull();
 });
 
+test('manager can re-up an existing leads shop lead', function () {
+    ['account' => $account, 'manager' => $manager, 'lead' => $lead] = secondManagerFixture('fresh');
+    $lead->forceFill(['created_at' => now()->subYear(), 'rehash_at' => null])->saveQuietly();
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.leads-shop'))
+        ->patch(route('lead-workflow.leads-shop.re-up', $lead))
+        ->assertRedirect();
+
+    expect($lead->fresh())
+        ->status->toBe('fresh')
+        ->manager_2_id->toBe($manager->manager_id)
+        ->rehash_at->not->toBeNull();
+
+    $this->assertDatabaseHas('lead_movements', [
+        'lead_id' => $lead->id,
+        'from_status' => 'fresh',
+        'to_status' => 'fresh',
+        'moved_by' => $account->acc_id,
+    ]);
+});
+
 test('manager cannot move a lead to a tab without edit permission', function () {
     ['account' => $account, 'lead' => $lead] = secondManagerFixture('his');
 
@@ -187,6 +210,42 @@ test('manager cannot move a lead to a tab without edit permission', function () 
         ->assertRedirect();
 
     expect($lead->fresh()->status)->toBe('his');
+});
+
+test('manager with confirm edit access can dispatch without separate dispatch edit access', function () {
+    ['account' => $account, 'lead' => $lead] = secondManagerFixture('confirmed');
+
+    $account->manager->permissions()->where('module', 'dispatch_leads')->delete();
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.confirm-leads'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), ['status' => 'dispatched'])
+        ->assertRedirect();
+
+    expect($lead->fresh()->status)->toBe('dispatched');
+});
+
+test('moving a dispatched lead to another workflow queue clears its salesmen', function () {
+    ['account' => $account, 'lead' => $lead] = secondManagerFixture('dispatched');
+    $firstSalesman = Salesman::query()->create(['salesman_name' => 'First Assigned Salesman']);
+    $secondSalesman = Salesman::query()->create(['salesman_name' => 'Second Assigned Salesman']);
+    $lead->update([
+        'salesman_1_id' => $firstSalesman->salesman_id,
+        'salesman_2_id' => $secondSalesman->salesman_id,
+    ]);
+
+    $this->actingAs($account)
+        ->from(route('lead-workflow.dispatch-leads'))
+        ->patch(route('lead-workflow.leads-shop.status.update', $lead), [
+            'status' => 'reschedule',
+            'follow_up_at' => now()->addDay()->format('Y-m-d H:i:s'),
+        ])
+        ->assertRedirect();
+
+    expect($lead->fresh())
+        ->status->toBe('reschedule')
+        ->salesman_1_id->toBeNull()
+        ->salesman_2_id->toBeNull();
 });
 
 test('manager without workflow action permission can only return a restricted queue lead to leads shop', function () {

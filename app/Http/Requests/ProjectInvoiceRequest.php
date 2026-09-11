@@ -38,6 +38,11 @@ class ProjectInvoiceRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:5000'],
             'file' => ['nullable', 'file', 'extensions:pdf,jpg,jpeg,jfif,png,webp,heic,heif', 'max:20480'],
             'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
+            'project_sale_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('project_sales', 'id')->where('project_id', $this->route('project')->id),
+            ],
         ];
     }
 

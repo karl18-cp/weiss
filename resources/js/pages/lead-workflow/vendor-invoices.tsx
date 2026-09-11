@@ -24,6 +24,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { SearchableSelect } from '@/components/searchable-select';
+import { AttachmentPreviewGallery } from '@/components/attachment-preview-gallery';
 
 type Contractor = { con_id: number; contractor: string };
 type Vendor = { vendor_id: number; vendor: string };
@@ -123,6 +124,9 @@ const withInvoicePrefix = (value: string) => {
 
 const invoiceSuffix = (value: string) => withInvoicePrefix(value).slice(4);
 
+const invoiceHasAttachment = (invoice: VendorInvoice) =>
+    Boolean(invoice.file_name || invoice.documents.length);
+
 const projectNumber = (project: ProjectOption) =>
     project.project_number || 'Not assigned';
 
@@ -165,7 +169,7 @@ export default function VendorInvoices({
         mode: 'create' | 'edit';
         invoice: VendorInvoice | null;
     } | null>(null);
-    const [actionInvoice, setActionInvoice] =
+    const [selectedInvoice, setSelectedInvoice] =
         useState<VendorInvoice | null>(null);
     const [attachmentInvoice, setAttachmentInvoice] = useState<VendorInvoice | null>(null);
     const attachmentForm = useForm<{ files: File[]; target_type: 'invoice'; target_id: string }>({ files: [], target_type: 'invoice', target_id: '' });
@@ -337,7 +341,10 @@ export default function VendorInvoices({
         if (accepted) {
             router.delete(
                 `/management/projects/${invoice.project_id}/invoices/${invoice.id}`,
-                { preserveScroll: true },
+                {
+                    preserveScroll: true,
+                    onSuccess: () => setSelectedInvoice(null),
+                },
             );
         }
     };
@@ -348,11 +355,6 @@ export default function VendorInvoices({
             preserveScroll: true,
             onSuccess: () => setAttachmentInvoice(null),
         });
-    };
-
-    const afterActionChooserCloses = (action: () => void) => {
-        setActionInvoice(null);
-        window.setTimeout(action, 180);
     };
 
     return (
@@ -436,13 +438,40 @@ export default function VendorInvoices({
                                 </button>
                             )}
                         </form>
-                        <button
-                            type="button"
-                            className="vendor-data-add"
-                            onClick={openNew}
-                        >
-                            <Plus /> Add Invoice
-                        </button>
+                        <div className="vendor-data-toolbar-actions">
+                            {selectedInvoice && Number(selectedInvoice.balance) > 0 && (
+                                <button
+                                    type="button"
+                                    className="vendor-data-selected-action is-pay"
+                                    onClick={() => router.get(`/management/payables?invoice=${selectedInvoice.id}`)}
+                                >
+                                    Pay
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className="vendor-data-selected-action"
+                                disabled={!selectedInvoice}
+                                onClick={() => selectedInvoice && openEdit(selectedInvoice)}
+                            >
+                                <Pencil /> Edit
+                            </button>
+                            <button
+                                type="button"
+                                className="vendor-data-selected-action is-delete"
+                                disabled={!selectedInvoice}
+                                onClick={() => selectedInvoice && void remove(selectedInvoice)}
+                            >
+                                <Trash2 /> Delete
+                            </button>
+                            <button
+                                type="button"
+                                className="vendor-data-add"
+                                onClick={openNew}
+                            >
+                                <Plus /> Add Invoice
+                            </button>
+                        </div>
                     </header>
 
                     <div className="vendor-data-table-wrap">
@@ -465,16 +494,17 @@ export default function VendorInvoices({
                                 {invoices.data.map((invoice) => (
                                     <tr
                                         key={invoice.id}
-                                        className="vendor-data-clickable-row"
+                                        className={`vendor-data-clickable-row ${selectedInvoice?.id === invoice.id ? 'is-selected' : ''}`}
+                                        aria-selected={selectedInvoice?.id === invoice.id}
                                         tabIndex={0}
-                                        onClick={() => setActionInvoice(invoice)}
+                                        onClick={() => setSelectedInvoice(invoice)}
                                         onKeyDown={(event) => {
                                             if (
                                                 event.key === 'Enter' ||
                                                 event.key === ' '
                                             ) {
                                                 event.preventDefault();
-                                                setActionInvoice(invoice);
+                                                setSelectedInvoice(invoice);
                                             }
                                         }}
                                     >
@@ -489,7 +519,7 @@ export default function VendorInvoices({
                                             </small>
                                         </td>
                                         <td className="is-link">
-                                            <button className="vendor-invoice-attachment-trigger" type="button" onClick={(event) => { event.stopPropagation(); attachmentForm.setData({ files: [], target_type: 'invoice', target_id: String(invoice.id) }); attachmentForm.clearErrors(); setAttachmentInvoice(invoice); }}>
+                                            <button className={`vendor-invoice-attachment-trigger attachment-status-tag ${invoiceHasAttachment(invoice) ? 'has-attachment' : 'no-attachment'}`} type="button" onClick={(event) => { event.stopPropagation(); attachmentForm.setData({ files: [], target_type: 'invoice', target_id: String(invoice.id) }); attachmentForm.clearErrors(); setAttachmentInvoice(invoice); }}>
                                                 {invoice.invoice_number}
                                             </button>
                                         </td>
@@ -605,81 +635,13 @@ export default function VendorInvoices({
                     </footer>
                 </section>
 
-                <Dialog
-                    open={actionInvoice !== null}
-                    onOpenChange={(open) => {
-                        if (!open) setActionInvoice(null);
-                    }}
-                >
-                    {actionInvoice && (
-                        <DialogContent className="vendor-action-modal">
-                            <DialogHeader>
-                                <DialogTitle>
-                                    {actionInvoice.invoice_number}
-                                </DialogTitle>
-                                <DialogDescription>
-                                    Choose what you want to do with this invoice.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <div className="vendor-action-choices">
-                                {Number(actionInvoice.balance) > 0 && (
-                                    <button
-                                        type="button"
-                                        className="is-pay"
-                                        onClick={() => {
-                                            const invoice = actionInvoice;
-                                            afterActionChooserCloses(() =>
-                                                router.get(
-                                                    `/management/payables?invoice=${invoice.id}`,
-                                                ),
-                                            );
-                                        }}
-                                    >
-                                        Pay invoice
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const invoice = actionInvoice;
-                                        afterActionChooserCloses(() =>
-                                            openEdit(invoice),
-                                        );
-                                    }}
-                                >
-                                    <Pencil /> Edit invoice
-                                </button>
-                                <button type="button" onClick={() => {
-                                    const invoice = actionInvoice;
-                                    afterActionChooserCloses(() => {
-                                        attachmentForm.setData({ files: [], target_type: 'invoice', target_id: String(invoice.id) });
-                                        attachmentForm.clearErrors();
-                                        setAttachmentInvoice(invoice);
-                                    });
-                                }}><Upload /> Add files or photos</button>
-                                <button
-                                    type="button"
-                                    className="is-delete"
-                                    onClick={() => {
-                                        const invoice = actionInvoice;
-                                        afterActionChooserCloses(() =>
-                                            void remove(invoice),
-                                        );
-                                    }}
-                                >
-                                    <Trash2 /> Delete invoice
-                                </button>
-                            </div>
-                        </DialogContent>
-                    )}
-                </Dialog>
-
                 <Dialog open={attachmentInvoice !== null} onOpenChange={(open) => !open && !attachmentForm.processing && setAttachmentInvoice(null)}>
-                    {attachmentInvoice && <DialogContent className="vendor-action-modal"><form onSubmit={(event) => {
+                    {attachmentInvoice && <DialogContent className="vendor-action-modal attachment-preview-modal"><form onSubmit={(event) => {
                         event.preventDefault();
                         attachmentForm.post(`/management/projects/${attachmentInvoice.project_id}/documents`, { forceFormData: true, preserveScroll: true, onSuccess: () => { setAttachmentInvoice(null); attachmentForm.reset(); } });
                     }}>
                         <DialogHeader><DialogTitle>{attachmentInvoice.invoice_number}</DialogTitle><DialogDescription>View existing attachments or add PDFs, images, and photos. New files also appear in the project DOC tab and Google Drive.</DialogDescription></DialogHeader>
+                        <AttachmentPreviewGallery files={[...(attachmentInvoice.file_name ? [{ name: attachmentInvoice.file_name, mime: attachmentInvoice.file_mime, url: fileUrl(attachmentInvoice) }] : []), ...attachmentInvoice.documents.map((document) => ({ name: document.file_name, mime: document.file_mime, url: `/management/projects/${attachmentInvoice.project_id}/documents/${document.id}/file` }))]} />
                         <div className="vendor-attachment-list">
                             {attachmentInvoice.file_name && <div className="accounting-attachment-row"><a href={fileUrl(attachmentInvoice)} target="_blank" rel="noreferrer"><FileText /><span>{attachmentInvoice.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/projects/${attachmentInvoice.project_id}/invoices/${attachmentInvoice.id}/file`, attachmentInvoice.file_name!)}><Trash2 /> Remove</button></div>}
                             {attachmentInvoice.documents.map((document) => <div className="accounting-attachment-row" key={document.id}><a href={`/management/projects/${attachmentInvoice.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/projects/${attachmentInvoice.project_id}/documents/${document.id}`, document.file_name)}><Trash2 /> Remove</button></div>)}

@@ -22,11 +22,17 @@ test('admins can view and create products', function () {
     $this->actingAs($admin)
         ->post(route('management.products.store'), [
             'product_name' => 'Foundation Repair',
+            'price' => '125.50',
+            'unit' => 'Square Foot',
+            'description' => 'Foundation repair priced by square foot.',
         ])
         ->assertRedirect();
 
     $this->assertDatabaseHas('products', [
         'product_name' => 'Foundation Repair',
+        'price' => '125.50',
+        'unit' => 'Square Foot',
+        'description' => 'Foundation repair priced by square foot.',
     ]);
 });
 
@@ -39,10 +45,17 @@ test('admins can update and delete products', function () {
     $this->actingAs($admin)
         ->put(route('management.products.update', $product), [
             'product_name' => 'New Product',
+            'price' => '75.00',
+            'unit' => 'Each',
+            'description' => 'Updated product description.',
         ])
         ->assertRedirect();
 
-    expect($product->refresh()->product_name)->toBe('New Product');
+    expect($product->refresh())
+        ->product_name->toBe('New Product')
+        ->price->toBe('75.00')
+        ->unit->toBe('Each')
+        ->description->toBe('Updated product description.');
 
     $this->actingAs($admin)
         ->delete(route('management.products.destroy', $product))

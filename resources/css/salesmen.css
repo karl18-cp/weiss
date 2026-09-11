@@ -31,7 +31,7 @@
 .salesman-commission-totals strong { display: block; }
 .salesman-commission-totals small { color: #7b728a; font-size: 0.52rem; font-weight: 800; text-transform: uppercase; }
 .salesman-commission-totals strong { margin-top: 0.1rem; color: #68469a; font-size: 0.78rem; }
-.salesman-commission-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.85rem; }
+.salesman-commission-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.85rem; }
 .salesman-commission-fields label > span { display: block; margin-bottom: 0.3rem; color: #58667a; font-size: 0.64rem; font-weight: 800; }
 .salesman-commission-fields label > div { display: flex; align-items: center; overflow: hidden; border: 1px solid #d5cbe7; border-radius: 0.65rem; background: #fff; }
 .salesman-commission-fields input { width: 100%; min-width: 0; padding: 0.65rem 0.75rem; outline: none; }

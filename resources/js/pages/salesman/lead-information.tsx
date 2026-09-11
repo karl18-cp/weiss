@@ -23,6 +23,7 @@ type SalesmanLead = {
     customer_name: string;
     primary_number: string;
     mobile_number: string | null;
+    dial_number: string | null;
     address: string;
     city: string;
     state: string;
@@ -54,7 +55,7 @@ export default function SalesmanLeadInformation({
     const [contractFileError, setContractFileError] = useState('');
     const [showMapChoices, setShowMapChoices] = useState(false);
     const phoneNumber = lead?.primary_number || lead?.mobile_number || '';
-    const dialNumber = phoneNumber.replace(/[^\d+]/g, '');
+    const dialNumber = (lead?.dial_number ?? '').replace(/[^\d+]/g, '');
     const openDeviceDialer = () => {
         if (!dialNumber) return;
 

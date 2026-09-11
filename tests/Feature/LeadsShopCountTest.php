@@ -4,6 +4,7 @@ use App\Models\Account;
 use App\Models\Agent;
 use App\Models\Company;
 use App\Models\Lead;
+use App\Models\LeadAgentAssignment;
 use App\Models\LeadMovement;
 use App\Models\Manager;
 use App\Models\ManagerPermission;
@@ -71,25 +72,25 @@ function createOwnedCallbackLead(Account $creator, Account $owner, Agent $agent,
     return $lead->fresh();
 }
 
-test('leads shop keeps the last 30 dates visible when they have no leads', function () {
+test('leads shop keeps zero counts only for the five most recent dates', function () {
     $account = Account::query()->create([
         'username' => 'empty-date-navigator-admin',
         'password' => 'password',
         'role' => 'admin',
     ]);
     $today = now('America/Los_Angeles')->toDateString();
-    $oldestVisibleDate = now('America/Los_Angeles')->subDays(29)->toDateString();
+    $fifthVisibleDate = now('America/Los_Angeles')->subDays(4)->toDateString();
 
     $this->actingAs($account)
         ->get(route('lead-workflow.leads-shop'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('selectedDate', $today)
-            ->has('dateRows', 30)
+            ->has('dateRows', 5)
             ->where('dateRows.0.key', $today)
             ->where('dateRows.0.count', 0)
-            ->where('dateRows.29.key', $oldestVisibleDate)
-            ->where('dateRows.29.count', 0));
+            ->where('dateRows.4.key', $fifthVisibleDate)
+            ->where('dateRows.4.count', 0));
 });
 
 test('leads shop header counts manager returns from restricted workflow tabs', function () {
@@ -263,6 +264,8 @@ test('a verify lead creation date can be corrected and updates its initial movem
     ]);
     $product = Product::query()->create(['product_name' => 'Verify Date Product']);
     $agent = Agent::query()->create(['agent_name' => 'Verify Date Agent']);
+    $replacementAgent = Agent::query()->create(['agent_name' => 'Replacement Original Agent']);
+    $oldSecondAgent = Agent::query()->create(['agent_name' => 'Old Second Agent']);
     $lead = Lead::query()->create([
         'customer_name' => 'Transferred Verify Lead',
         'marital_status' => 'Unknown',
@@ -279,8 +282,15 @@ test('a verify lead creation date can be corrected and updates its initial movem
         'company_id' => $company->com_id,
         'source' => 'CallTools',
         'agent_id' => $agent->agent_id,
+        'agent_2_id' => $oldSecondAgent->agent_id,
         'created_by' => $account->acc_id,
         'status' => 'verify',
+    ]);
+    LeadAgentAssignment::query()->create([
+        'lead_id' => $lead->id,
+        'agent_id' => $oldSecondAgent->agent_id,
+        'assigned_by' => $account->acc_id,
+        'is_original' => false,
     ]);
 
     $this->actingAs($account)
@@ -298,13 +308,21 @@ test('a verify lead creation date can be corrected and updates its initial movem
             'appointment_at' => $lead->appointment_at->format('Y-m-d H:i:s'),
             'company_id' => $company->com_id,
             'source' => 'CallTools',
-            'agent_id' => $agent->agent_id,
+            'agent_id' => $replacementAgent->agent_id,
+            'agent_2_id' => '',
         ])
         ->assertSessionHasNoErrors()
         ->assertRedirect();
 
-    expect($lead->fresh()->getRawOriginal('created_at'))
+    $lead->refresh();
+
+    expect($lead->getRawOriginal('created_at'))
         ->toBe('2026-06-15 16:30:00')
+        ->and($lead->agent_id)->toBe($replacementAgent->agent_id)
+        ->and($lead->agent_2_id)->toBeNull()
+        ->and($lead->agentAssignments()->count())->toBe(1)
+        ->and($lead->agentAssignments()->firstOrFail()->agent_id)->toBe($replacementAgent->agent_id)
+        ->and($lead->agentAssignments()->firstOrFail()->is_original)->toBeTrue()
         ->and($lead->movements()->reorder()->oldest('created_at')->firstOrFail()->getRawOriginal('created_at'))
         ->toBe('2026-06-15 16:30:00');
 });

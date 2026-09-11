@@ -8,6 +8,18 @@ use App\Services\RingCentralRecordingSync;
 use App\Services\RingCentralService;
 use Illuminate\Support\Facades\Storage;
 
+test('RingCentral timestamps are serialized with an explicit UTC offset', function () {
+    $call = new RingCentralCall();
+    $call->setRawAttributes([
+        'initiated_at' => '2026-08-26 00:20:00',
+        'started_at' => '2026-08-26 00:20:05',
+    ]);
+
+    expect($call->toArray())
+        ->initiated_at->toBe('2026-08-26T00:20:00+00:00')
+        ->started_at->toBe('2026-08-26T00:20:05+00:00');
+});
+
 test('newly matched RingCentral recordings are downloaded in the same sync pass', function () {
     Storage::fake('local');
     $account = Account::query()->create([

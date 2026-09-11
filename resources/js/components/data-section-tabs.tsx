@@ -109,7 +109,7 @@ export default function DataSectionTabs({
                 {active === 'Projects' ? (
                     <span className="lead-data-tab is-active">Projects</span>
                 ) : (
-                    <Link href="/management/projects" className="lead-data-tab">
+                    <Link href="/lead-workflow/data/projects" className="lead-data-tab">
                         Projects
                     </Link>
                 )}

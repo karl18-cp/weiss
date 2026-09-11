@@ -19,6 +19,8 @@ class QualityControlController extends Controller
         return Inertia::render('management/quality-control', [
             'projects' => Project::query()
                 ->where('status', '!=', 'canceled')
+                ->whereNotNull('lead_id')
+                ->whereHas('lead')
                 ->with([
                     'lead.company:com_id,company,prefix',
                     'lead.product:prod_id,product_name',

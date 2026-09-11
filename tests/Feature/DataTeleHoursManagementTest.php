@@ -6,7 +6,7 @@ use App\Models\AgentAttendanceSession;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
-test('admin can edit and delete a tele hours row while preserving raw imported history', function () {
+test('admin can edit and delete a tele hours row while preserving raw portal history', function () {
     $admin = Account::query()->create([
         'username' => 'tele-hours-admin',
         'password' => 'password',
@@ -34,11 +34,8 @@ test('admin can edit and delete a tele hours row while preserving raw imported h
         ->patch(route('lead-workflow.data.tele-hours.update', [$agent->agent_id, '2026-08-12']), [
             'agent_id' => $agent->agent_id,
             'work_date' => '2026-08-12',
-            'calltools_login' => '08:00',
-            'calltools_logout' => '18:00',
             'first_login' => '08:30',
             'first_logout' => '17:30',
-            'imported_hours' => 9.5,
             'leads_sent' => 7,
             'lunch_hours' => 0.5,
             'note' => 'Updated note',
@@ -49,7 +46,7 @@ test('admin can edit and delete a tele hours row while preserving raw imported h
         'agent_id' => $agent->agent_id,
         'work_date' => '2026-08-12',
         'duration_seconds' => 32400,
-        'imported_seconds_override' => 34200,
+        'imported_seconds_override' => null,
         'leads_sent_override' => 7,
         'lunch_seconds' => 1800,
         'note' => 'Updated note',
@@ -69,7 +66,7 @@ test('admin can edit and delete a tele hours row while preserving raw imported h
     ]);
 });
 
-test('imported sessions and a manual override produce one agent day row', function () {
+test('manual correction overrides automatic portal hours without counting calltools sessions', function () {
     $admin = Account::query()->create([
         'username' => 'tele-hours-dedupe-admin',
         'password' => 'password',
@@ -79,17 +76,12 @@ test('imported sessions and a manual override produce one agent day row', functi
         'agent_name' => 'Deduped Agent',
         'calltools_user_id' => 'deduped-user',
     ]);
-    foreach ([1, 2] as $session) {
-        DB::table('calltools_user_login_shifts')->insert([
-            'calltools_id' => "dedupe-session-{$session}",
-            'app_user_id' => 'deduped-user',
-            'started_at' => "2026-08-12 1{$session}:00:00",
-            'stopped_at' => "2026-08-12 1{$session}:30:00",
-            'duration_seconds' => 1800,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
+    AgentAttendanceSession::query()->create([
+        'agent_id' => $agent->agent_id,
+        'work_date' => '2026-08-12',
+        'clocked_in_at' => '2026-08-12 16:00:00',
+        'clocked_out_at' => '2026-08-13 01:00:00',
+    ]);
     DB::table('agent_manual_hours')->insert([
         'agent_id' => $agent->agent_id,
         'work_date' => '2026-08-12',
@@ -108,10 +100,10 @@ test('imported sessions and a manual override produce one agent day row', functi
             ->has('hours', 1)
             ->where('hours.0.agent_id', $agent->agent_id)
             ->where('hours.0.manual_override', true)
-            ->where('hours.0.sessions', 2));
+            ->where('hours.0.sessions', 1));
 });
 
-test('inactive agents remain visible on dates where CallTools recorded a login', function () {
+test('inactive agents remain visible on dates where the agent portal recorded a login', function () {
     $admin = Account::query()->create([
         'username' => 'inactive-history-admin',
         'password' => 'password',
@@ -123,14 +115,11 @@ test('inactive agents remain visible on dates where CallTools recorded a login',
         'inactive_at' => '2026-08-13 00:00:00',
     ]);
 
-    DB::table('calltools_user_login_shifts')->insert([
-        'calltools_id' => 'historical-inactive-session',
-        'app_user_id' => 'historical-inactive-user',
-        'started_at' => '2026-08-12 16:00:00',
-        'stopped_at' => '2026-08-12 17:00:00',
-        'duration_seconds' => 3600,
-        'created_at' => now(),
-        'updated_at' => now(),
+    AgentAttendanceSession::query()->create([
+        'agent_id' => $inactiveAgent->agent_id,
+        'work_date' => '2026-08-12',
+        'clocked_in_at' => '2026-08-12 16:00:00',
+        'clocked_out_at' => '2026-08-12 17:00:00',
     ]);
 
     $this->actingAs($admin)
@@ -172,15 +161,57 @@ test('data tele hours uses the same effective portal attendance hours as the mai
         ->assertInertia(fn (Assert $page) => $page
             ->where('loginDays.0.agent_id', $agent->agent_id)
             ->where('loginDays.0.logged_seconds', 32400)
-            ->where('loginDays.0.lunch_seconds', 3600)
+            ->where('loginDays.0.lunch_seconds', 5400)
             ->where('loginDays.0.attendance_source', 'Agent portal'));
 
     $this->actingAs($admin)
         ->get(route('lead-workflow.data.tele-hours', ['date' => '2026-08-12']))
         ->assertInertia(fn (Assert $page) => $page
             ->where('hours.0.agent_id', $agent->agent_id)
-            ->where('hours.0.imported_seconds', 32400)
-            ->where('hours.0.lunch_seconds', 3600)
-            ->where('hours.0.total_seconds', 28800)
+            ->where('hours.0.logged_seconds', 32400)
+            ->where('hours.0.lunch_seconds', 5400)
+            ->where('hours.0.total_seconds', 27000)
             ->where('hours.0.attendance_source', 'Agent portal'));
+});
+
+test('both tele reports fall back to historical calltools shifts but prefer portal attendance', function () {
+    $admin = Account::query()->create([
+        'username' => 'historical-calltools-hours-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Historical Hours Agent',
+        'calltools_user_id' => 'historical-hours-user',
+    ]);
+
+    DB::table('calltools_user_login_shifts')->insert([
+        'calltools_id' => 'historical-shift',
+        'app_user_id' => 'historical-hours-user',
+        'started_at' => '2026-08-12 16:00:00',
+        'stopped_at' => '2026-08-13 00:00:00',
+        'duration_seconds' => 28800,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    foreach ([route('lead-workflow.tele-hours', ['date' => '2026-08-12']), route('lead-workflow.data.tele-hours', ['date' => '2026-08-12'])] as $index => $url) {
+        $this->actingAs($admin)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where(($index === 0 ? 'loginDays' : 'hours').'.0.agent_id', $agent->agent_id)
+            ->where(($index === 0 ? 'loginDays' : 'hours').'.0.logged_seconds', 28800)
+            ->where(($index === 0 ? 'loginDays' : 'hours').'.0.attendance_source', 'CallTools'));
+    }
+
+    AgentAttendanceSession::query()->create([
+        'agent_id' => $agent->agent_id,
+        'work_date' => '2026-08-12',
+        'clocked_in_at' => '2026-08-12 17:00:00',
+        'clocked_out_at' => '2026-08-12 21:00:00',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('lead-workflow.tele-hours', ['date' => '2026-08-12']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('loginDays.0.logged_seconds', 14400)
+            ->where('loginDays.0.attendance_source', 'Agent portal'));
 });

@@ -1,0 +1,193 @@
+.attachment-preview-gallery {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.75rem 0;
+}
+
+.attachment-preview-modal {
+    width: min(96rem, calc(100vw - 1rem));
+    max-width: 96rem;
+    max-height: calc(100vh - 1rem);
+    overflow-y: auto;
+}
+
+.attachment-preview-modal > form,
+.project-accounting-attachment-modal > form {
+    display: grid;
+    grid-template-columns: minmax(17rem, 0.55fr) minmax(36rem, 1.8fr);
+    align-items: start;
+    gap: 0.8rem 1rem;
+}
+
+.attachment-preview-modal > form > *,
+.project-accounting-attachment-modal > form > * {
+    min-width: 0;
+    grid-column: 1;
+}
+
+.attachment-preview-modal > form > :first-child,
+.project-accounting-attachment-modal > form > :first-child {
+    grid-column: 1 / -1;
+}
+
+.attachment-preview-modal > form > .attachment-preview-gallery,
+.project-accounting-attachment-modal > form > .attachment-preview-gallery {
+    grid-column: 2;
+    grid-row: 2 / span 6;
+    margin: 0;
+}
+
+.attachment-preview-gallery__tabs {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+}
+
+.attachment-preview-gallery__tabs button {
+    max-width: 12rem;
+    flex: none;
+    overflow: hidden;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid #d7e2f1;
+    border-radius: 0.5rem;
+    color: #53627a;
+    background: #fff;
+    font-size: 0.68rem;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attachment-preview-gallery__tabs button.is-active {
+    border-color: #2871ed;
+    color: #1768e7;
+    background: #edf5ff;
+}
+
+.attachment-preview-gallery__frame {
+    display: grid;
+    height: clamp(24rem, 68vh, 48rem);
+    overflow: hidden;
+    place-items: center;
+    border: 1px solid #d7e2f1;
+    border-radius: 0.7rem;
+    background: #f4f7fb;
+}
+
+.attachment-preview-gallery__frame.is-image {
+    position: relative;
+    display: block;
+    overflow: auto;
+}
+
+@media (max-width: 850px) {
+    .attachment-preview-modal > form,
+    .project-accounting-attachment-modal > form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .attachment-preview-modal > form > *,
+    .project-accounting-attachment-modal > form > *,
+    .attachment-preview-modal > form > :first-child,
+    .project-accounting-attachment-modal > form > :first-child,
+    .attachment-preview-modal > form > .attachment-preview-gallery,
+    .project-accounting-attachment-modal > form > .attachment-preview-gallery {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}
+
+.attachment-preview-gallery__frame img,
+.attachment-preview-gallery__frame iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.attachment-preview-gallery__frame img {
+    object-fit: contain;
+    max-width: none;
+    max-height: none;
+    cursor: zoom-in;
+}
+
+.attachment-preview-gallery__zoom {
+    position: sticky;
+    z-index: 2;
+    top: 0.65rem;
+    left: 0.65rem;
+    display: flex;
+    width: max-content;
+    align-items: center;
+    gap: 0.25rem;
+    margin: 0.65rem 0 -3.35rem 0.65rem;
+    padding: 0.3rem;
+    border: 1px solid rgb(255 255 255 / 35%);
+    border-radius: 0.55rem;
+    color: #fff;
+    background: rgb(17 24 39 / 82%);
+    box-shadow: 0 5px 18px rgb(0 0 0 / 24%);
+    backdrop-filter: blur(8px);
+}
+
+.attachment-preview-gallery__zoom button {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border: 0;
+    border-radius: 0.4rem;
+    color: #fff;
+    background: transparent;
+}
+
+.attachment-preview-gallery__zoom button:hover:not(:disabled) {
+    background: rgb(255 255 255 / 18%);
+}
+
+.attachment-preview-gallery__zoom button:disabled {
+    opacity: 0.38;
+}
+
+.attachment-preview-gallery__zoom button svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.attachment-preview-gallery__zoom strong {
+    min-width: 2.9rem;
+    font-size: 0.68rem;
+    text-align: center;
+}
+
+.attachment-preview-gallery__unsupported {
+    display: grid;
+    max-width: 24rem;
+    place-items: center;
+    gap: 0.45rem;
+    padding: 1rem;
+    color: #5f6f86;
+    text-align: center;
+}
+
+.attachment-preview-gallery__unsupported svg {
+    width: 2rem;
+    height: 2rem;
+    color: #2871ed;
+}
+
+.attachment-preview-gallery > a {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    justify-self: start;
+    gap: 0.35rem;
+    color: #1768e7;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
+.attachment-preview-gallery > a svg {
+    width: 0.85rem;
+    height: 0.85rem;
+}

@@ -6,6 +6,7 @@ import {
     CalendarClock,
     ClipboardCheck,
     Clock3,
+    FileText,
     History,
     LayoutDashboard,
     ListTodo,
@@ -174,6 +175,12 @@ const managementItems: SidebarItem[] = [
         permission: 'quality_control',
     },
     {
+        title: 'Proposals',
+        icon: FileText,
+        href: '/management/proposals',
+        permission: 'proposals',
+    },
+    {
         title: 'Projects',
         icon: PanelsTopLeft,
         href: '/management/projects',
@@ -205,7 +212,6 @@ function NavigationSection({
     onNavigate?: () => void;
 }) {
     const { currentUrl, isCurrentUrl } = useCurrentUrl();
-
     return (
         <SidebarGroup className="crm-sidebar__group">
             <SidebarGroupLabel className="crm-sidebar__label">

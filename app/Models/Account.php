@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
 #[Fillable(['username', 'password', 'role', 'suspended_at'])]
-#[Hidden(['password'])]
+#[Hidden(['password', 'remember_token'])]
 class Account extends Authenticatable
 {
     protected $table = 'accounts';

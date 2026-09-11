@@ -262,6 +262,10 @@ export default function LeadCard({
 
         form.transform((data) => ({
             ...data,
+            primary_number:
+                data.primary_number.trim() ||
+                data.secondary_number.trim() ||
+                data.mobile_number.trim(),
             address: [data.address.trim(), formattedUnit]
                 .filter(Boolean)
                 .join(', '),
@@ -401,7 +405,7 @@ export default function LeadCard({
                             </label>
                             {input(
                                 'primary_number',
-                                'Primary number',
+                                'Primary number (one phone required)',
                                 '(555) 000-0000',
                                 <Phone />,
                                 'tel',
@@ -587,6 +591,7 @@ export default function LeadCard({
                                 '0',
                                 undefined,
                                 'number',
+                                true,
                             )}
                             {input(
                                 'house_age',
@@ -594,9 +599,13 @@ export default function LeadCard({
                                 'Age in years',
                                 <House />,
                                 'number',
+                                true,
                             )}
                             <label className="lead-field">
-                                <span>Do you need financing?</span>
+                                <span>
+                                    Do you need financing?
+                                    <small>Optional</small>
+                                </span>
                                 <div className="lead-input">
                                     <select
                                         value={form.data.needs_financing}
@@ -622,6 +631,7 @@ export default function LeadCard({
                                 'Estimated value',
                                 undefined,
                                 'number',
+                                true,
                             )}
                             {input(
                                 'email',
@@ -851,8 +861,9 @@ export default function LeadCard({
                         </section>
 
                         <p className="lead-required-note">
-                            All fields are required except apartment/unit,
-                            secondary number, mobile number, and email.
+                            Apartment/unit, secondary number, mobile number,
+                            years in house, house built, financing, house value,
+                            and email are optional.
                         </p>
                     </aside>
                 </form>

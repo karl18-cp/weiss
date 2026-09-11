@@ -47,8 +47,10 @@ class ManagerActivityController extends Controller
         $today = CarbonImmutable::now($californiaTimezone)->toDateString();
         $fromValue = (string) $request->query('from', $today);
         $toValue = (string) $request->query('to', $today);
-        $from = CarbonImmutable::parse($fromValue, $californiaTimezone)->startOfDay();
-        $to = CarbonImmutable::parse($toValue, $californiaTimezone)->endOfDay();
+        $fromCalifornia = CarbonImmutable::parse($fromValue, $californiaTimezone)->startOfDay();
+        $toCalifornia = CarbonImmutable::parse($toValue, $californiaTimezone)->endOfDay();
+        $fromUtc = $fromCalifornia->utc();
+        $toUtc = $toCalifornia->utc();
 
         $activities = $view === 'history'
             ? DB::query()
@@ -61,8 +63,8 @@ class ManagerActivityController extends Controller
                 ->when($destination, fn (Builder $query) => $query
                     ->where('activity.activity_type', 'movement')
                     ->where('activity.to_status', $destination))
-                ->when($from, fn (Builder $query) => $query->where('activity.created_at', '>=', $from))
-                ->when($to, fn (Builder $query) => $query->where('activity.created_at', '<=', $to))
+                ->where('activity.created_at', '>=', $fromCalifornia)
+                ->where('activity.created_at', '<=', $toCalifornia)
                 ->when($search !== '', function (Builder $query) use ($search): void {
                     $like = '%'.$search.'%';
                     $query->where(function (Builder $query) use ($like): void {
@@ -93,7 +95,7 @@ class ManagerActivityController extends Controller
                     'manager_account_id' => (int) $row->manager_account_id,
                     'activity_type' => $row->activity_type,
                     'description' => $this->description($row),
-                    'created_at' => $row->created_at,
+                    'created_at' => $this->californiaIsoTimestamp($row->created_at),
                 ])
             : new LengthAwarePaginator(
                 items: [],
@@ -113,8 +115,8 @@ class ManagerActivityController extends Controller
         $calls = RingCentralCall::query()
             ->whereIn('account_id', $managerNames->keys())
             ->when($managerAccountId, fn ($query) => $query->where('account_id', $managerAccountId))
-            ->when($from, fn ($query) => $query->where('initiated_at', '>=', $from))
-            ->when($to, fn ($query) => $query->where('initiated_at', '<=', $to))
+            ->where('initiated_at', '>=', $fromUtc)
+            ->where('initiated_at', '<=', $toUtc)
             ->when($talkedTo, fn ($query) => $query->where('duration_seconds', '>', 20))
             ->when($search !== '', function ($query) use ($search): void {
                 $like = '%'.$search.'%';
@@ -149,6 +151,8 @@ class ManagerActivityController extends Controller
             ->through(function (RingCentralCall $call) use ($managerNames): array {
                 return [
                     ...$call->toArray(),
+                    'initiated_at' => $this->utcIsoTimestamp($call->getRawOriginal('initiated_at')),
+                    'started_at' => $this->utcIsoTimestamp($call->getRawOriginal('started_at')),
                     'manager_name' => $managerNames->get($call->account_id, $call->caller?->username ?? 'Manager'),
                     'recording_url' => $call->recording_path
                         ? route('lead-workflow.leads-shop.ringcentral-calls.recording', [$call->lead_id, $call->id])
@@ -163,8 +167,8 @@ class ManagerActivityController extends Controller
             ->where('manager_returns.to_status', 'fresh')
             ->whereNotNull('manager_returns.from_status')
             ->when($managerAccountId, fn (Builder $query) => $query->where('manager_returns.moved_by', $managerAccountId))
-            ->when($from, fn (Builder $query) => $query->where('manager_returns.created_at', '>=', $from))
-            ->when($to, fn (Builder $query) => $query->where('manager_returns.created_at', '<=', $to))
+            ->where('manager_returns.created_at', '>=', $fromCalifornia)
+            ->where('manager_returns.created_at', '<=', $toCalifornia)
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $like = '%'.$search.'%';
                 $query->where(function (Builder $query) use ($like): void {
@@ -268,5 +272,23 @@ class ManagerActivityController extends Controller
         $body = trim((string) $row->body);
 
         return 'Added '.$label.' note'.($body !== '' ? ': '.$body : '.');
+    }
+
+    private function utcIsoTimestamp(mixed $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        return CarbonImmutable::parse((string) $value, 'UTC')->toIso8601String();
+    }
+
+    private function californiaIsoTimestamp(mixed $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        return CarbonImmutable::parse((string) $value, 'America/Los_Angeles')->toIso8601String();
     }
 }

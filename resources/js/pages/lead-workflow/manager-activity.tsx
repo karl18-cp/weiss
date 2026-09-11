@@ -80,6 +80,13 @@ const dateTime = (value: string) =>
         timeStyle: 'short',
     }).format(new Date(value));
 
+const callDateTime = (value: string) =>
+    new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Los_Angeles',
+        dateStyle: 'medium',
+        timeStyle: 'long',
+    }).format(new Date(value));
+
 const duration = (seconds: number) =>
     `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
@@ -407,7 +414,7 @@ export default function ManagerActivity({
                                             <tr key={call.id}>
                                                 <td>
                                                     <CalendarDays />
-                                                    {dateTime(
+                                                    {callDateTime(
                                                         call.started_at ??
                                                             call.initiated_at,
                                                     )}

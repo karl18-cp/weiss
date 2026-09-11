@@ -36,3 +36,13 @@ weiss-php83-dependencies.zip
 /.vscode
 /.zed
 /bootstrap/cache/*.php
+
+# Local build and deployment artifacts
+/.deploy*
+/.production-frontend-build*
+/.production-frontend-source*
+/.tools/
+/weiss-main/
+/storage/bid_*.png
+/storage/fonts-manifest.dev.json
+/storage/vite.hot

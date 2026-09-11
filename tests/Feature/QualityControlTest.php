@@ -66,6 +66,13 @@ function qualityControlFixtures(): array
 test('quality control contains only leads related to projects', function () {
     ['account' => $account, 'projectLead' => $projectLead, 'ordinaryLead' => $ordinaryLead] = qualityControlFixtures();
 
+    Project::query()->create([
+        'customer_name' => 'Standalone Project Without Lead',
+        'amount' => 5000,
+        'status' => 'new',
+        'created_by' => $account->acc_id,
+    ]);
+
     $this->actingAs($account)
         ->get(route('management.quality-control'))
         ->assertInertia(fn (Assert $page) => $page

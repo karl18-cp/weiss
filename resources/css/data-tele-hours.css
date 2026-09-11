@@ -54,3 +54,10 @@
 .data-hours-modal footer button { border: 1px solid #a82ac1; border-radius: 8px; padding: .58rem .8rem; background: #fff; color: #8d219f; font-size: .8rem; font-weight: 800; cursor: pointer; }
 .data-hours-modal footer button[type=submit] { background: #9825b7; color: #fff; }
 @media (max-width: 700px) { .data-hours-add { width: 100%; justify-content: center; margin-left: 0; } .data-hours-filter { align-items: stretch; flex-direction: column; } .data-hours-filter p { margin: .25rem 0 0; } .data-hours-card-title { align-items: flex-start; flex-direction: column; } .data-hours-fields, .data-hours-agent-options { grid-template-columns: 1fr; } }
+.data-hours-source {
+    display: block;
+    margin-top: 0.2rem;
+    color: #7a879b;
+    font-size: 0.68rem;
+    font-weight: 600;
+}

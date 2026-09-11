@@ -405,6 +405,66 @@
     font-size: 0.7rem;
 }
 
+.products-form__pricing {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.8rem;
+}
+
+.products-price-input {
+    display: flex;
+    height: 3rem;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #dce3ee;
+    border-radius: 0.75rem;
+}
+
+.products-price-input:focus-within,
+.products-form select:focus,
+.products-form textarea:focus {
+    border-color: #4a7df0;
+    box-shadow: 0 0 0 3px rgb(55 111 240 / 12%);
+}
+
+.products-price-input b {
+    display: grid;
+    height: 100%;
+    place-items: center;
+    padding-inline: 0.85rem;
+    color: #2b63df;
+    background: #edf3ff;
+}
+
+.products-price-input input {
+    min-width: 0;
+    flex: 1;
+    padding-inline: 0.8rem;
+    outline: none;
+}
+
+.products-form select,
+.products-form textarea {
+    width: 100%;
+    border: 1px solid #dce3ee;
+    border-radius: 0.75rem;
+    color: #172036;
+    background: #fff;
+    font-size: 0.85rem;
+    outline: none;
+}
+
+.products-form select {
+    height: 3rem;
+    padding-inline: 0.8rem;
+}
+
+.products-form textarea {
+    min-height: 7rem;
+    padding: 0.8rem;
+    resize: vertical;
+}
+
 .products-input {
     display: flex;
     height: 3rem;
@@ -486,5 +546,9 @@
     .products-header .products-primary-button,
     .products-search {
         width: 100%;
+    }
+
+    .products-form__pricing {
+        grid-template-columns: 1fr;
     }
 }

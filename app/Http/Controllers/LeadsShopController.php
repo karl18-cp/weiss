@@ -193,20 +193,22 @@ class LeadsShopController extends Controller
                 ->filter()
                 ->map(fn ($value): string => substr((string) $value, 0, 10))
                 ->countBy();
-        // Keep a stable 30-day navigator even after the final lead on a day
-        // is moved elsewhere. Without the zero-count rows, the active date
-        // disappears from the sidebar in the middle of a manager's workflow.
-        $dateRows = collect(range(0, 29))
-            ->map(function (int $daysAgo) use ($crmTimezone, $dateCounts): array {
-                $date = CarbonImmutable::today($crmTimezone)
-                    ->subDays($daysAgo)
-                    ->toDateString();
-
-                return [
-                    'key' => $date,
-                    'count' => (int) ($dateCounts[$date] ?? 0),
-                ];
-            });
+        // Always show the five most recent dates, then include every other
+        // historical or future date that actually contains a lead.
+        $recentDates = collect(range(0, 4))->map(
+            fn (int $daysAgo): string => CarbonImmutable::today($crmTimezone)
+                ->subDays($daysAgo)
+                ->toDateString(),
+        );
+        $dateRows = $recentDates
+            ->merge($dateCounts->keys())
+            ->unique()
+            ->sortDesc()
+            ->map(fn (string $date): array => [
+                'key' => $date,
+                'count' => (int) ($dateCounts[$date] ?? 0),
+            ])
+            ->values();
 
         $requestedLeadDate = $requestedLeadId
             ? (clone $queueQuery)
@@ -438,8 +440,11 @@ class LeadsShopController extends Controller
             // This field is read-only in the edit UI. Never overwrite it with a
             // stale or blank value submitted by an already-open lead card.
             unset($data['telemarketer_notes']);
-            $reassignedAgentId = (int) $data['agent_id'];
-            unset($data['agent_id']);
+            $originalAgentId = (int) $data['agent_id'];
+            $secondAgentId = filled($data['agent_2_id'] ?? null)
+                ? (int) $data['agent_2_id']
+                : null;
+            unset($data['agent_id'], $data['agent_2_id']);
             $previousSalesmen = [
                 'salesman_1_id' => $lead->salesman_1_id,
                 'salesman_2_id' => $lead->salesman_2_id,
@@ -447,6 +452,8 @@ class LeadsShopController extends Controller
 
             $lead->update([
                 ...$data,
+                'agent_id' => $originalAgentId,
+                'agent_2_id' => $secondAgentId,
                 'crm_qualification_completed_at' => now(),
             ]);
 
@@ -460,7 +467,7 @@ class LeadsShopController extends Controller
             }
 
             $this->recordSalesmanChanges($request, $lead, $previousSalesmen);
-            $this->appendAgentAssignment($request, $lead, $reassignedAgentId);
+            $this->syncAgentAssignments($request, $lead, $originalAgentId, $secondAgentId);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead updated.']);
@@ -583,6 +590,8 @@ class LeadsShopController extends Controller
         );
         $isLeadsShopAction = $sourcePath === '/lead-workflow/leads-shop'
             || in_array($lead->status, ['fresh', 'raw', 'cb', 'naov', 'verify', 'ng'], true);
+        $isConfirmTabAction = $sourcePath === '/lead-workflow/confirm-leads'
+            && ManagerAccess::canEdit($request->user(), 'confirm_leads');
         $restrictedActionPaths = [
             '/lead-workflow/555',
             '/lead-workflow/reschedule',
@@ -640,6 +649,7 @@ class LeadsShopController extends Controller
             $status !== 'fresh'
             && $destinationModule !== null
             && ! $isLeadsShopAction
+            && ! $isConfirmTabAction
             && ! ManagerAccess::canEdit($request->user(), $destinationModule)
         ) {
             Inertia::flash('toast', [
@@ -652,6 +662,13 @@ class LeadsShopController extends Controller
         }
 
         $updates = ['status' => $status];
+        if (
+            $lead->status === 'dispatched'
+            && ! in_array($status, ['dispatched', 'project'], true)
+        ) {
+            $updates['salesman_1_id'] = null;
+            $updates['salesman_2_id'] = null;
+        }
         if (
             $status === 'fresh'
             && ($isRestrictedActionSource || $lead->status === 'verify')
@@ -698,6 +715,48 @@ class LeadsShopController extends Controller
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead status updated.']);
+
+        return back();
+    }
+
+    public function reUp(Request $request, Lead $lead): RedirectResponse
+    {
+        $account = $request->user();
+        $manager = $account?->role === 'manager' ? $account->manager : null;
+
+        abort_unless($manager, 403, 'Only a manager can re-up a Leads Shop lead.');
+        abort_unless(
+            in_array($lead->status, Lead::LEADS_SHOP_STATUSES, true),
+            422,
+            'Only leads currently in Leads Shop can be re-upped.',
+        );
+
+        DB::transaction(function () use ($account, $lead, $manager): void {
+            $lockedLead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
+            $previousStatus = $lockedLead->status ?: 'fresh';
+
+            $lockedLead->update([
+                'status' => 'fresh',
+                'rehash_at' => now(),
+                'manager_2_id' => $manager->manager_id,
+            ]);
+
+            // Eloquent records status changes automatically. A Fresh-to-Fresh
+            // re-up is still a real workflow event, so record it explicitly.
+            if ($previousStatus === 'fresh' && Schema::hasTable('lead_movements')) {
+                LeadMovement::query()->create([
+                    'lead_id' => $lockedLead->id,
+                    'from_status' => 'fresh',
+                    'to_status' => 'fresh',
+                    'moved_by' => $account->getAuthIdentifier(),
+                ]);
+            }
+        });
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Lead re-upped and moved to today in Leads Shop.',
+        ]);
 
         return back();
     }
@@ -855,46 +914,49 @@ class LeadsShopController extends Controller
         return to_route('management.projects', ['project' => $project->id]);
     }
 
-    private function appendAgentAssignment(Request $request, Lead $lead, int $agentId): void
+    private function syncAgentAssignments(Request $request, Lead $lead, int $originalAgentId, ?int $secondAgentId): void
     {
         $hasAssignmentHistory = class_exists(LeadAgentAssignment::class)
             && Schema::hasTable('lead_agent_assignments');
 
-        if ($agentId === (int) $lead->agent_id && ! $hasAssignmentHistory) {
+        if (! $hasAssignmentHistory) {
             return;
         }
 
-        if ($hasAssignmentHistory) {
-            $latestAgentId = (int) (LeadAgentAssignment::query()
-                ->where('lead_id', $lead->id)
-                ->latest('id')
-                ->value('agent_id') ?? $lead->agent_id);
+        $originalAssignment = LeadAgentAssignment::query()
+            ->where('lead_id', $lead->id)
+            ->where('is_original', true)
+            ->oldest('id')
+            ->first();
 
-            if ($latestAgentId === $agentId) {
-                return;
-            }
-
+        if ($originalAssignment) {
+            $originalAssignment->update([
+                'agent_id' => $originalAgentId,
+                'assigned_by' => $request->user()->getAuthIdentifier(),
+            ]);
+        } else {
             LeadAgentAssignment::query()->create([
                 'lead_id' => $lead->id,
-                'agent_id' => $agentId,
+                'agent_id' => $originalAgentId,
+                'assigned_by' => $request->user()->getAuthIdentifier(),
+                'is_original' => true,
+            ]);
+        }
+
+        LeadAgentAssignment::query()
+            ->where('lead_id', $lead->id)
+            ->where(fn ($query) => $query->where('is_original', false)
+                ->orWhere('id', '!=', $originalAssignment?->id))
+            ->delete();
+
+        if ($secondAgentId !== null) {
+            LeadAgentAssignment::query()->create([
+                'lead_id' => $lead->id,
+                'agent_id' => $secondAgentId,
                 'assigned_by' => $request->user()->getAuthIdentifier(),
                 'is_original' => false,
             ]);
-        } elseif ((int) $lead->agent_id === $agentId) {
-            return;
         }
-
-        if (! $lead->agent_2_id) {
-            $lead->update(['agent_2_id' => $agentId]);
-        }
-
-        $agentName = Agent::query()->whereKey($agentId)->value('agent_name') ?? 'Unknown agent';
-        LeadNote::query()->create([
-            'lead_id' => $lead->id,
-            'note_type' => 'agent_reassigned',
-            'body' => "Agent reassigned to {$agentName}.",
-            'created_by' => $request->user()->getAuthIdentifier(),
-        ]);
     }
 
     /** @param array{salesman_1_id: mixed, salesman_2_id: mixed} $previous */

@@ -10,11 +10,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'project_id',
+    'project_sale_id',
     'company_id',
     'project_document_id',
     'project_invoice_id',
     'contractor_id',
     'vendor_id',
+    'salesman_id',
     'type',
     'category',
     'transaction_date',
@@ -36,7 +38,10 @@ class ProjectAccountingTransaction extends Model
 {
     protected static function booted(): void
     {
-        static::created(fn (self $transaction) => $transaction->syncLinkedInvoice());
+        static::created(function (self $transaction): void {
+            $transaction->syncLinkedInvoice();
+            $transaction->syncProjectStatus();
+        });
         static::updated(function (self $transaction): void {
             $transaction->syncLinkedInvoice();
 
@@ -44,8 +49,18 @@ class ProjectAccountingTransaction extends Model
             if ($originalInvoiceId && (int) $originalInvoiceId !== (int) $transaction->project_invoice_id) {
                 ProjectInvoice::query()->find($originalInvoiceId)?->syncStatusFromPayables();
             }
+
+            $transaction->syncProjectStatus();
+
+            $originalProjectId = $transaction->getOriginal('project_id');
+            if ($originalProjectId && (int) $originalProjectId !== (int) $transaction->project_id) {
+                Project::query()->find($originalProjectId)?->syncStatusFromAccounting();
+            }
         });
-        static::deleted(fn (self $transaction) => $transaction->syncLinkedInvoice());
+        static::deleted(function (self $transaction): void {
+            $transaction->syncLinkedInvoice();
+            $transaction->syncProjectStatus();
+        });
     }
 
     private function syncLinkedInvoice(): void
@@ -55,9 +70,19 @@ class ProjectAccountingTransaction extends Model
         }
     }
 
+    private function syncProjectStatus(): void
+    {
+        Project::query()->find($this->project_id)?->syncStatusFromAccounting();
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(ProjectSale::class, 'project_sale_id');
     }
 
     public function company(): BelongsTo
@@ -83,6 +108,11 @@ class ProjectAccountingTransaction extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class, 'vendor_id', 'vendor_id');
+    }
+
+    public function salesman(): BelongsTo
+    {
+        return $this->belongsTo(Salesman::class, 'salesman_id', 'salesman_id');
     }
 
     public function scheduledPayments(): BelongsToMany

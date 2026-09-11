@@ -62,6 +62,32 @@ class ProjectNumberAllocator
         return $projectNumber;
     }
 
+    public function allocateChild(Project $project): string
+    {
+        $current = trim((string) $project->project_number);
+        if ($current === '') {
+            throw ValidationException::withMessages([
+                'project_number' => 'The current project needs a project number before another customer project can be created.',
+            ]);
+        }
+
+        $base = preg_replace('/\.\d+$/', '', $current) ?: $current;
+        $pattern = '/^'.preg_quote($base, '/').'\.(\d+)$/';
+        $nextSuffix = Project::query()
+            ->where(fn ($query) => $query
+                ->where('project_number', $base)
+                ->orWhere('project_number', 'like', $base.'.%'))
+            ->lockForUpdate()
+            ->pluck('project_number')
+            ->reduce(function (int $highest, string $number) use ($pattern): int {
+                return preg_match($pattern, $number, $matches)
+                    ? max($highest, (int) $matches[1])
+                    : $highest;
+            }, 0) + 1;
+
+        return $base.'.'.$nextSuffix;
+    }
+
     public function normalizeForCompany(int $companyId, string $projectNumber, ?int $ignoreProjectId = null): string
     {
         $company = Company::query()->find($companyId);
@@ -71,9 +97,9 @@ class ProjectNumberAllocator
             ]);
         }
 
-        if (! preg_match('/(\d+)$/', trim($projectNumber), $matches)) {
+        if (! preg_match('/(\d+(?:\.\d+)?)$/', trim($projectNumber), $matches)) {
             throw ValidationException::withMessages([
-                'project_number' => 'Enter a project number ending in digits, such as SBH#5008.',
+                'project_number' => 'Enter a project number such as SBH#5008 or SBH#5008.1.',
             ]);
         }
 

@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Schema;
     'appointment_result', 'telemarketer_notes',
     'company_id', 'source', 'agent_id', 'agent_2_id', 'manager_2_id', 'rep', 'salesman_1_id', 'salesman_2_id',
     'created_by', 'status', 'confirmation_notes', 'rehash_at',
-    'calltools_contact_id', 'calltools_campaign_name', 'primary_phone_normalized', 'duplicate_of_id',
+    'calltools_contact_id', 'calltools_campaign_name', 'primary_phone_normalized', 'duplicate_of_id', 'project_family_id',
 ])]
 class Lead extends Model
 {

@@ -370,6 +370,7 @@ const emptyLeadForm = {
     company_id: '',
     source: 'CallTools',
     agent_id: '',
+    agent_2_id: '',
     salesman_1_id: '',
     salesman_2_id: '',
 };
@@ -399,6 +400,7 @@ const leadFormData = (lead: Lead) => ({
     company_id: String(lead.company?.com_id ?? ''),
     source: 'CallTools',
     agent_id: String(lead.agent?.agent_id ?? ''),
+    agent_2_id: String(lead.second_agent?.agent_id ?? ''),
     salesman_1_id: String(lead.salesman_one?.salesman_id ?? ''),
     salesman_2_id: String(lead.salesman_two?.salesman_id ?? ''),
 });
@@ -430,6 +432,17 @@ const formatDate = (value: string) =>
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+    }).format(new Date(value));
+
+const formatCallAttemptDate = (value: string) =>
+    new Intl.DateTimeFormat('en-US', {
+        timeZone: CRM_TIMEZONE,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short',
     }).format(new Date(value));
 
 const workflowLocation = (status: string | null) => {
@@ -988,7 +1001,7 @@ export default function LeadsShop({
 
     const [dateField, setDateField] = useState<DateField>(serverDateField);
     const [selectedStatus, setSelectedStatus] = useState(
-        requestedLead?.status ?? activeShopStatus ?? queue?.status ?? 'fresh',
+        requestedLead?.status ?? activeShopStatus ?? queue?.status ?? 'all',
     );
     const [companyFilter, setCompanyFilter] = useState('all');
     const [sourceFilter, setSourceFilter] = useState('all');
@@ -1000,6 +1013,7 @@ export default function LeadsShop({
         requestedLeadId,
     );
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isReUpping, setIsReUpping] = useState(false);
     const [appointmentDateDraft, setAppointmentDateDraft] = useState(
         appointmentInputValue(requestedLead?.appointment_at ?? ''),
     );
@@ -1073,6 +1087,9 @@ export default function LeadsShop({
     const canMoveToStatus = (status: string): boolean => {
         if (window.location.pathname === '/lead-workflow/leads-shop') {
             return true;
+        }
+        if (window.location.pathname === '/lead-workflow/confirm-leads') {
+            return status === 'fresh' || status === 'history' || canEditCurrentTab;
         }
         if (
             hasRestrictedQueueActions &&
@@ -1358,7 +1375,12 @@ export default function LeadsShop({
         nextDateField: DateField = effectiveDateField,
     ) => {
         setCityFilter('all');
-        if (activeShopStatus) setSelectedStatus('fresh');
+        setCompanyFilter('all');
+        setSourceFilter('all');
+        setProductFilter('all');
+        setAgentFilter('all');
+        setSelectedId(null);
+        setSelectedStatus('all');
         router.get(
             window.location.pathname,
             {
@@ -1457,6 +1479,7 @@ export default function LeadsShop({
                 : queue
                   ? ([[queue.status, queue.listTitle]] as const)
                   : ([
+                        ['all', 'All'],
                         ['fresh', 'Freshly In'],
                         ['raw', 'Raw'],
                         ['cb', 'CB'],
@@ -1471,6 +1494,8 @@ export default function LeadsShop({
                 statusFilters.map(([status]) => [
                     status,
                     isProjectQueue
+                        ? leads.length
+                        : status === 'all'
                         ? leads.length
                         : status === 'verify'
                         ? verifyCount
@@ -1538,6 +1563,7 @@ export default function LeadsShop({
                 const matchesStatus =
                     isKeepInTouchQueue ||
                     isProjectQueue ||
+                    selectedStatus === 'all' ||
                     (lead.status || 'fresh') === selectedStatus;
                 const matchesCompany =
                     companyFilter === 'all' ||
@@ -1645,7 +1671,7 @@ export default function LeadsShop({
 
     const clearListFilters = () => {
         setSearch('');
-        setSelectedStatus(queue?.status ?? 'fresh');
+        setSelectedStatus(queue?.status ?? 'all');
         setCompanyFilter('all');
         setSourceFilter('all');
         setCityFilter('all');
@@ -1932,6 +1958,33 @@ export default function LeadsShop({
         });
     };
 
+    const reUpLead = async () => {
+        if (!selected || isReUpping) return;
+
+        const approved = await confirm({
+            title: 'Re-up this lead?',
+            message: `${selected.customer_name} will be moved to Freshly In with today's rehash date, and you will be recorded as the second manager.`,
+            confirmLabel: 'Re-up lead',
+        });
+
+        if (!approved) return;
+
+        setIsReUpping(true);
+        router.patch(
+            `/lead-workflow/leads-shop/${selected.id}/re-up`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setSelectedId(null);
+                    setSelectedStatus('all');
+                    router.flushAll();
+                },
+                onFinish: () => setIsReUpping(false),
+            },
+        );
+    };
+
     const saveTelemarketerNote = () => {
         const body = telemarketerNoteForm.data.body.trim();
         if (!selected || !body || body === loadedTelemarketerNote.trim()) {
@@ -2072,8 +2125,8 @@ export default function LeadsShop({
         }
 
         if (
-            isDispatchQueue &&
-            ['kit', 'rehash', 'reschedule'].includes(status)
+            status === 'reschedule' ||
+            (isDispatchQueue && ['kit', 'rehash'].includes(status))
         ) {
             setFollowUpDestination(status as 'kit' | 'rehash' | 'reschedule');
             setFollowUpAt('');
@@ -2364,11 +2417,13 @@ export default function LeadsShop({
         ['history', 'History', History, 'history'],
     ] as const;
     const verifyWorkflowActions = [
+        ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
         ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
     const confirmWorkflowActions = [
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['kit', 'Keep in Touch', MessageCircle, 'callback'],
         ['reschedule', 'Reschedule', CalendarClock, 'reschedule'],
         ['555', '555', Phone, '555'],
         ['toss', 'TOSS', Trash2, 'toss'],
@@ -2387,6 +2442,7 @@ export default function LeadsShop({
     const rescheduleWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['kit', 'Keep in Touch', MessageCircle, 'callback'],
         ['verify', 'Verify', BadgeCheck, 'confirm'],
         ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
@@ -2394,10 +2450,8 @@ export default function LeadsShop({
     const rehashWorkflowActions = [
         ['confirmed', 'Confirm', CheckCircle2, 'confirm'],
         ['dispatched', 'Dispatch', Truck, 'dispatch'],
+        ['kit', 'Keep in Touch', MessageCircle, 'callback'],
         ['verify', 'Verify', BadgeCheck, 'confirm'],
-        ['rehash_ng', 'NG', Ban, 'raw'],
-        ['rehash_toss', 'TOSS', Trash2, 'toss'],
-        ['rehash_cb', 'Call Back', PhoneCall, 'callback'],
         ['fresh', 'Leads Shop', ShoppingBag, 'raw'],
         ['history', 'History', History, 'history'],
     ] as const;
@@ -3218,13 +3272,14 @@ export default function LeadsShop({
                                         </label>
                                         <label
                                             className={requiredEditFieldClass(
-                                                form.data.primary_number,
+                                                form.data.primary_number ||
+                                                    form.data.secondary_number ||
+                                                    form.data.mobile_number,
                                             )}
                                         >
-                                            <span>Primary phone</span>
+                                            <span>Primary phone (one phone required)</span>
                                             <div className="lead-edit-phone">
                                                 <input
-                                                    required
                                                     value={
                                                         form.data.primary_number
                                                     }
@@ -3636,9 +3691,7 @@ export default function LeadsShop({
                                                 form.data.agent_id,
                                             )}
                                         >
-                                            <span>
-                                                Original agent / reassign
-                                            </span>
+                                            <span>Original agent</span>
                                             <select
                                                 required
                                                 value={form.data.agent_id}
@@ -3663,6 +3716,39 @@ export default function LeadsShop({
                                             </select>
                                             {form.errors.agent_id && (
                                                 <em>{form.errors.agent_id}</em>
+                                            )}
+                                        </label>
+                                        <label>
+                                            <span>Agent 2</span>
+                                            <select
+                                                value={form.data.agent_2_id}
+                                                onChange={(event) =>
+                                                    form.setData(
+                                                        'agent_2_id',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">None</option>
+                                                {agents.map((agent) => (
+                                                    <option
+                                                        key={agent.agent_id}
+                                                        value={agent.agent_id}
+                                                        disabled={
+                                                            String(
+                                                                agent.agent_id,
+                                                            ) ===
+                                                            form.data.agent_id
+                                                        }
+                                                    >
+                                                        {agent.agent_name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {form.errors.agent_2_id && (
+                                                <em>
+                                                    {form.errors.agent_2_id}
+                                                </em>
                                             )}
                                         </label>
                                         <label>
@@ -4845,7 +4931,6 @@ export default function LeadsShop({
                                                 'verify',
                                                 'ng',
                                                 'confirmed',
-                                                'rehash',
                                             ].includes(queue.status) && (
                                                 <>
                                                     <article className="lead-detail-card lead-detail-card--notes lead-live-notes lead-note-card--dispatch">
@@ -4986,6 +5071,18 @@ export default function LeadsShop({
                             <BlankLeadDetail queueStatus={queue?.status} />
                         )}
                         <div className="lead-workflow-actions">
+                            {!queue && auth.user.role === 'manager' && (
+                                <button
+                                    type="button"
+                                    className="lead-workflow-action lead-workflow-action--reup"
+                                    disabled={!selected || isEditing || isReUpping}
+                                    onClick={reUpLead}
+                                    title="Refresh this lead in Leads Shop and record the acting manager"
+                                >
+                                    <RotateCcw />
+                                    {isReUpping ? 'Re-upping…' : 'Re-up'}
+                                </button>
+                            )}
                             {workflowActions.map(
                                 ([status, label, Icon, tone]) => (
                                     <button
@@ -5685,7 +5782,7 @@ export default function LeadsShop({
                                                     )}
                                                 </span>
                                                 <time>
-                                                    {formatDate(
+                                                    {formatCallAttemptDate(
                                                         call.started_at ??
                                                             call.initiated_at,
                                                     )}

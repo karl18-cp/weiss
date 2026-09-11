@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\PhoneNumberVisibility;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,6 +43,26 @@ class RingCentralCall extends Model
     public function toArray(): array
     {
         $data = parent::toArray();
+
+        // RingCentral timestamps are persisted as UTC database values. Emit
+        // them with an explicit offset so browsers can safely convert them to
+        // the CRM's America/Los_Angeles display timezone (PST/PDT).
+        foreach ([
+            'initiated_at',
+            'started_at',
+            'ended_at',
+            'matched_at',
+            'recorded_at',
+            'sync_checked_at',
+        ] as $attribute) {
+            $rawValue = $this->getRawOriginal($attribute);
+
+            if ($rawValue !== null) {
+                $data[$attribute] = CarbonImmutable::parse((string) $rawValue, 'UTC')
+                    ->utc()
+                    ->toIso8601String();
+            }
+        }
 
         if (! PhoneNumberVisibility::canView()) {
             $data['phone_number'] = PhoneNumberVisibility::mask($this->phone_number);

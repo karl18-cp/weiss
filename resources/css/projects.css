@@ -203,6 +203,65 @@
     outline: 2px solid rgb(40 104 232 / 14%);
 }
 
+.projects-header-date-filter {
+    display: grid;
+    min-width: 18rem;
+    gap: 0.1rem;
+}
+
+.projects-header-date-filter > span {
+    color: #718096;
+    font-size: 0.5rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.projects-header-date-filter > div {
+    display: flex;
+    min-height: 1.9rem;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0 0.5rem;
+    border: 1px solid #cbd8e8;
+    border-radius: 0.6rem;
+    background: #fff;
+}
+
+.projects-header-date-filter > div:focus-within {
+    border-color: #2868e8;
+    outline: 2px solid rgb(40 104 232 / 14%);
+}
+
+.projects-header-date-filter input {
+    width: 7.1rem;
+    min-width: 7.1rem;
+    border: 0;
+    outline: 0;
+    color: #253858;
+    background: transparent;
+    font-size: 0.64rem;
+    font-weight: 700;
+}
+
+.projects-header-date-filter > div > span {
+    color: #718096;
+    font-size: 0.58rem;
+    font-weight: 700;
+}
+
+.projects-header-date-filter button {
+    min-height: 1.45rem;
+    padding: 0 0.4rem;
+    border: 0;
+    border-radius: 0.35rem;
+    color: #1768e7;
+    background: #eaf2ff;
+    font-size: 0.55rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
 .projects-header-search > div {
     display: flex;
     width: 15rem;
@@ -317,6 +376,23 @@
     border-radius: 0.85rem;
     background: #fff;
     box-shadow: 0 8px 26px rgb(35 51 79 / 5%);
+}
+
+.project-context-bar.project-sales-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.project-context-bar.project-sales-summary.has-project {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.project-sales-summary strong {
+    color: #1768e7;
+    font-size: 1rem;
+}
+
+.project-sales-summary:not(.has-project) > div:last-child strong {
+    color: #c2413a;
 }
 
 .project-context-bar > div {
@@ -555,7 +631,9 @@
 
 .projects-sale-breakdown > div {
     display: grid;
-    grid-template-columns: minmax(7rem, 0.7fr) minmax(8rem, 0.8fr) minmax(7rem, 0.7fr) minmax(14rem, 2fr);
+    grid-template-columns:
+        minmax(7rem, 0.7fr) minmax(8rem, 0.8fr) minmax(7rem, 0.7fr)
+        minmax(14rem, 2fr);
     align-items: center;
     gap: 1rem;
     padding: 0.65rem 1rem;
@@ -1512,10 +1590,21 @@
     color: #245bd9;
 }
 
-.project-documents-upload-area label svg { width: 0.8rem; }
-.project-documents-upload-area label input { display: none; }
-.project-documents-upload-area button { color: #fff; background: #245bd9; border-color: #245bd9; }
-.project-documents-upload-area button:disabled { cursor: not-allowed; opacity: 0.5; }
+.project-documents-upload-area label svg {
+    width: 0.8rem;
+}
+.project-documents-upload-area label input {
+    display: none;
+}
+.project-documents-upload-area button {
+    color: #fff;
+    background: #245bd9;
+    border-color: #245bd9;
+}
+.project-documents-upload-area button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
 
 .project-documents-workspace {
     display: grid;
@@ -1800,6 +1889,258 @@
     background: #fff0f2;
 }
 
+.project-accounting-actions > .project-accounting-export {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding-inline: 0.65rem;
+    border: 1px solid #9fbae9;
+    border-radius: 0.5rem;
+    color: #1e55b5;
+    background: #eaf1ff;
+    font-size: 0.62rem;
+    font-weight: 850;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.project-accounting-actions > .project-accounting-export:hover {
+    border-color: #6d97df;
+    background: #dce8ff;
+}
+
+.project-accounting-actions > .project-accounting-export svg {
+    width: 0.78rem;
+}
+
+.project-accounting-actions > button.is-commission {
+    color: #6b3fc5;
+    background: #f1ebff;
+}
+
+.project-commission-modal {
+    width: min(46rem, calc(100vw - 2rem));
+    max-width: 46rem;
+}
+
+.project-commission-list {
+    display: grid;
+    max-height: 65vh;
+    gap: 0.8rem;
+    overflow-y: auto;
+}
+
+.project-commission-list > section {
+    overflow: hidden;
+    border: 1px solid #ddd5f3;
+    border-radius: 0.8rem;
+    background: #fbf9ff;
+}
+
+.project-commission-list > section > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 0.85rem;
+    color: #55349b;
+    background: #f1ebff;
+}
+
+.project-commission-list > section > header span {
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
+.project-commission-equation {
+    padding: 0.45rem 0.85rem 0.75rem;
+}
+
+.project-commission-equation dl,
+.project-commission-equation dl > div {
+    margin: 0;
+}
+
+.project-commission-equation dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.42rem 0;
+    border-bottom: 1px solid #ece7f7;
+    font-size: 0.74rem;
+}
+
+.project-commission-equation dd {
+    margin: 0;
+    font-weight: 800;
+}
+
+.project-commission-equation .is-base {
+    color: #245bd9;
+    font-weight: 850;
+}
+
+.project-commission-equation .is-balance {
+    border-bottom: 0;
+    color: #68469a;
+    font-size: 0.84rem;
+    font-weight: 900;
+}
+
+.project-commission-message {
+    padding: 2.5rem 1rem;
+    color: #77859a;
+    text-align: center;
+}
+
+.project-totals-panel {
+    min-width: 0;
+    overflow: auto;
+    border: 1px solid #d9e3f0;
+    border-radius: 0.9rem;
+    background: #eef4ff;
+}
+
+.project-totals-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #ccd9ef;
+    background: #dceaff;
+}
+
+.project-totals-header > div {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.project-totals-header svg {
+    width: 1.5rem;
+    color: #1768e7;
+}
+
+.project-totals-header small {
+    color: #2868e8;
+    font-size: 0.58rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.project-totals-header h2 {
+    margin: 0.08rem 0 0;
+    font-size: 1rem;
+}
+
+.project-totals-header p {
+    margin: 0.1rem 0 0;
+    color: #6f7f96;
+    font-size: 0.64rem;
+}
+
+.project-totals-header button {
+    min-height: 2rem;
+    padding-inline: 0.7rem;
+    border-radius: 0.55rem;
+    color: #fff;
+    background: #2763df;
+    font-size: 0.64rem;
+    font-weight: 850;
+}
+
+.project-totals-grid {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.4rem;
+}
+
+.project-accounting-totals-card,
+.project-salesman-total-card {
+    min-width: 0;
+    border: 1px solid #cad8ef;
+    background: rgb(255 255 255 / 55%);
+}
+
+@media (max-width: 900px) {
+    .project-totals-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+.project-accounting-totals-card > header,
+.project-salesman-total-card > header {
+    min-height: 2.4rem;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid #cad8ef;
+    color: #185bd4;
+    background: rgb(255 255 255 / 45%);
+    font-size: 0.95rem;
+    font-weight: 850;
+}
+
+.project-salesman-total-card > header {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: center;
+}
+
+.project-salesman-total-card > header span {
+    padding: 0.2rem 0.35rem;
+    border: 1px solid #b9c5d8;
+    border-radius: 0.3rem;
+    color: #4f5d73;
+    background: #eef1f6;
+    font-size: 0.58rem;
+}
+
+.project-accounting-totals-card dl,
+.project-salesman-total-card dl {
+    margin: 0;
+    padding: 0.45rem 0.65rem;
+}
+
+.project-accounting-totals-card dl > div,
+.project-salesman-total-card dl > div {
+    display: flex;
+    min-height: 2.15rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    border-bottom: 1px solid #dce5f2;
+    font-size: 0.72rem;
+}
+
+.project-accounting-totals-card dd,
+.project-salesman-total-card dd {
+    margin: 0;
+    padding: 0.25rem 0.45rem;
+    color: #70451c;
+    background: rgb(255 255 255 / 65%);
+    font-weight: 800;
+}
+
+.project-accounting-totals-card .is-total,
+.project-salesman-total-card .is-base {
+    border-top: 2px solid #b8cae5;
+    color: #1d57b8;
+    font-weight: 850;
+}
+
+.project-accounting-totals-card .is-net,
+.project-salesman-total-card .is-balance {
+    margin-top: 0.35rem;
+    border-top: 2px solid #8eadde;
+    border-bottom: 0;
+    color: #185bd4;
+    font-size: 0.8rem;
+    font-weight: 900;
+}
+
 .project-accounting-actions > button:disabled {
     cursor: not-allowed;
     opacity: 0.42;
@@ -1941,7 +2282,7 @@
 .project-accounting-totals {
     display: grid;
     flex: none;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.55rem;
     padding: 0.75rem;
     border-top: 1px solid #e5ebf3;
@@ -2124,6 +2465,19 @@
     box-shadow: inset 3px 0 #326cf0;
 }
 
+.projects-table td.projects-shared-sale-date {
+    border-left: 3px solid #f59e0b;
+    color: #8a4b00;
+    background: #fff4ce;
+    font-weight: 850;
+}
+
+.projects-table tbody tr:hover td.projects-shared-sale-date,
+.projects-table tbody tr.is-selected td.projects-shared-sale-date {
+    color: #754000;
+    background: #ffe9a3;
+}
+
 .projects-table tbody tr.is-search-target td,
 .projects-table tbody tr.is-search-target:hover td,
 .projects-table tbody tr.is-search-target.is-selected td {
@@ -2156,6 +2510,13 @@
 
 .projects-table td strong {
     color: #26344b;
+}
+
+.projects-table td.projects-salesman-share {
+    color: #1d5fd1;
+    background: #f4f8ff;
+    font-weight: 850;
+    white-space: nowrap;
 }
 
 .projects-table td small {
@@ -2270,6 +2631,33 @@
     text-align: right;
 }
 
+.project-family-switcher {
+    display: grid;
+    min-width: 12rem;
+    gap: 0.15rem;
+    text-align: left;
+}
+
+.project-family-switcher > span {
+    color: #75839a;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.project-family-switcher select {
+    height: 2rem;
+    max-width: 16rem;
+    padding: 0 1.9rem 0 0.65rem;
+    border: 1px solid #d7e0ed;
+    border-radius: 0.55rem;
+    color: #17243a;
+    background: #fff;
+    font-size: 0.7rem;
+    font-weight: 750;
+}
+
 .project-details-header__meta small {
     display: block;
     margin: 0;
@@ -2356,6 +2744,50 @@
     width: 0.7rem !important;
 }
 
+.project-delete-customer-project {
+    display: inline-flex;
+    min-height: 2rem;
+    flex: none;
+    align-items: center;
+    gap: 0.3rem;
+    padding-inline: 0.55rem;
+    border: 1px solid #f3bdc5;
+    border-radius: 0.5rem;
+    color: #bd2940;
+    background: #fff3f5;
+    font-size: 0.58rem;
+    font-weight: 850;
+}
+
+.project-delete-customer-project svg {
+    width: 0.72rem;
+}
+
+.project-create-auto-number,
+.project-sale-auto-number {
+    display: grid;
+    align-content: center;
+    gap: 0.25rem;
+    min-height: 4.25rem;
+    padding: 0.75rem;
+    border: 1px solid #cddcf5;
+    border-radius: 0.65rem;
+    color: #34445e;
+    background: #f3f7ff;
+}
+
+.project-create-auto-number strong,
+.project-sale-auto-number strong {
+    color: #1f4fac;
+    font-size: 0.72rem;
+}
+
+.project-create-auto-number span,
+.project-sale-auto-number span {
+    font-size: 0.65rem;
+    line-height: 1.45;
+}
+
 .project-detail-card--sale > .project-sale-toolbar {
     display: grid;
     width: 100%;
@@ -2382,6 +2814,31 @@
     white-space: nowrap;
 }
 
+.project-sale-toolbar > .project-print-cover {
+    display: inline-flex;
+    min-height: 34px;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid #b9ccf6;
+    border-radius: 8px;
+    color: #174cae;
+    background: #e7efff;
+    font-size: 11px;
+    font-weight: 850;
+    text-decoration: none;
+}
+
+.project-sale-toolbar > .project-print-cover:hover {
+    border-color: #6f98ec;
+    background: #dbe8ff;
+}
+
+.project-sale-toolbar > .project-print-cover svg {
+    width: 13px;
+}
+
 .project-sale-toolbar > button svg {
     width: 12px;
     flex: none;
@@ -2405,6 +2862,13 @@
 .project-sale-toolbar > button:nth-child(2):not(:disabled) {
     color: #8a5a00;
     background: #fff4d8;
+}
+
+.project-sale-toolbar > button.is-missing-file:not(:disabled) {
+    border: 1px solid #f59e0b;
+    color: #92400e;
+    background: #fef3c7;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.16);
 }
 
 .project-sale-summary {
@@ -3151,15 +3615,59 @@
 .project-payment-confirm-modal {
     width: min(540px, calc(100vw - 32px));
 }
-.project-qb-confirm-summary { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 16px 22px 0; padding: 12px 14px; border: 1px solid #dce4ef; border-radius: 10px; background: #f8fafc; }
-.project-qb-confirm-summary span { color: #718096; font-size: 11px; }
-.project-qb-confirm-summary strong { color: #1d2940; font-size: 12px; text-align: right; }
-.project-qb-confirm-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 12px 22px 0; padding: 12px 14px; border: 1px solid #dce4ef; border-radius: 10px; background: #fff; }
-.project-qb-confirm-details > div { display: grid; gap: 3px; min-width: 0; }
-.project-qb-confirm-details .is-wide { grid-column: 1 / -1; }
-.project-qb-confirm-details span { color: #718096; font-size: 10px; font-weight: 750; text-transform: uppercase; }
-.project-qb-confirm-details strong { color: #1d2940; font-size: 12px; overflow-wrap: anywhere; }
-.project-sale-modal__footer button svg { width: 15px; height: 15px; vertical-align: middle; }
+.project-qb-confirm-summary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 16px;
+    margin: 16px 22px 0;
+    padding: 12px 14px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.project-qb-confirm-summary span {
+    color: #718096;
+    font-size: 11px;
+}
+.project-qb-confirm-summary strong {
+    color: #1d2940;
+    font-size: 12px;
+    text-align: right;
+}
+.project-qb-confirm-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 16px;
+    margin: 12px 22px 0;
+    padding: 12px 14px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    background: #fff;
+}
+.project-qb-confirm-details > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+.project-qb-confirm-details .is-wide {
+    grid-column: 1 / -1;
+}
+.project-qb-confirm-details span {
+    color: #718096;
+    font-size: 10px;
+    font-weight: 750;
+    text-transform: uppercase;
+}
+.project-qb-confirm-details strong {
+    color: #1d2940;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+.project-sale-modal__footer button svg {
+    width: 15px;
+    height: 15px;
+    vertical-align: middle;
+}
 
 .project-payment-confirm-modal .project-accounting-form-top {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3315,6 +3823,7 @@
 .project-accounting-modal {
     width: min(1280px, calc(100vw - 32px));
     max-width: min(1280px, calc(100vw - 32px));
+    height: min(820px, calc(100vh - 32px));
     max-height: calc(100vh - 32px);
     gap: 0;
     padding: 0;
@@ -3327,8 +3836,15 @@
 
 .project-accounting-modal form {
     display: flex;
+    min-height: 0;
+    height: 100%;
     max-height: calc(100vh - 32px);
     flex-direction: column;
+    overflow: hidden;
+}
+
+.project-accounting-modal .project-sale-modal__footer {
+    flex: none;
 }
 
 .project-accounting-modal form > div:first-child {
@@ -3548,15 +4064,49 @@
     grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
     gap: 14px;
     padding: 0 22px 22px;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+}
+
+.project-accounting-modal.is-commission .project-accounting-form-body {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.project-accounting-modal.is-commission {
+    width: min(1060px, calc(100vw - 32px));
+    max-width: min(1060px, calc(100vw - 32px));
+}
+
+.project-accounting-modal.is-commission .project-accounting-form-top {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.project-accounting-modal.is-commission .project-accounting-form-body > section {
+    min-height: 0;
+}
+
+.project-accounting-modal.is-commission .project-accounting-notes-field {
+    padding: 16px;
+}
+
+.project-accounting-modal.is-commission .project-accounting-notes-field textarea {
+    min-height: 84px;
+}
+
+.project-totals-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .project-accounting-form-body > section {
     display: flex;
     min-width: 0;
     min-height: 19rem;
+    height: max-content;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     border: 1px solid #dce4ef;
     border-radius: 12px;
     background: #f9fbfd;
@@ -3732,6 +4282,30 @@
     color: #245bd9;
     font-weight: 800;
     text-decoration: none;
+}
+
+.attachment-status-tag {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 4px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+}
+
+.attachment-status-tag.has-attachment {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+}
+
+.attachment-status-tag.no-attachment {
+    border-color: #facc15;
+    background: #fef3c7;
+    color: #854d0e;
 }
 
 .project-accounting-notes-field textarea {
@@ -4155,6 +4729,7 @@
     }
 
     .projects-header-entity-filters {
+        width: max-content;
         margin-left: 0;
     }
 
@@ -4185,6 +4760,10 @@
         grid-template-columns: 1fr;
     }
 
+    .project-context-bar.project-sales-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .project-context-bar > div {
         border-right: 0;
     }
@@ -4209,7 +4788,13 @@
     }
 
     .project-details-header__meta {
+        width: 100%;
+        flex-wrap: wrap;
         text-align: left;
+    }
+
+    .project-family-switcher {
+        min-width: min(100%, 14rem);
     }
 
     .project-details-grid {
@@ -4301,6 +4886,10 @@
         grid-template-columns: 1fr;
     }
 
+    .project-accounting-modal.is-commission .project-accounting-form-top {
+        grid-template-columns: 1fr;
+    }
+
     .project-schedule-form > label.is-wide {
         grid-column: auto;
     }
@@ -4330,23 +4919,126 @@
     color: #713636;
 }
 
-.project-accounting-reference-link { padding: 0; border: 0; background: transparent; color: #245bd9; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.project-accounting-reference-link:hover { color: #1742a5; }
-.project-accounting-attachment-modal { width: min(520px, calc(100vw - 32px)); max-width: 520px; gap: 16px; padding: 24px; border-radius: 16px; }
-.project-accounting-attachment-modal form { display: grid; gap: 14px; }
-.project-accounting-attachment-list { display: grid; max-height: 15rem; gap: 7px; overflow-y: auto; }
-.project-accounting-attachment-list a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #dbe4f2; border-radius: 9px; background: #f8faff; color: #24344d; text-decoration: none; }
-.project-accounting-attachment-list a:hover { border-color: #8faeed; background: #f0f5ff; }
-.project-accounting-attachment-list svg { width: 17px; color: #2964db; }
-.project-accounting-attachment-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-accounting-attachment-list strong { color: #245bd9; font-size: 0.78rem; }
-.project-accounting-attachment-list p { margin: 0; padding: 14px; border-radius: 9px; background: #f5f7fb; color: #6e7d94; text-align: center; }
-.project-accounting-attachment-upload { position: relative; display: grid; min-height: 7rem; place-items: center; gap: 4px; padding: 16px; border: 1px dashed #aebfda; border-radius: 10px; background: #f5f8ff; cursor: pointer; text-align: center; }
-.project-accounting-attachment-upload:hover { border-color: #5f86db; background: #eef4ff; }
-.project-accounting-attachment-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-.project-accounting-attachment-upload svg { width: 22px; color: #2765df; }
-.project-accounting-attachment-upload strong { color: #263a58; }
-.project-accounting-attachment-upload small { color: #72819a; }
+.project-accounting-reference-link {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #245bd9;
+    font: inherit;
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.project-accounting-reference-link:hover {
+    color: #1742a5;
+}
+.project-accounting-attachment-modal {
+    width: min(96rem, calc(100vw - 16px));
+    max-width: 96rem;
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    gap: 16px;
+    padding: 24px;
+    border-radius: 16px;
+}
+.project-accounting-attachment-modal form {
+    display: grid;
+    gap: 14px;
+}
+.project-accounting-attachment-list {
+    display: grid;
+    max-height: 15rem;
+    gap: 7px;
+    overflow-y: auto;
+}
+.project-accounting-attachment-list__item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #dbe4f2;
+    border-radius: 9px;
+    background: #f8faff;
+    color: #24344d;
+}
+.project-accounting-attachment-list__item:hover {
+    border-color: #8faeed;
+    background: #f0f5ff;
+}
+.project-accounting-attachment-list__item > svg {
+    width: 17px;
+    color: #2964db;
+}
+.project-accounting-attachment-list span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.project-accounting-attachment-list__item a,
+.project-accounting-attachment-list__item button {
+    border: 0;
+    background: transparent;
+    color: #245bd9;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+.project-accounting-attachment-list__item button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #d6364b;
+    cursor: pointer;
+}
+.project-accounting-attachment-list__item button svg {
+    width: 14px;
+    height: 14px;
+}
+.project-accounting-attachment-list p {
+    margin: 0;
+    padding: 14px;
+    border-radius: 9px;
+    background: #f5f7fb;
+    color: #6e7d94;
+    text-align: center;
+}
+.project-accounting-attachment-upload {
+    position: relative;
+    display: grid;
+    min-height: 7rem;
+    place-items: center;
+    gap: 4px;
+    padding: 16px;
+    border: 1px dashed #aebfda;
+    border-radius: 10px;
+    background: #f5f8ff;
+    cursor: pointer;
+    text-align: center;
+}
+.project-accounting-attachment-upload:hover {
+    border-color: #5f86db;
+    background: #eef4ff;
+}
+.project-accounting-attachment-upload input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+.project-accounting-attachment-upload svg {
+    width: 22px;
+    color: #2765df;
+}
+.project-accounting-attachment-upload strong {
+    color: #263a58;
+}
+.project-accounting-attachment-upload small {
+    color: #72819a;
+}
 
 .project-sale-files {
     grid-column: 1 / -1;
@@ -4359,3 +5051,49 @@
 .project-sale-files input {
     width: 100%;
 }
+
+.project-history-panel { min-height: 100%; padding: 20px; background: #f5f8ff; }
+.project-history-header { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border: 1px solid #cbdaf6; border-radius: 14px; background: #eaf1ff; }
+.project-history-header > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: #fff; background: #2864dc; }
+.project-history-header svg { width: 20px; }
+.project-history-header small { color: #2864dc; font-size: 10px; font-weight: 900; letter-spacing: .08em; }
+.project-history-header h2 { margin: 2px 0; color: #17243b; font-size: 20px; }
+.project-history-header p { margin: 0; color: #65758d; font-size: 12px; }
+.project-history-list { display: grid; gap: 10px; margin-top: 14px; }
+.project-history-list > article { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; padding: 14px; border: 1px solid #dbe4f2; border-radius: 12px; background: #fff; }
+.project-history-marker { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #2864dc; background: #eaf1ff; }
+.project-history-marker svg { width: 15px; }
+.project-history-list article.is-deleted .project-history-marker { color: #b42318; background: #fee4e2; }
+.project-history-content > header { display: flex; align-items: start; justify-content: space-between; gap: 15px; }
+.project-history-content > header div { display: grid; gap: 2px; }
+.project-history-content > header strong { color: #17243b; font-size: 13px; }
+.project-history-content > header span, .project-history-content > p, .project-history-content time { color: #718096; font-size: 10px; }
+.project-history-content > p { margin: 4px 0 0; }
+.project-history-content dl { display: grid; gap: 5px; margin-top: 10px; }
+.project-history-content dl > div { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 6px 8px; border-radius: 7px; background: #f7f9fc; font-size: 11px; }
+.project-history-content dt { color: #4d5d75; font-weight: 800; }
+.project-history-content dd { margin: 0; overflow-wrap: anywhere; color: #173f8a; }
+.project-history-content dd.was { color: #a33a3a; text-decoration: line-through; }
+.project-history-empty { display: grid; min-height: 220px; place-items: center; align-content: center; gap: 8px; color: #718096; text-align: center; }
+.project-history-empty svg { width: 28px; color: #8ba7d8; }
+.project-history-empty strong { color: #334155; }
+.project-history-empty span { font-size: 12px; }
+.project-selected-banner { display: grid; grid-template-columns: minmax(220px, 1.25fr) minmax(520px, 3fr) auto; align-items: center; gap: 18px; margin: 10px 18px 0; padding: 12px 14px; border: 1px solid #b9cff5; border-radius: 13px; background: linear-gradient(100deg, #eaf2ff, #f8fbff); box-shadow: 0 5px 16px rgba(42, 84, 156, .08); }
+.project-selected-banner__identity { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.project-selected-banner__identity > span { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 11px; color: #fff; background: #2864dc; }
+.project-selected-banner__identity svg { width: 18px; }
+.project-selected-banner__identity div { display: grid; min-width: 0; gap: 2px; }
+.project-selected-banner__identity small { color: #3970cf; font-size: 9px; font-weight: 900; letter-spacing: .08em; }
+.project-selected-banner__identity strong { overflow: hidden; color: #14213a; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.project-selected-banner dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
+.project-selected-banner dl > div { min-width: 0; padding: 0 13px; border-left: 1px solid #cfddf4; }
+.project-selected-banner dt { color: #718096; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.project-selected-banner dd { margin: 3px 0 0; overflow: hidden; color: #1d3764; font-size: 11px; font-weight: 850; text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
+.project-selected-banner > button { min-height: 34px; padding: 7px 12px; border: 1px solid #8eb1ee; border-radius: 9px; color: #1f5bc9; background: #fff; font: inherit; font-size: 10px; font-weight: 850; cursor: pointer; }
+.project-selected-banner > button:hover { background: #edf4ff; }
+@media (max-width: 1050px) { .project-selected-banner { grid-template-columns: minmax(200px, 1fr) auto; } .project-selected-banner dl { grid-column: 1 / -1; grid-row: 2; } }
+.projects-number-contract-button { color: #1261d5; font-weight: 850; text-decoration: underline; text-underline-offset: 0.18rem; }
+.project-contract-viewer-modal { width: min(72rem, calc(100vw - 2rem)); max-width: 72rem; max-height: min(52rem, calc(100vh - 2rem)); overflow-y: auto; }
+.project-contract-viewer-group { display: grid; gap: 0.65rem; margin-top: 0.75rem; padding-top: 0.9rem; border-top: 1px solid #dce5f0; }
+.project-contract-viewer-group h3 { color: #1a2740; font-size: 0.88rem; font-weight: 850; }
+.project-contract-viewer-group > p { padding: 0.85rem; border-radius: 0.7rem; color: #718096; background: #f5f7fa; font-size: 0.78rem; }

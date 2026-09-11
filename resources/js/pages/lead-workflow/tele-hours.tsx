@@ -16,6 +16,7 @@ type LoginDay = {
     lunch_seconds: number;
     sessions: number;
     leads_sent: number;
+    attendance_source: string;
 };
 type CallLog = {
     uuid: string;
@@ -384,14 +385,9 @@ export default function TeleHours({
                     </small>
                 </section>
                 <p className="tele-hours-coverage">
-                    Showing login sessions for{' '}
+                    Showing Agent Portal attendance with historical CallTools fallback for{' '}
                     <strong>{filters.from}{filters.to !== filters.from ? ` through ${filters.to}` : ''}</strong>{' '}
-                    in <strong>{filters.timezone}</strong>. Imported coverage:{' '}
-                    {activityCoverage.from
-                        ? `${activityCoverage.from}${activityCoverage.to && activityCoverage.to !== activityCoverage.from ? ` through ${activityCoverage.to}` : ''}`
-                        : 'waiting for the first imported session'}
-                    . Call and disposition history continues backfilling
-                    separately.
+                    in <strong>{filters.timezone}</strong>. Manual corrections made in Data &gt; Tele Report are reflected here. Call and disposition history remains separate.
                 </p>
                 {view === 'hours' && (
                     <section className="tele-hours-table-card">
@@ -420,6 +416,9 @@ export default function TeleHours({
                                     <span className="tele-hours-day-only">{day.shift_date}</span>
                                     <strong>
                                         {day.agent_name ?? 'Unmapped'}
+                                        <small className="tele-hours-source">
+                                            {day.attendance_source}
+                                        </small>
                                     </strong>
                                     <span className="tele-hours-day-only">
                                         {day.first_login_at
@@ -441,8 +440,7 @@ export default function TeleHours({
                             ))}
                             {loginDays.length === 0 && (
                                 <div className="tele-hours-empty">
-                                    No imported login sessions in this range
-                                    yet.
+                                    No Agent Portal or CallTools attendance in this range yet.
                                 </div>
                             )}
                         </div>

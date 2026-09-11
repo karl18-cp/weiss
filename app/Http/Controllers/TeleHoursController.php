@@ -7,6 +7,7 @@ use App\Models\AgentAttendanceSession;
 use App\Models\Lead;
 use App\Services\CallToolsReportingSync;
 use App\Support\AgentAttendanceHours;
+use App\Support\AgentPortalHoursReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,7 @@ class TeleHoursController extends Controller
         Request $request,
         CallToolsReportingSync $reportingSync,
         AgentAttendanceHours $attendanceHours,
+        AgentPortalHoursReport $portalHoursReport,
     ): Response {
         $this->refreshLoginShiftsIfStale($reportingSync);
 
@@ -201,6 +203,19 @@ class TeleHoursController extends Controller
                 });
             $loginDays = $loginDays->map(fn ($row) => $portalRows->get($row->agent_id) ?? $row);
         }
+
+        // Agent Portal attendance (plus Data-tab manual corrections) is the
+        // sole source for hour rows. CallTools remains available only for the
+        // separate Call Logs and Dispositions views.
+        $visibleAgents = $agentId ? $agents->where('agent_id', $agentId) : $agents;
+        $loginDays = $portalHoursReport->rows(
+            $visibleAgents,
+            $selectedFrom,
+            $selectedTo,
+            $leadCounts,
+            $timezone,
+            true,
+        );
 
         return Inertia::render('lead-workflow/tele-hours', [
             'loginDays' => $loginDays,

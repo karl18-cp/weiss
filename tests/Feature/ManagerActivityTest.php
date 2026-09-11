@@ -221,6 +221,43 @@ test('manager activity defaults to today and excludes inactive managers from its
             ->where('filters.to', $today));
 });
 
+test('manager activity treats stored timestamps as utc and filters them by california date', function () {
+    ['firstAccount' => $firstAccount] = managerActivityFixtures();
+
+    RingCentralCall::query()
+        ->where('account_id', $firstAccount->acc_id)
+        ->update(['initiated_at' => '2026-08-25 01:24:00']);
+
+    $this->actingAs($firstAccount)
+        ->get(route('lead-workflow.call-logs', [
+            'from' => '2026-08-24',
+            'to' => '2026-08-24',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('calls.data', 1)
+            ->where('calls.data.0.initiated_at', '2026-08-25T01:24:00+00:00'));
+});
+
+test('manager lead history keeps its stored california wall time', function () {
+    ['firstAccount' => $firstAccount] = managerActivityFixtures();
+
+    LeadMovement::query()
+        ->where('moved_by', $firstAccount->acc_id)
+        ->update(['created_at' => '2026-08-24 14:24:00']);
+
+    $this->actingAs($firstAccount)
+        ->get(route('lead-workflow.call-logs', [
+            'view' => 'history',
+            'from' => '2026-08-24',
+            'to' => '2026-08-24',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('activities.data', fn ($activities): bool => collect($activities)
+                ->contains('created_at', '2026-08-24T14:24:00-07:00')));
+});
+
 test('called leads can be filtered to conversations over twenty seconds and sorted', function () {
     [
         'firstAccount' => $firstAccount,

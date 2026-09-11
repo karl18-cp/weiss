@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'project_id',
+    'project_sale_id',
     'project_document_id',
     'contractor_id',
     'vendor_id',
@@ -24,6 +25,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class ProjectInvoice extends Model
 {
+    protected static function booted(): void
+    {
+        static::created(fn (self $invoice) => $invoice->syncProjectStatus());
+        static::updated(fn (self $invoice) => $invoice->syncProjectStatus());
+        static::deleted(fn (self $invoice) => $invoice->syncProjectStatus());
+    }
+
+    private function syncProjectStatus(): void
+    {
+        Project::query()->find($this->project_id)?->syncStatusFromAccounting();
+    }
+
     public function syncStatusFromPayables(): void
     {
         $payables = $this->accountingTransactions()
@@ -31,9 +44,8 @@ class ProjectInvoice extends Model
             ->get(['amount', 'status']);
 
         $paidTotal = (float) $payables->where('status', 'paid')->sum('amount');
-        $allPaid = $payables->isNotEmpty()
-            && $payables->every(fn (ProjectAccountingTransaction $payable): bool => $payable->status === 'paid');
-        $fullyPaid = $allPaid && round($paidTotal, 2) >= round((float) $this->amount, 2);
+        $fullyPaid = $payables->isNotEmpty()
+            && round($paidTotal, 2) >= round((float) $this->amount, 2);
 
         $status = $fullyPaid
             ? 'paid'
@@ -44,11 +56,18 @@ class ProjectInvoice extends Model
         if ($this->status !== $status) {
             $this->updateQuietly(['status' => $status]);
         }
+
+        $this->syncProjectStatus();
     }
 
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(ProjectSale::class, 'project_sale_id');
     }
 
     public function document(): BelongsTo

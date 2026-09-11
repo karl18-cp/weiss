@@ -71,6 +71,7 @@ class CallToolsWebhookController extends Controller
 
         $phoneNumber = $this->findPhoneNumber($request, [
             'phone_number',
+            'primary_number',
             'mobile_primary',
             'active_number',
             'primary_phone_number',
@@ -78,7 +79,15 @@ class CallToolsWebhookController extends Controller
             'phoneNumber',
             'mobile_number',
             'mobile_phone',
+            'mobile',
             'cell_phone',
+            'cell_number',
+            'secondary_number',
+            'secondary_phone_number',
+            'secondary_phone',
+            'home_number',
+            'home_phone_number',
+            'home_phone',
             'contact_phone',
             'contact_number',
             'customer_phone',
@@ -442,7 +451,10 @@ class CallToolsWebhookController extends Controller
 
         $recognizedKeys = collect($preferredKeys)
             ->merge([
-                'number', 'phone1', 'phone_1', 'home_phone', 'work_phone',
+                'number', 'phone1', 'phone_1', 'phone2', 'phone_2',
+                'home_phone', 'home_number', 'home_phone_number',
+                'secondary_phone', 'secondary_number', 'secondary_phone_number',
+                'mobile', 'cell', 'cell_number', 'work_phone',
                 'caller_id', 'caller_number', 'contact_mobile', 'customer_number',
             ])
             ->map(fn (string $key): string => $this->normalizeFieldKey($key))

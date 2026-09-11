@@ -41,6 +41,7 @@ const when = (value: string) =>
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+        timeZoneName: 'short',
     }).format(new Date(value));
 
 const duration = (seconds: number) =>

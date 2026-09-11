@@ -2,6 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\Project;
+use App\Models\ProjectAccountingTransaction;
+use App\Models\ProjectDocument;
+use App\Models\ProjectInvoice;
+use App\Models\ProjectSale;
+use App\Models\ScheduledPayment;
+use App\Observers\ProjectActivityObserver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +32,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::useHotFile(storage_path('vite.hot'));
+
+        Project::observe(ProjectActivityObserver::class);
+        ProjectSale::observe(ProjectActivityObserver::class);
+        ProjectInvoice::observe(ProjectActivityObserver::class);
+        ProjectAccountingTransaction::observe(ProjectActivityObserver::class);
+        ProjectDocument::observe(ProjectActivityObserver::class);
+        ScheduledPayment::observe(ProjectActivityObserver::class);
 
         $this->configureDefaults();
     }

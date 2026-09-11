@@ -255,6 +255,30 @@ test('calltools webhook finds camel case and nested phone fields', function () {
         ->toBe('+1 (408) 555-0199');
 });
 
+test('calltools webhook accepts primary secondary home and mobile number fields', function (string $field) {
+    configureCallToolsWebhook();
+
+    $contactId = 'phone-field-'.str_replace('_', '-', $field);
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => $contactId,
+            $field => '+1 (510) 555-0199',
+        ])
+        ->assertCreated();
+
+    expect(Lead::query()->where('calltools_contact_id', $contactId)->value('primary_number'))
+        ->toBe('+1 (510) 555-0199');
+})->with([
+    'primary_number',
+    'secondary_number',
+    'secondary_phone',
+    'home_number',
+    'home_phone',
+    'mobile_number',
+    'mobile_phone',
+]);
+
 test('calltools browser submission receives a friendly result screen', function () {
     configureCallToolsWebhook();
 

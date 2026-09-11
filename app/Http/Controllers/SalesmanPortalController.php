@@ -64,6 +64,8 @@ class SalesmanPortalController extends Controller
 
         $leads = $this->assignedLeadsQuery($salesmanId)
             ->whereNotIn('status', ['kit', 'kit_ng', 'kit_toss', 'kit_cb'])
+            ->whereNotNull('appointment_at')
+            ->where('appointment_at', '>=', now(config('app.timezone'))->startOfDay())
             ->select([
                 'id',
                 'customer_name',
@@ -244,6 +246,15 @@ class SalesmanPortalController extends Controller
 
         $requestedLeadId = $request->integer('lead');
         $leadQuery = $this->assignedLeadsQuery($salesmanId)
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereIn('status', ['kit', 'kit_ng', 'kit_toss', 'kit_cb'])
+                    ->orWhere(function (Builder $active): void {
+                        $active
+                            ->whereNotNull('appointment_at')
+                            ->where('appointment_at', '>=', now(config('app.timezone'))->startOfDay());
+                    });
+            })
             ->select([
                 'id',
                 'customer_name',
@@ -277,8 +288,23 @@ class SalesmanPortalController extends Controller
             abort_unless($lead, 404);
         }
 
+        $leadPayload = null;
+
+        if ($lead) {
+            // This endpoint is restricted to the salesman assigned to the lead.
+            // Build the portal payload explicitly so Lead::toArray() cannot mask
+            // either the displayed number or the device dialer's tel: target.
+            $primaryNumber = $lead->getRawOriginal('primary_number');
+            $mobileNumber = $lead->getRawOriginal('mobile_number');
+            $leadPayload = array_merge($lead->toArray(), [
+                'primary_number' => $primaryNumber,
+                'mobile_number' => $mobileNumber,
+                'dial_number' => $primaryNumber ?: $mobileNumber,
+            ]);
+        }
+
         return Inertia::render('salesman/lead-information', [
-            'lead' => $lead,
+            'lead' => $leadPayload,
             'dispatchNote' => $lead?->notes->first()?->body,
             'salesman' => [
                 'id' => $salesmanId,

@@ -206,6 +206,36 @@
     outline: none;
 }
 
+.salesman-leads__active-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-top: 0.7rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #d9e7ff;
+    border-radius: 0.85rem;
+    color: #52647e;
+    background: #f3f7ff;
+    font-size: 0.68rem;
+    line-height: 1.4;
+}
+
+.salesman-leads__active-summary svg {
+    width: 1.15rem;
+    flex: none;
+    color: #2865df;
+}
+
+.salesman-leads__active-summary span,
+.salesman-leads__active-summary strong {
+    display: block;
+}
+
+.salesman-leads__active-summary strong {
+    color: #1f3964;
+    font-size: 0.75rem;
+}
+
 .salesman-leads__layout {
     display: grid;
     grid-template-columns: minmax(17rem, 0.75fr) minmax(0, 1.25fr);
@@ -238,6 +268,45 @@
     text-decoration: none;
 }
 
+.salesman-leads__section > a {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    padding: 0.9rem;
+    border-bottom: 1px solid #edf1f6;
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+}
+
+.salesman-leads__section-heading {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid #dfe8f5;
+    color: #31517d;
+    background: #f7faff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.salesman-leads__section-heading small {
+    min-width: 1.35rem;
+    padding: 0.12rem 0.4rem;
+    border-radius: 999px;
+    color: #2461d4;
+    background: #e6efff;
+    text-align: center;
+}
+
 .salesman-leads__list > :is(button, a).is-active {
     color: #205cd3;
     background: #edf4ff;
@@ -246,21 +315,27 @@
 
 .salesman-leads__list :is(button, a) span,
 .salesman-leads__list :is(button, a) strong,
-.salesman-leads__list :is(button, a) small {
+.salesman-leads__list :is(button, a) small,
+.salesman-leads__section > a span,
+.salesman-leads__section > a strong,
+.salesman-leads__section > a small {
     display: block;
 }
 
-.salesman-leads__list :is(button, a) strong {
+.salesman-leads__list :is(button, a) strong,
+.salesman-leads__section > a strong {
     font-size: 0.82rem;
 }
 
-.salesman-leads__list :is(button, a) small {
+.salesman-leads__list :is(button, a) small,
+.salesman-leads__section > a small {
     margin-top: 0.16rem;
     color: #7b899d;
     font-size: 0.65rem;
 }
 
-.salesman-leads__list :is(button, a) svg {
+.salesman-leads__list :is(button, a) svg,
+.salesman-leads__section > a svg {
     width: 1rem;
     flex: none;
 }

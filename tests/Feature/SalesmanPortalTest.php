@@ -59,6 +59,10 @@ test('the salesman leads page only returns assigned leads', function () {
     $primary = $makeLead('Primary Assignment', $salesman->salesman_id);
     $makeLead('Secondary Assignment', $other->salesman_id, $salesman->salesman_id);
     $hidden = $makeLead('Hidden Assignment', $other->salesman_id);
+    $expired = $makeLead('Expired Assignment', $salesman->salesman_id);
+    $expired->update(['appointment_at' => now()->subYear()]);
+    $historicalFollowUp = $makeLead('Historical Follow Up', $salesman->salesman_id);
+    $historicalFollowUp->update(['appointment_at' => now()->subYear(), 'status' => 'kit']);
 
     LeadNote::query()->create([
         'lead_id' => $primary->id,
@@ -80,15 +84,52 @@ test('the salesman leads page only returns assigned leads', function () {
             ->where('salesman.id', $salesman->salesman_id));
 
     $this->actingAs($salesmanAccount)
+        ->get(route('salesman.follow-ups'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('salesman/leads')
+            ->has('leads', 1)
+            ->where('leads.0.customer_name', 'Historical Follow Up'));
+
+    $this->actingAs($salesmanAccount)
+        ->get(route('salesman.lead-information', ['lead' => $expired->id]))
+        ->assertNotFound();
+
+    $this->actingAs($salesmanAccount)
         ->get(route('salesman.lead-information', ['lead' => $primary->id]))
         ->assertInertia(fn (Assert $page) => $page
             ->component('salesman/lead-information')
             ->where('lead.id', $primary->id)
+            ->where('lead.primary_number', '555-0100')
+            ->where('lead.dial_number', '555-0100')
             ->where('dispatchNote', 'Gate code is 2468. Customer prefers the side entrance.'));
 
     $this->actingAs($salesmanAccount)
         ->get(route('salesman.lead-information', ['lead' => $hidden->id]))
         ->assertNotFound();
+});
+
+test('salesman login remains remembered until explicit logout', function () {
+    $account = Account::query()->create([
+        'username' => 'persistent-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    Salesman::query()->create([
+        'salesman_name' => 'Persistent Salesman',
+        'account_id' => $account->acc_id,
+    ]);
+
+    $response = $this->post('/login', [
+        'username' => $account->username,
+        'password' => 'password',
+    ]);
+
+    $response->assertRedirect();
+    $this->assertAuthenticatedAs($account);
+
+    expect(collect($response->headers->getCookies())->contains(
+        fn ($cookie): bool => str_starts_with($cookie->getName(), 'remember_web_'),
+    ))->toBeTrue();
 });
 
 test('non-salesman accounts cannot open the salesman portal', function () {
@@ -139,6 +180,28 @@ test('salesman accounts can keep their portal session alive', function () {
         ->assertOk()
         ->assertJson(['active' => true])
         ->assertSessionHas('salesman_last_keep_alive_at');
+});
+
+test('opening the salesman portal upgrades an existing session to a persistent login', function () {
+    $account = Account::query()->create([
+        'username' => 'persistent-portal-salesman@example.com',
+        'password' => 'password',
+        'role' => 'salesman',
+    ]);
+    Salesman::query()->create([
+        'salesman_name' => 'Persistent Portal Salesman',
+        'account_id' => $account->acc_id,
+    ]);
+
+    $response = $this->actingAs($account)
+        ->get(route('salesman.session.keep-alive'));
+
+    $response->assertOk();
+    expect(collect($response->headers->getCookies())->contains(
+        fn ($cookie): bool => str_starts_with($cookie->getName(), 'remember_web_')
+            && $cookie->getExpiresTime() > now()->addYear()->timestamp,
+    ))->toBeTrue();
+    expect($account->fresh()->getRememberToken())->not->toBeEmpty();
 });
 
 test('salesman follow ups and crm keep in touch use the same lead status', function () {

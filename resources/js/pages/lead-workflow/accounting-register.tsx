@@ -26,6 +26,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { SearchableSelect } from '@/components/searchable-select';
+import { AttachmentPreviewGallery } from '@/components/attachment-preview-gallery';
 
 type RegisterType = 'receivable' | 'payable';
 
@@ -37,6 +38,7 @@ type AccountingRow = {
     project_document_id: number | null;
     contractor_id: number | null;
     vendor_id: number | null;
+    salesman_id: number | null;
     project_number: string;
     company_prefix: string;
     customer: string;
@@ -138,6 +140,13 @@ const paymentLabels = {
 
 const cashReferenceCode = () => `CASH-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
+const transactionHasAttachment = (transaction: AccountingRow) =>
+    Boolean(
+        transaction.file_name ||
+            transaction.project_document_id ||
+            transaction.documents.length,
+    );
+
 export default function AccountingRegister({
     type,
     transactions,
@@ -175,6 +184,7 @@ export default function AccountingRegister({
     const [qbDetailsOpen, setQbDetailsOpen] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
     const [editingRow, setEditingRow] = useState<AccountingRow | null>(null);
+    const [selectedRow, setSelectedRow] = useState<AccountingRow | null>(null);
     const [attachmentRow, setAttachmentRow] = useState<AccountingRow | null>(null);
     const attachmentForm = useForm<{ files: File[]; target_type: 'accounting'; target_id: string }>({ files: [], target_type: 'accounting', target_id: '' });
     const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
@@ -198,6 +208,7 @@ export default function AccountingRegister({
         project_document_id: '',
         contractor_id: '',
         vendor_id: '',
+        salesman_id: '',
         transaction_date: crmDateKey(new Date()),
         amount: '',
         payment_method: type === 'receivable' ? 'check' : '',
@@ -225,9 +236,19 @@ export default function AccountingRegister({
 
     const selectedProjectInvoices = useMemo(
         () => createForm.data.project_id
-            ? invoices.filter((invoice) => String(invoice.project_id) === createForm.data.project_id)
+            ? invoices.filter((invoice) => {
+                if (String(invoice.project_id) !== createForm.data.project_id) return false;
+                if (createForm.data.contractor_id) {
+                    return String(invoice.contractor_id ?? '') === createForm.data.contractor_id;
+                }
+                if (createForm.data.vendor_id) {
+                    return String(invoice.vendor_id ?? '') === createForm.data.vendor_id;
+                }
+
+                return true;
+            })
             : [],
-        [createForm.data.project_id, invoices],
+        [createForm.data.contractor_id, createForm.data.project_id, createForm.data.vendor_id, invoices],
     );
 
     const selectProject = (project: ProjectOption) => {
@@ -426,6 +447,7 @@ export default function AccountingRegister({
             project_document_id: transaction.project_document_id ? String(transaction.project_document_id) : '',
             contractor_id: transaction.contractor_id ? String(transaction.contractor_id) : '',
             vendor_id: transaction.vendor_id ? String(transaction.vendor_id) : '',
+            salesman_id: transaction.salesman_id ? String(transaction.salesman_id) : '',
             transaction_date: transaction.transaction_date.slice(0, 10),
             amount: transaction.amount,
             payment_method: transaction.payment_method ?? 'check',
@@ -446,7 +468,10 @@ export default function AccountingRegister({
 
     const removeRow = (transaction: AccountingRow) => {
         if (!window.confirm(`Delete this ${type}? This action cannot be undone.`)) return;
-        router.delete(`/management/accounting-transactions/${transaction.id}`, { preserveScroll: true });
+        router.delete(`/management/accounting-transactions/${transaction.id}`, {
+            preserveScroll: true,
+            onSuccess: () => setSelectedRow(null),
+        });
     };
 
     const removeAttachedFile = (url: string, fileName: string) => {
@@ -561,9 +586,27 @@ export default function AccountingRegister({
                             options={[{ value: '', label: 'All contractors' }, ...contractors.map((contractor) => ({ value: String(contractor.con_id), label: contractor.contractor }))]}
                         />
                         </div>
-                        <button className="accounting-register-add" type="button" onClick={openCreate}>
-                            <Plus /> {isPayable ? 'Add Payable' : 'Add Receivable'}
-                        </button>
+                        <div className="accounting-register-toolbar-actions">
+                            <button
+                                className="accounting-register-selection-action"
+                                type="button"
+                                disabled={!selectedRow}
+                                onClick={() => selectedRow && openEdit(selectedRow)}
+                            >
+                                <Pencil /> Edit
+                            </button>
+                            <button
+                                className="accounting-register-selection-action is-danger"
+                                type="button"
+                                disabled={!selectedRow}
+                                onClick={() => selectedRow && removeRow(selectedRow)}
+                            >
+                                <Trash2 /> Delete
+                            </button>
+                            <button className="accounting-register-add" type="button" onClick={openCreate}>
+                                <Plus /> {isPayable ? 'Add Payable' : 'Add Receivable'}
+                            </button>
+                        </div>
                     </header>
 
                     <div className="accounting-register-table-wrap">
@@ -590,7 +633,6 @@ export default function AccountingRegister({
                                         <th>Notes</th>
                                         <th>File</th>
                                         <th>Payment</th>
-                                        <th>Actions</th>
                                     </tr>
                                 ) : (
                                     <tr>
@@ -605,7 +647,6 @@ export default function AccountingRegister({
                                         <th>QB</th>
                                         <th>Category</th>
                                         <th>File</th>
-                                        <th>Actions</th>
                                     </tr>
                                 )}
                             </thead>
@@ -614,7 +655,19 @@ export default function AccountingRegister({
                                     const fileUrl = `/management/projects/${transaction.project_id}/accounting-transactions/${transaction.id}/file`;
 
                                     return (
-                                        <tr key={transaction.id}>
+                                        <tr
+                                            key={transaction.id}
+                                            className={selectedRow?.id === transaction.id ? 'is-selected' : undefined}
+                                            aria-selected={selectedRow?.id === transaction.id}
+                                            tabIndex={0}
+                                            onClick={() => setSelectedRow(transaction)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    setSelectedRow(transaction);
+                                                }
+                                            }}
+                                        >
                                             <td>
                                                 {date.format(
                                                     new Date(
@@ -648,6 +701,7 @@ export default function AccountingRegister({
                                                     <td>{transaction.rep}</td>
                                                     <td>
                                                         {transaction.contractor ||
+                                                            transaction.vendor ||
                                                             '—'}
                                                     </td>
                                                     <td>
@@ -690,7 +744,7 @@ export default function AccountingRegister({
                                                         </strong>
                                                     </td>
                                                     <td>
-                                                        <button className="accounting-register-attachment-trigger" type="button" onClick={() => { attachmentForm.setData({ files: [], target_type: 'accounting', target_id: String(transaction.id) }); attachmentForm.clearErrors(); setAttachmentRow(transaction); }}>
+                                                        <button className={`accounting-register-attachment-trigger attachment-status-tag ${transactionHasAttachment(transaction) ? 'has-attachment' : 'no-attachment'}`} type="button" onClick={() => { attachmentForm.setData({ files: [], target_type: 'accounting', target_id: String(transaction.id) }); attachmentForm.clearErrors(); setAttachmentRow(transaction); }}>
                                                             {transaction.reference_number || 'Add file'}
                                                         </button>
                                                     </td>
@@ -710,7 +764,7 @@ export default function AccountingRegister({
                                             ) : (
                                                 <>
                                                     <td>
-                                                        <button className="accounting-register-attachment-trigger" type="button" onClick={() => { attachmentForm.setData({ files: [], target_type: 'accounting', target_id: String(transaction.id) }); attachmentForm.clearErrors(); setAttachmentRow(transaction); }}>
+                                                        <button className={`accounting-register-attachment-trigger attachment-status-tag ${transactionHasAttachment(transaction) ? 'has-attachment' : 'no-attachment'}`} type="button" onClick={() => { attachmentForm.setData({ files: [], target_type: 'accounting', target_id: String(transaction.id) }); attachmentForm.clearErrors(); setAttachmentRow(transaction); }}>
                                                             {transaction.reference_number || 'Add file'}
                                                         </button>
                                                     </td>
@@ -799,19 +853,13 @@ export default function AccountingRegister({
                                                     <button className="accounting-register-pay" type="button" onClick={() => requestStatus(transaction, 'paid')}>Pay</button>
                                                 ) : <span>Paid</span>}
                                             </td>}
-                                            <td>
-                                                <div className="accounting-register-row-actions">
-                                                    <button type="button" onClick={() => openEdit(transaction)}><Pencil /> Edit</button>
-                                                    <button className="is-danger" type="button" onClick={() => removeRow(transaction)}><Trash2 /> Delete</button>
-                                                </div>
-                                            </td>
                                         </tr>
                                     );
                                 })}
                                 {transactions.data.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={isPayable ? 16 : 12}
+                                            colSpan={isPayable ? 15 : 11}
                                             className="accounting-register-empty"
                                         >
                                             <Landmark />
@@ -898,8 +946,9 @@ export default function AccountingRegister({
                                 </div>
                                 <label><span>Project (optional)</span><SearchableSelect value={createForm.data.project_id} onChange={(value) => { const project = projects.find((item) => String(item.id) === value); if (project) selectProject(project); else { createForm.setData((data) => ({...data, project_id: '', project_invoice_id: '', project_document_id: ''})); setProjectCustomerSearch(''); setProjectAddressSearch(''); } }} searchPlaceholder="Search project or customer…" options={[{ value: '', label: 'Unassigned / not project related' }, ...projects.map((project) => ({ value: String(project.id), label: `${project.project_number || 'Not assigned'} - ${project.lead?.customer_name || 'Standalone project'}`, keywords: projectAddress(project) }))]} /></label>
                                 <label className="is-wide"><span>Use existing project file (optional)</span><SearchableSelect disabled={!createForm.data.project_id} value={createForm.data.project_document_id} onChange={(value) => createForm.setData('project_document_id', value)} searchPlaceholder="Search project files…" options={[{ value: '', label: !createForm.data.project_id ? 'Select a project first' : 'No existing file selected' }, ...(projects.find((project) => String(project.id) === createForm.data.project_id)?.documents ?? []).map((document) => ({ value: String(document.id), label: `${document.file_name} (${document.category})` }))]} /><small>Files uploaded by the salesman in My Sold are available here.</small></label>
-                                {isPayable && <label><span>Invoice for selected project (optional)</span><SearchableSelect disabled={!createForm.data.project_id} value={createForm.data.project_invoice_id} onChange={selectInvoice} searchPlaceholder="Search invoice numbers…" options={[{ value: '', label: !createForm.data.project_id ? 'Select a project customer first' : selectedProjectInvoices.length === 0 ? 'No unpaid invoices for this project' : 'Choose an invoice' }, ...selectedProjectInvoices.map((invoice) => ({ value: String(invoice.id), label: `${invoice.invoice_number} - Balance ${currency.format(Number(invoice.balance))}` }))]} />{createForm.data.project_id && selectedProjectInvoices.length > 0 && <small>Selecting an invoice fills its remaining balance and contractor.</small>}</label>}
+                                {isPayable && <label><span>Connect to invoice (optional)</span><SearchableSelect disabled={!createForm.data.project_id} value={createForm.data.project_invoice_id} onChange={selectInvoice} searchPlaceholder="Search invoice numbers…" options={[{ value: '', label: !createForm.data.project_id ? 'Select a project customer first' : selectedProjectInvoices.length === 0 ? 'No invoices for this project' : 'Choose an invoice' }, ...selectedProjectInvoices.map((invoice) => ({ value: String(invoice.id), label: `${invoice.invoice_number} - Balance ${currency.format(Number(invoice.balance))}` }))]} />{createForm.data.project_id && selectedProjectInvoices.length > 0 && <small>Selecting an invoice fills its remaining balance and contractor or vendor.</small>}</label>}
                                 {isPayable && <label><span>Contractor or vendor (optional)</span><SearchableSelect value={createForm.data.contractor_id ? `contractor:${createForm.data.contractor_id}` : createForm.data.vendor_id ? `vendor:${createForm.data.vendor_id}` : ''} onChange={(value) => createForm.setData((data) => ({ ...data, contractor_id: value.startsWith('contractor:') ? value.slice(11) : '', vendor_id: value.startsWith('vendor:') ? value.slice(7) : '', project_invoice_id: '' }))} searchPlaceholder="Search contractors or vendors…" options={[{ value: '', label: 'No contractor or vendor' }, ...contractors.map((contractor) => ({ value: `contractor:${contractor.con_id}`, label: `Contractor — ${contractor.contractor}` })), ...vendors.map((vendor) => ({ value: `vendor:${vendor.vendor_id}`, label: `Vendor — ${vendor.vendor}` }))]} /></label>}
+                                {isPayable && <label><span>Salesman (optional)</span><SearchableSelect value={createForm.data.salesman_id} onChange={(value) => createForm.setData('salesman_id', value)} searchPlaceholder="Search salesmen…" options={[{ value: '', label: 'No salesman' }, ...salesmen.map((salesman) => ({ value: String(salesman.salesman_id), label: salesman.salesman_name }))]} /></label>}
                                 {isPayable && !createForm.data.contractor_id && !createForm.data.vendor_id && <label className="is-wide"><span>What is this payable for? *</span><input required placeholder="Example: Vendor payment, office rent, utilities, supplies..." value={createForm.data.payable_for} onChange={(e) => createForm.setData('payable_for', e.target.value)} /></label>}
                                 </div>
                               </section>
@@ -919,12 +968,13 @@ export default function AccountingRegister({
                 </Dialog>
 
                 <Dialog open={attachmentRow !== null} onOpenChange={(open) => !open && !attachmentForm.processing && setAttachmentRow(null)}>
-                    {attachmentRow && <DialogContent className="accounting-register-qb-modal"><form onSubmit={(event) => {
+                    {attachmentRow && <DialogContent className="accounting-register-qb-modal attachment-preview-modal"><form onSubmit={(event) => {
                         event.preventDefault();
                         if (!attachmentRow.project_id) return;
                         attachmentForm.post(`/management/projects/${attachmentRow.project_id}/documents`, { forceFormData: true, preserveScroll: true, onSuccess: () => { setAttachmentRow(null); attachmentForm.reset(); } });
                     }}>
                         <DialogHeader><DialogTitle>{attachmentRow.reference_number || `Files for this ${attachmentRow.type}`}</DialogTitle><DialogDescription>View existing attachments or add PDFs, images, and photos. New files also appear in the project DOC tab and Google Drive.</DialogDescription></DialogHeader>
+                        <AttachmentPreviewGallery files={[...(attachmentRow.file_name ? [{ name: attachmentRow.file_name, mime: attachmentRow.file_mime, url: `/management/projects/${attachmentRow.project_id}/accounting-transactions/${attachmentRow.id}/file` }] : []), ...attachmentRow.documents.map((document) => ({ name: document.file_name, mime: document.file_mime, url: `/management/projects/${attachmentRow.project_id}/documents/${document.id}/file` }))]} />
                         <div className="accounting-register-attachment-list">
                             {attachmentRow.file_name && <div className="accounting-attachment-row"><a href={`/management/projects/${attachmentRow.project_id}/accounting-transactions/${attachmentRow.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{attachmentRow.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/accounting-transactions/${attachmentRow.id}/file`, attachmentRow.file_name!)}><Trash2 /> Remove</button></div>}
                             {attachmentRow.documents.map((document) => <div className="accounting-attachment-row" key={document.id}><a href={`/management/projects/${attachmentRow.project_id}/documents/${document.id}/file`} target="_blank" rel="noreferrer"><FileText /><span>{document.file_name}</span><strong>View</strong></a><button type="button" onClick={() => removeAttachedFile(`/management/projects/${attachmentRow.project_id}/documents/${document.id}`, document.file_name)}><Trash2 /> Remove</button></div>)}

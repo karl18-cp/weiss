@@ -51,6 +51,13 @@ class FortifyServiceProvider extends ServiceProvider
                 ]);
             }
 
+            // Salesmen use the portal throughout the day and may install it as
+            // a desktop/mobile web app. Keep that login persistent until they
+            // explicitly use the portal's Logout button.
+            if ($account->role === 'salesman') {
+                $request->merge(['remember' => true]);
+            }
+
             return $account;
         });
     }

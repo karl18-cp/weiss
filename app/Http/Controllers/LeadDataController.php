@@ -163,6 +163,132 @@ class LeadDataController extends Controller
         return back()->with('success', 'Original agent updated.');
     }
 
+    public function projects(Request $request): Response
+    {
+        $search = trim((string) $request->query('search', ''));
+        $status = (string) $request->query('status', 'all');
+        $saleType = (string) $request->query('sale_type', 'all');
+        $allowedStatuses = ['all', 'new', 'progress', 'completed', 'canceled'];
+        $status = in_array($status, $allowedStatuses, true) ? $status : 'all';
+        $saleType = in_array($saleType, ['all', 'original', 'referral'], true) ? $saleType : 'all';
+
+        $query = Project::query()
+            ->with([
+                'lead:id,customer_name,address,city,state,zip_code,company_id,agent_id,salesman_1_id,salesman_2_id',
+                'lead.company:com_id,company,prefix',
+                'lead.agent:agent_id,agent_name',
+                'lead.salesmanOne:salesman_id,salesman_name',
+                'lead.salesmanTwo:salesman_id,salesman_name',
+                'company:com_id,company,prefix',
+                'salesman:salesman_id,salesman_name',
+                'sales:id,project_id,type,amount,sale_date',
+                'documents:id,project_id,project_sale_id,file_name,file_mime,category',
+            ])
+            ->withSum(['sales as original_sale' => fn (Builder $query) => $query->where('type', 'original')], 'amount')
+            ->withSum(['sales as referral_sale' => fn (Builder $query) => $query->where('type', 'referral')], 'amount')
+            ->withCount(['invoices', 'accountingTransactions as receivables_count' => fn (Builder $query) => $query->where('type', 'receivable')])
+            ->when($status !== 'all', fn (Builder $query) => $query->where('status', $status))
+            ->when($saleType !== 'all', fn (Builder $query) => $query->whereHas('sales', fn (Builder $saleQuery) => $saleQuery->where('type', $saleType)))
+            ->when($search !== '', function (Builder $query) use ($search): void {
+                $query->where(function (Builder $query) use ($search): void {
+                    $query
+                        ->where('project_number', 'like', "%{$search}%")
+                        ->orWhere('customer_name', 'like', "%{$search}%")
+                        ->orWhere('address', 'like', "%{$search}%")
+                        ->orWhere('city', 'like', "%{$search}%")
+                        ->orWhereHas('lead', fn (Builder $leadQuery) => $leadQuery
+                            ->where('customer_name', 'like', "%{$search}%")
+                            ->orWhere('address', 'like', "%{$search}%")
+                            ->orWhere('city', 'like', "%{$search}%"))
+                        ->orWhereHas('company', fn (Builder $companyQuery) => $companyQuery
+                            ->where('company', 'like', "%{$search}%")
+                            ->orWhere('prefix', 'like', "%{$search}%"))
+                        ->orWhereHas('lead.company', fn (Builder $companyQuery) => $companyQuery
+                            ->where('company', 'like', "%{$search}%")
+                            ->orWhere('prefix', 'like', "%{$search}%"));
+                });
+            });
+
+        $totalProjects = Project::query()->count();
+        $statusCounts = Project::query()
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $projects = $query
+            ->latest('created_at')
+            ->latest('id')
+            ->paginate(25)
+            ->withQueryString()
+            ->through(function (Project $project): array {
+                $lead = $project->lead;
+                $company = $project->company ?? $lead?->company;
+                $salesmen = collect([
+                    $project->salesman?->salesman_name,
+                    $lead?->salesmanOne?->salesman_name,
+                    $lead?->salesmanTwo?->salesman_name,
+                ])->filter()->unique()->implode(', ');
+                $originalSale = (float) ($project->getAttribute('original_sale') ?? 0);
+                $referralSale = (float) ($project->getAttribute('referral_sale') ?? 0);
+
+                return [
+                    'id' => $project->id,
+                    'project_number' => $project->project_number ?: 'Unnumbered',
+                    'signed_at' => $project->created_at?->toDateString(),
+                    'status' => $project->status,
+                    'customer' => $project->customer_name ?: $lead?->customer_name ?: 'Unassigned',
+                    'company' => $company?->prefix ?: $company?->company ?: 'Unassigned',
+                    'salesman' => $salesmen ?: 'Unassigned',
+                    'original_agent' => $lead?->agent?->agent_name ?: 'Unassigned',
+                    'address' => collect([
+                        $project->address ?: $lead?->address,
+                        $project->city ?: $lead?->city,
+                        collect([$project->state ?: $lead?->state, $project->zip_code ?: $lead?->zip_code])->filter()->implode(' '),
+                    ])->filter()->implode(', ') ?: 'No address',
+                    'original_sale' => number_format($originalSale ?: (float) $project->amount, 2, '.', ''),
+                    'referral_sale' => number_format($referralSale, 2, '.', ''),
+                    'total_sale' => number_format(($originalSale + $referralSale) ?: (float) $project->amount, 2, '.', ''),
+                    'receivables_count' => (int) $project->getAttribute('receivables_count'),
+                    'invoices_count' => (int) $project->getAttribute('invoices_count'),
+                    'attachments' => collect([
+                        ...($project->contract_file_name ? [[
+                            'id' => 'contract',
+                            'sale_type' => 'original',
+                            'name' => $project->contract_file_name,
+                            'mime' => $project->contract_file_mime,
+                            'url' => "/management/projects/{$project->id}/contract-file",
+                        ]] : []),
+                        ...$project->documents
+                            ->filter(fn ($document) => $document->project_sale_id !== null)
+                            ->map(function ($document) use ($project): array {
+                                $sale = $project->sales->firstWhere('id', $document->project_sale_id);
+
+                                return [
+                                    'id' => $document->id,
+                                    'sale_type' => $sale?->type ?? 'original',
+                                    'name' => $document->file_name,
+                                    'mime' => $document->file_mime,
+                                    'url' => "/management/projects/{$project->id}/documents/{$document->id}/file",
+                                ];
+                            })->all(),
+                    ])->values(),
+                ];
+            });
+
+        return Inertia::render('lead-workflow/data-projects', [
+            'projects' => $projects,
+            'filters' => ['search' => $search, 'status' => $status, 'sale_type' => $saleType],
+            'totalProjects' => $totalProjects,
+            'statusCounts' => [
+                'all' => $totalProjects,
+                'new' => (int) ($statusCounts['new'] ?? 0),
+                'progress' => (int) ($statusCounts['progress'] ?? 0),
+                'completed' => (int) ($statusCounts['completed'] ?? 0),
+                'canceled' => (int) ($statusCounts['canceled'] ?? 0),
+            ],
+        ]);
+    }
+
     public function vendorInvoices(Request $request): Response
     {
         $search = trim((string) $request->query('search', ''));
@@ -196,8 +322,6 @@ class LeadDataController extends Controller
             ], 'amount')
             ->with([
                 'contractor:con_id,contractor',
-                'vendor:vendor_id,vendor',
-                'company:com_id,company,prefix',
                 'vendor:vendor_id,vendor',
                 'project:id,lead_id',
                 'project.lead:id,customer_name,address,city,state,zip_code,company_id,salesman_1_id,salesman_2_id',
@@ -318,14 +442,17 @@ class LeadDataController extends Controller
             ->where('type', $type)
             ->when(! $showAll && $type === 'receivable', fn (Builder $query) => $query->where('qb', false))
             ->when(! $showAll && $type === 'payable', fn (Builder $query) => $query->where('status', '!=', 'paid'))
-            ->when($salesmanId, fn (Builder $query) => $query->whereHas('project', function (Builder $projectQuery) use ($salesmanId): void {
-                $projectQuery->where(function (Builder $projectQuery) use ($salesmanId): void {
-                    $projectQuery
-                        ->where('salesman_id', $salesmanId)
-                        ->orWhereHas('lead', fn (Builder $leadQuery) => $leadQuery
-                            ->where('salesman_1_id', $salesmanId)
-                            ->orWhere('salesman_2_id', $salesmanId));
-                });
+            ->when($salesmanId, fn (Builder $query) => $query->where(function (Builder $query) use ($salesmanId): void {
+                $query->where('salesman_id', $salesmanId)
+                    ->orWhereHas('project', function (Builder $projectQuery) use ($salesmanId): void {
+                        $projectQuery->where(function (Builder $projectQuery) use ($salesmanId): void {
+                            $projectQuery
+                                ->where('salesman_id', $salesmanId)
+                                ->orWhereHas('lead', fn (Builder $leadQuery) => $leadQuery
+                                    ->where('salesman_1_id', $salesmanId)
+                                    ->orWhere('salesman_2_id', $salesmanId));
+                        });
+                    });
             }))
             ->when($contractorId, fn (Builder $query) => $query->where(function (Builder $query) use ($contractorId): void {
                 $query
@@ -335,6 +462,7 @@ class LeadDataController extends Controller
             }))
             ->with([
                 'contractor:con_id,contractor',
+                'salesman:salesman_id,salesman_name',
                 'invoice:id,project_id,contractor_id,invoice_number,amount,status',
                 'project:id,lead_id,project_number',
                 'project.lead:id,customer_name,address,city,state,zip_code,company_id,salesman_1_id,salesman_2_id',
@@ -390,12 +518,13 @@ class LeadDataController extends Controller
                     'project_document_id' => $transaction->project_document_id,
                     'contractor_id' => $transaction->contractor_id,
                     'vendor_id' => $transaction->vendor_id,
+                    'salesman_id' => $transaction->salesman_id,
                     'project_number' => $project
                         ? ($transaction->getAttribute('linked_project_number') ?: $project->project_number ?: 'Not assigned')
                         : 'Unassigned',
                     'company_prefix' => $company?->prefix ?? '—',
                     'customer' => $lead?->customer_name ?? ($transaction->counterparty ?: 'Unassigned'),
-                    'rep' => collect([
+                    'rep' => $transaction->salesman?->salesman_name ?: collect([
                         $lead?->salesmanOne?->salesman_name,
                         $lead?->salesmanTwo?->salesman_name,
                     ])->filter()->join(', ') ?: 'Unassigned',
@@ -461,7 +590,6 @@ class LeadDataController extends Controller
                         ->where('type', 'payable')
                         ->where('status', 'paid'),
                 ], 'amount')
-                ->where('status', '!=', 'paid')
                 ->latest('invoice_date')
                 ->get(['id', 'project_id', 'contractor_id', 'vendor_id', 'invoice_number', 'amount'])
                 ->map(fn (ProjectInvoice $invoice): array => [
@@ -487,6 +615,7 @@ class LeadDataController extends Controller
             'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
             'contractor_id' => ['nullable', 'integer', 'exists:contractors,con_id'],
             'vendor_id' => ['nullable', 'integer', 'exists:vendors,vendor_id'],
+            'salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
             'transaction_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'payment_method' => ['nullable', Rule::in(['check', 'zelle', 'credit_card', 'wire_transfer', 'square_transfer', 'cash'])],
@@ -523,6 +652,16 @@ class LeadDataController extends Controller
                 ? ProjectInvoice::query()->findOrFail($data['project_invoice_id'])
                 : null;
             if ($invoice) {
+                if (filled($data['contractor_id'] ?? null) && (int) $data['contractor_id'] !== (int) $invoice->contractor_id) {
+                    throw ValidationException::withMessages([
+                        'project_invoice_id' => 'The selected invoice must belong to the selected contractor.',
+                    ]);
+                }
+                if (filled($data['vendor_id'] ?? null) && (int) $data['vendor_id'] !== (int) $invoice->vendor_id) {
+                    throw ValidationException::withMessages([
+                        'project_invoice_id' => 'The selected invoice must belong to the selected vendor.',
+                    ]);
+                }
                 $data['project_id'] = $invoice->project_id;
                 $data['contractor_id'] = $invoice->contractor_id;
                 $data['vendor_id'] = $invoice->vendor_id;
@@ -637,6 +776,7 @@ class LeadDataController extends Controller
             'project_document_id' => ['nullable', 'integer', 'exists:project_documents,id'],
             'contractor_id' => ['nullable', 'integer', 'exists:contractors,con_id'],
             'vendor_id' => ['nullable', 'integer', 'exists:vendors,vendor_id'],
+            'salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
             'transaction_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'payment_method' => ['nullable', Rule::in(['check', 'zelle', 'credit_card', 'wire_transfer', 'square_transfer', 'cash'])],
@@ -662,6 +802,12 @@ class LeadDataController extends Controller
         if ($invoice) {
             if (! $project || $invoice->project_id !== $project->id) {
                 throw ValidationException::withMessages(['project_invoice_id' => 'The selected invoice must belong to the selected project.']);
+            }
+            if (filled($data['contractor_id'] ?? null) && (int) $data['contractor_id'] !== (int) $invoice->contractor_id) {
+                throw ValidationException::withMessages(['project_invoice_id' => 'The selected invoice must belong to the selected contractor.']);
+            }
+            if (filled($data['vendor_id'] ?? null) && (int) $data['vendor_id'] !== (int) $invoice->vendor_id) {
+                throw ValidationException::withMessages(['project_invoice_id' => 'The selected invoice must belong to the selected vendor.']);
             }
             $data['contractor_id'] = $invoice->contractor_id;
             $data['vendor_id'] = $invoice->vendor_id;

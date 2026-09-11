@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'salesman_name', 'phone', 'account_id', 'company_id', 'inactive_at',
     'live_latitude', 'live_longitude', 'live_location_accuracy', 'live_location_updated_at',
     'initial_sale_cut_percent', 'change_order_cut_percent', 'sale_commission_percent',
+    'shared_sale_commission_percent',
 ])]
 class Salesman extends Model
 {
@@ -27,6 +28,7 @@ class Salesman extends Model
             'initial_sale_cut_percent' => 'decimal:2',
             'change_order_cut_percent' => 'decimal:2',
             'sale_commission_percent' => 'decimal:2',
+            'shared_sale_commission_percent' => 'decimal:2',
         ];
     }
 

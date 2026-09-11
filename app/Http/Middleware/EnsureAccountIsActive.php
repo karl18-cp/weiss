@@ -21,6 +21,19 @@ class EnsureAccountIsActive
             ]);
         }
 
+        // A salesman may close the installed portal, remove it from recent
+        // apps, or leave it suspended longer than the normal session lifetime.
+        // Ensure the authenticated browser also has Laravel's long-lived
+        // remember cookie so reopening the portal restores the account instead
+        // of sending the salesman back to the login screen.
+        if (
+            $request->user()?->role === 'salesman'
+            && $request->is('salesman', 'salesman/*')
+            && ! $request->cookie(Auth::guard()->getRecallerName())
+        ) {
+            Auth::guard()->login($request->user(), true);
+        }
+
         return $next($request);
     }
 }
