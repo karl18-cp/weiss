@@ -31,7 +31,8 @@ return [
     'disks' => [
 
         'local' => [
-            'driver' => 'local',
+            'driver' => 'portable-local',
+            'name' => 'local',
             'root' => storage_path('app/private'),
             'serve' => true,
             'throw' => false,
@@ -39,7 +40,8 @@ return [
         ],
 
         'public' => [
-            'driver' => 'local',
+            'driver' => 'portable-local',
+            'name' => 'public',
             'root' => storage_path('app/public'),
             'url' => rtrim((string) env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
