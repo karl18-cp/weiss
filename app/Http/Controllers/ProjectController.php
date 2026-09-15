@@ -61,9 +61,13 @@ class ProjectController extends Controller
             'invoices.contractor',
             'invoices.vendor',
             'contractors',
+            'company',
+            'product',
+            'telemarketer',
             'salesman',
             'manager',
         ]);
+        $this->hydrateStandaloneProject($project);
 
         $income = (float) $project->accountingTransactions
             ->where('type', 'receivable')
