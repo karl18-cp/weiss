@@ -1574,38 +1574,17 @@ export default function Projects({
         ) ?? null;
 
     const selectProject = (project: Project) => {
-        setSelectedId(project.id);
-        setSelectedSaleId(null);
-        setSelectedScheduledPaymentId(null);
-        setSelectedInvoiceId(null);
-        setSelectedAccountingId(null);
-        setSelectedDocumentKey(null);
-        setEditingProjectDetails(false);
-        projectDetailsForm.setData({
-            project_number: project.project_number ?? '',
-            status: project.status || 'new',
-            company_id: String(project.lead.company?.com_id ?? ''),
-            product_id: String(project.lead.product?.prod_id ?? ''),
-            customer_name: project.lead.customer_name,
-            primary_number: project.lead.primary_number,
-            secondary_number: project.lead.secondary_number ?? '',
-            mobile_number: project.lead.mobile_number ?? '',
-            email: project.lead.email ?? '',
-            address: project.lead.address,
-            city: project.lead.city,
-            state: project.lead.state,
-            zip_code: project.lead.zip_code,
-            source: project.lead.source,
-            appointment_at: appointmentInputValue(
-                project.lead.appointment_at ?? '',
-            ),
-            lead_created_at: dateTimeInputValue(project.lead.created_at),
-            agent_id: String(project.lead.agent?.agent_id ?? ''),
-            agent_2_id: String(project.lead.second_agent?.agent_id ?? ''),
-            salesman_1_id: String(project.lead.salesman_one?.salesman_id ?? ''),
-            salesman_2_id: String(project.lead.salesman_two?.salesman_id ?? ''),
-        });
-        projectDetailsForm.clearErrors();
+        router.get(
+            '/management/projects',
+            {
+                project: project.id,
+                tab: activeTab === 'PRJ' ? 'DTL' : activeTab,
+            },
+            {
+                preserveState: false,
+                preserveScroll: true,
+            },
+        );
     };
 
     const returnToProjectList = () => {

@@ -224,40 +224,69 @@ class ProjectController extends Controller
 
     public function index(): Response
     {
+        $selectedProjectId = request()->integer('project');
+        $selectedLeadId = $selectedProjectId > 0
+            ? (int) Project::query()->whereKey($selectedProjectId)->value('lead_id')
+            : 0;
+
+        $projects = Project::query()
+            ->with([
+                'lead.company:com_id,company,prefix',
+                'lead.product:prod_id,product_name',
+                'lead.agent:agent_id,agent_name',
+                'lead.secondAgent:agent_id,agent_name',
+                'lead.salesmanOne:salesman_id,salesman_name,phone',
+                'lead.salesmanTwo:salesman_id,salesman_name,phone',
+                'lead.notes' => fn ($query) => $selectedLeadId > 0
+                    ? $query->where('lead_id', $selectedLeadId)
+                    : $query->whereRaw('1 = 0'),
+                'sales.product:prod_id,product_name',
+                'sales.salesman:salesman_id,salesman_name',
+                'scheduledPayments' => fn ($query) => $selectedProjectId > 0
+                    ? $query->where('project_id', $selectedProjectId)
+                    : $query->whereRaw('1 = 0'),
+                'invoices.contractor:con_id,contractor',
+                'invoices.vendor:vendor_id,vendor',
+                'accountingTransactions' => fn ($query) => $query->select([
+                    'id', 'project_id', 'type', 'category', 'transaction_date',
+                    'reference_number', 'counterparty', 'amount', 'status', 'qb',
+                ]),
+                'documents' => fn ($query) => $selectedProjectId > 0
+                    ? $query->where('project_id', $selectedProjectId)
+                        ->select(['id', 'project_id', 'project_invoice_id', 'project_accounting_transaction_id', 'project_sale_id', 'category', 'file_name', 'file_mime', 'file_size', 'created_at'])
+                    : $query->whereRaw('1 = 0'),
+                'activityLogs' => fn ($query) => $selectedProjectId > 0
+                    ? $query->where('project_id', $selectedProjectId)
+                    : $query->whereRaw('1 = 0'),
+                'activityLogs.actor:acc_id,username',
+                'company:com_id,company,prefix',
+                'product:prod_id,product_name',
+                'telemarketer:agent_id,agent_name',
+                'salesman:salesman_id,salesman_name,phone',
+                'manager:manager_id,manager_name',
+                'contractors' => fn ($query) => $selectedProjectId > 0
+                    ? $query->wherePivot('project_id', $selectedProjectId)
+                        ->select(['contractors.con_id', 'contractor'])
+                    : $query->whereRaw('1 = 0'),
+            ])
+            ->latest()
+            ->get()
+            ->each(fn (Project $project) => $this->hydrateStandaloneProject($project));
+
+        if ($selectedProject = $projects->firstWhere('id', $selectedProjectId)) {
+            $selectedProject->load([
+                'accountingTransactions.scheduledPayments',
+                'accountingTransactions.invoice.contractor:con_id,contractor',
+                'accountingTransactions.invoice.vendor:vendor_id,vendor',
+                'accountingTransactions.contractor:con_id,contractor',
+                'accountingTransactions.vendor:vendor_id,vendor',
+                'accountingTransactions.salesman:salesman_id,salesman_name',
+                'accountingTransactions.company:com_id,company,prefix',
+            ]);
+        }
+
         return Inertia::render('management/projects', [
-            'projects' => Project::query()
-                ->with([
-                    'lead.company:com_id,company,prefix',
-                    'lead.product:prod_id,product_name',
-                    'lead.agent:agent_id,agent_name',
-                    'lead.secondAgent:agent_id,agent_name',
-                    'lead.salesmanOne:salesman_id,salesman_name,phone',
-                    'lead.salesmanTwo:salesman_id,salesman_name,phone',
-                    'lead.notes:id,lead_id,note_type,body,created_at',
-                    'sales.product:prod_id,product_name',
-                    'sales.salesman:salesman_id,salesman_name',
-                    'scheduledPayments',
-                    'invoices.contractor:con_id,contractor',
-                    'invoices.vendor:vendor_id,vendor',
-                    'accountingTransactions.scheduledPayments',
-                    'accountingTransactions.invoice.contractor:con_id,contractor',
-                    'accountingTransactions.invoice.vendor:vendor_id,vendor',
-                    'accountingTransactions.contractor:con_id,contractor',
-                    'accountingTransactions.vendor:vendor_id,vendor',
-                    'accountingTransactions.salesman:salesman_id,salesman_name',
-                    'accountingTransactions.company:com_id,company,prefix',
-                    'documents:id,project_id,project_invoice_id,project_accounting_transaction_id,project_sale_id,category,file_name,file_mime,file_size,created_at',
-                    'activityLogs.actor:acc_id,username',
-                    'company:com_id,company,prefix',
-                    'product:prod_id,product_name',
-                    'telemarketer:agent_id,agent_name',
-                    'salesman:salesman_id,salesman_name,phone',
-                    'manager:manager_id,manager_name',
-                    'contractors:con_id,contractor',
-                ])
-                ->latest()
-                ->get()
-                ->each(fn (Project $project) => $this->hydrateStandaloneProject($project)),
+            'projects' => $projects,
             'products' => Product::query()->orderBy('product_name')->get(['prod_id', 'product_name']),
             'companies' => Company::query()->orderBy('company')->get(['com_id', 'company', 'prefix']),
             'agents' => Agent::query()
