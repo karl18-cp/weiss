@@ -80,22 +80,35 @@ class ProjectController extends Controller
             ...$project->sales->pluck('salesman.salesman_name')->all(),
         ])->filter()->unique()->join(', ');
 
-        $invoiceRows = $project->invoices->map(fn (ProjectInvoice $invoice): array => [
-            'contractor' => $invoice->contractor?->contractor ?? $invoice->vendor?->vendor ?? 'Unassigned',
-            'date' => $invoice->invoice_date,
-            'bid' => (float) $invoice->amount,
-            'invoice' => $invoice->invoice_number,
-            'note' => $invoice->notes,
-        ]);
-        $invoicedContractors = $invoiceRows->pluck('contractor')->filter()->all();
+        $invoiceRows = $project->invoices
+            ->groupBy(fn (ProjectInvoice $invoice): string => strtolower(trim(
+                $invoice->contractor?->contractor
+                    ?? $invoice->vendor?->vendor
+                    ?? 'Unassigned',
+            )))
+            ->map(function ($invoices): array {
+                /** @var ProjectInvoice $first */
+                $first = $invoices->first();
+
+                return [
+                    'contractor' => $first->contractor?->contractor ?? $first->vendor?->vendor ?? 'Unassigned',
+                    'date' => $invoices->sortByDesc('invoice_date')->first()?->invoice_date,
+                    'bid' => (float) $invoices->sum('amount'),
+                    'note' => $invoices->pluck('notes')->filter()->unique()->join('; '),
+                ];
+            })
+            ->values();
+        $invoicedContractors = $invoiceRows->pluck('contractor')
+            ->filter()
+            ->map(fn (string $name): string => strtolower(trim($name)))
+            ->all();
         $contractorRows = $invoiceRows->concat(
             $project->contractors
-                ->reject(fn (Contractor $contractor): bool => in_array($contractor->contractor, $invoicedContractors, true))
+                ->reject(fn (Contractor $contractor): bool => in_array(strtolower(trim($contractor->contractor)), $invoicedContractors, true))
                 ->map(fn (Contractor $contractor): array => [
                     'contractor' => $contractor->contractor,
                     'date' => null,
                     'bid' => null,
-                    'invoice' => null,
                     'note' => null,
                 ]),
         )->take(10)->values();

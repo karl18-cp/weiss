@@ -62,8 +62,8 @@
         </tr>
     </table>
     <table class="contractors">
-        <colgroup><col style="width:25%"><col style="width:15%"><col style="width:16%"><col style="width:17%"><col style="width:27%"></colgroup>
-        <thead><tr><th>Contractor</th><th>Date</th><th>Bid</th><th>Invoice #</th><th>Note</th></tr></thead>
+        <colgroup><col style="width:30%"><col style="width:17%"><col style="width:18%"><col style="width:35%"></colgroup>
+        <thead><tr><th>Contractor</th><th>Latest invoice</th><th>Total</th><th>Note</th></tr></thead>
         <tbody>
             @for($index = 0; $index < 10; $index++)
                 @php($row = $contractorRows->get($index))
@@ -71,7 +71,6 @@
                     <td>{{ $row['contractor'] ?? '' }}</td>
                     <td>{{ !empty($row['date']) ? $row['date']->format('m/d/Y') : '' }}</td>
                     <td class="amount">{{ isset($row['bid']) ? '$'.number_format($row['bid'], 2) : '' }}</td>
-                    <td>{{ $row['invoice'] ?? '' }}</td>
                     <td>{{ $row['note'] ?? '' }}</td>
                 </tr>
             @endfor
