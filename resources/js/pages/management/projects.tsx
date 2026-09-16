@@ -623,9 +623,14 @@ export default function Projects({
     >(null);
     const documentUploadForm = useForm<{
         files: File[];
-        target_type: 'project' | 'invoice' | 'accounting' | 'sale';
+        target_type: 'project' | 'invoice' | 'accounting' | 'sale' | 'completion';
         target_id: string;
-    }>({ files: [], target_type: 'project', target_id: '' });
+        completion_audience?: 'office' | 'salesman';
+        completion_salesman_id?: string;
+    }>({ files: [], target_type: 'project', target_id: '', completion_audience: 'office', completion_salesman_id: '' });
+    const [completionModalOpen, setCompletionModalOpen] = useState(false);
+    const [completionAudience, setCompletionAudience] = useState<'office' | 'salesman'>('office');
+    const [completionSalesmanId, setCompletionSalesmanId] = useState('');
     const [
         accountingAttachmentTransaction,
         setAccountingAttachmentTransaction,
@@ -2440,6 +2445,18 @@ export default function Projects({
         }
     };
 
+    const openCompletionModal = () => {
+        setCompletionAudience('office');
+        setCompletionSalesmanId('');
+        documentUploadForm.setData({
+            files: [], target_type: 'completion', target_id: '',
+            completion_audience: 'office', completion_salesman_id: '',
+        });
+        documentUploadForm.clearErrors();
+        setCompletionModalOpen(true);
+        if (!commissionBreakdown) void loadCommissionBreakdown();
+    };
+
     useEffect(() => {
         if (activeTab === 'TTL' && selectedId) {
             void loadCommissionBreakdown();
@@ -3684,6 +3701,9 @@ export default function Projects({
                                     </div>
                                 </div>
                                 <div className="project-totals-actions">
+                                    <button type="button" onClick={openCompletionModal}>
+                                        <FileText /> Completion
+                                    </button>
                                     <button type="button" onClick={() => setActiveTab('INV')}>
                                         Open invoices
                                     </button>
@@ -6556,6 +6576,13 @@ export default function Projects({
                                         </a>
                                         <button
                                             type="button"
+                                            className="project-print-cover"
+                                            onClick={openCompletionModal}
+                                        >
+                                            <FileText /> Completion
+                                        </button>
+                                        <button
+                                            type="button"
                                             className="project-add-sale"
                                             onClick={openReferralSale}
                                         >
@@ -9276,6 +9303,103 @@ export default function Projects({
                             </DialogFooter>
                         </form>
                     </DialogContent>
+                </Dialog>
+
+                <Dialog
+                    open={completionModalOpen}
+                    onOpenChange={(open) => !documentUploadForm.processing && setCompletionModalOpen(open)}
+                >
+                    {selected && (
+                        <DialogContent className="project-accounting-attachment-modal">
+                            <form
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    documentUploadForm.post(`/management/projects/${selected.id}/documents`, {
+                                        forceFormData: true,
+                                        preserveScroll: true,
+                                        onSuccess: () => documentUploadForm.setData('files', []),
+                                    });
+                                }}
+                            >
+                                <DialogHeader>
+                                    <DialogTitle>Completion form</DialogTitle>
+                                    <DialogDescription>
+                                        Choose the accounting copy, export a printable PDF, or attach completed forms. Multiple files are supported.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="project-accounting-form-top">
+                                    <label>
+                                        Copy for
+                                        <select
+                                            value={completionAudience}
+                                            onChange={(event) => {
+                                                const audience = event.target.value as 'office' | 'salesman';
+                                                setCompletionAudience(audience);
+                                                documentUploadForm.setData('completion_audience', audience);
+                                                if (audience === 'office') {
+                                                    setCompletionSalesmanId('');
+                                                    documentUploadForm.setData('completion_salesman_id', '');
+                                                }
+                                            }}
+                                        >
+                                            <option value="office">Office — all accounting totals</option>
+                                            <option value="salesman">Salesman — salesman totals only</option>
+                                        </select>
+                                    </label>
+                                    {completionAudience === 'salesman' && (
+                                        <label>
+                                            Salesman
+                                            <select
+                                                value={completionSalesmanId}
+                                                onChange={(event) => {
+                                                    setCompletionSalesmanId(event.target.value);
+                                                    documentUploadForm.setData('completion_salesman_id', event.target.value);
+                                                }}
+                                                required
+                                            >
+                                                <option value="">Select salesman</option>
+                                                {(commissionBreakdown?.salesmen ?? []).map((row) => (
+                                                    <option key={row.salesman_id} value={row.salesman_id}>{row.salesman_name}</option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                    )}
+                                </div>
+                                <div className="project-accounting-attachment-list">
+                                    {selected.documents
+                                        .filter((document) => document.category.startsWith('Completion Form'))
+                                        .map((document) => (
+                                            <div key={document.id} className="project-accounting-attachment-list__item">
+                                                <FileText /><span>{document.file_name}</span>
+                                                <a href={`/management/projects/${selected.id}/documents/${document.id}/file`} target="_blank" rel="noreferrer">View / print</a>
+                                            </div>
+                                        ))}
+                                    {selected.documents.every((document) => !document.category.startsWith('Completion Form')) && <p>No completion forms uploaded yet.</p>}
+                                </div>
+                                <label className="project-accounting-attachment-upload">
+                                    <Upload />
+                                    <strong>{documentUploadForm.data.files.length ? `${documentUploadForm.data.files.length} files selected` : 'Choose completion forms'}</strong>
+                                    <small>PDF, JPG, PNG, WebP, HEIC, or HEIF</small>
+                                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => documentUploadForm.setData('files', Array.from(event.target.files ?? []))} />
+                                </label>
+                                <DialogFooter className="project-sale-modal__footer">
+                                    <a
+                                        className="project-print-cover"
+                                        href={`/management/projects/${selected.id}/completion-form?audience=${completionAudience}${completionAudience === 'salesman' ? `&salesman_id=${completionSalesmanId}` : ''}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        aria-disabled={completionAudience === 'salesman' && !completionSalesmanId}
+                                        onClick={(event) => completionAudience === 'salesman' && !completionSalesmanId && event.preventDefault()}
+                                    >
+                                        <Printer /> Export / print PDF
+                                    </a>
+                                    <button type="submit" disabled={documentUploadForm.processing || documentUploadForm.data.files.length === 0 || (completionAudience === 'salesman' && !completionSalesmanId)}>
+                                        {documentUploadForm.processing ? 'Uploading...' : 'Upload forms'}
+                                    </button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    )}
                 </Dialog>
 
                 <Dialog

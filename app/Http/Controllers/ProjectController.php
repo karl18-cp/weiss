@@ -184,6 +184,72 @@ class ProjectController extends Controller
         ]);
     }
 
+    public function exportCompletionForm(Request $request, Project $project): \Illuminate\Http\Response
+    {
+        $data = $request->validate([
+            'audience' => ['required', 'in:office,salesman'],
+            'salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
+        ]);
+        $project->loadMissing([
+            'lead.company', 'lead.product', 'lead.salesmanOne', 'lead.salesmanTwo',
+            'sales', 'sales.salesman', 'accountingTransactions', 'company', 'product',
+            'salesman', 'manager',
+        ]);
+        $this->hydrateStandaloneProject($project);
+        $salesmen = collect([
+            $project->salesman,
+            $project->lead?->salesmanOne,
+            $project->lead?->salesmanTwo,
+            ...$project->sales->pluck('salesman')->all(),
+        ])->filter()->unique('salesman_id')->values();
+
+        $salesman = null;
+        $salesmanTotals = null;
+        if ($data['audience'] === 'salesman') {
+            $salesman = $salesmen->firstWhere('salesman_id', (int) ($data['salesman_id'] ?? 0));
+            abort_unless($salesman instanceof Salesman, 422, 'Select a salesman assigned to this project.');
+            $salesmanTotals = $this->commissions->calculate($project, $salesman);
+        }
+
+        $receivables = (float) $project->accountingTransactions->where('type', 'receivable')->sum('amount');
+        $payables = $project->accountingTransactions->where('type', 'payable');
+        $expenses = (float) $payables
+            ->reject(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
+            ->sum('amount');
+        $commissionPaid = (float) $payables
+            ->filter(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
+            ->where('status', 'paid')->sum('amount');
+        $saleAmount = (float) ($project->sales->sum('amount') ?: $project->amount);
+
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml(view('pdf.project-completion-form', [
+            'project' => $project,
+            'audience' => $data['audience'],
+            'salesman' => $salesman,
+            'salesmanTotals' => $salesmanTotals,
+            'officeTotals' => [
+                'sale_amount' => $saleAmount,
+                'receivables' => $receivables,
+                'balance' => $saleAmount - $receivables,
+                'expenses' => $expenses,
+                'commission_paid' => $commissionPaid,
+                'net' => $receivables - $expenses - $commissionPaid,
+            ],
+        ])->render());
+        $dompdf->setPaper('letter', 'portrait');
+        $dompdf->render();
+
+        $suffix = $data['audience'] === 'office' ? 'office' : 'salesman-'.($salesman?->salesman_id ?? 'copy');
+        $fileName = preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number ?: "project-{$project->id}")."-completion-{$suffix}.pdf";
+
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+        ]);
+    }
+
     public function commissionBreakdown(Project $project): \Illuminate\Http\JsonResponse
     {
         $project->loadMissing([
@@ -1204,8 +1270,10 @@ class ProjectController extends Controller
             // detector. Phone photos (especially HEIC/JFIF) are commonly reported
             // as application/octet-stream even though they are valid uploads.
             'files.*' => ['required', 'file', 'extensions:pdf,jpg,jpeg,jfif,png,webp,heic,heif', 'max:20480'],
-            'target_type' => ['required', 'in:project,invoice,accounting,sale'],
+            'target_type' => ['required', 'in:project,invoice,accounting,sale,completion'],
             'target_id' => ['nullable', 'integer'],
+            'completion_audience' => ['nullable', 'required_if:target_type,completion', 'in:office,salesman'],
+            'completion_salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
         ]);
 
         $invoice = null;
@@ -1219,13 +1287,17 @@ class ProjectController extends Controller
             $sale = $project->sales()->findOrFail($data['target_id'] ?? 0);
         }
 
-        $category = $sale
+        $category = $data['target_type'] === 'completion'
+            ? 'Completion Form - '.($data['completion_audience'] === 'office'
+                ? 'Office'
+                : 'Salesman'.(! empty($data['completion_salesman_id']) ? ' #'.$data['completion_salesman_id'] : ''))
+            : ($sale
             ? 'Sale Contract'
             : ($invoice
             ? 'Invoice'
             : ($transaction
                 ? ($transaction->type === 'receivable' ? 'Receivable' : 'Payable')
-                : 'Project Upload'));
+                : 'Project Upload')));
         $driveFailures = 0;
 
         foreach ($data['files'] as $file) {

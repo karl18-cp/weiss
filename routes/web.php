@@ -164,6 +164,7 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('proposals/{proposal}/versions/{version}', [ProposalController::class, 'download'])->name('proposals.versions.download');
         Route::get('projects', [ProjectController::class, 'index'])->name('projects');
         Route::get('projects/{project}/cover-page', [ProjectController::class, 'printCoverPage'])->name('projects.cover-page');
+        Route::get('projects/{project}/completion-form', [ProjectController::class, 'exportCompletionForm'])->name('projects.completion-form');
         Route::get('projects/{project}/accounting/export/{type}', [ProjectController::class, 'exportAccounting'])
             ->whereIn('type', ['receivable', 'payable'])
             ->name('projects.accounting.export');
