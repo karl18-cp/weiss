@@ -234,6 +234,10 @@ type ProjectCommissionBreakdown = {
         project_balance: number;
         lead_cost: number;
         expenses_commissionable: number;
+        open_invoices: number;
+        gross_profit: number;
+        salesman_commission: number;
+        office_commission: number;
         total_commission: number;
         total_commission_paid: number;
         profit_net: number;
@@ -247,11 +251,13 @@ type ProjectCommissionBreakdown = {
         received: number;
         project_balance: number;
         expenses: number;
+        open_invoices: number;
         lead_cost_rate: number;
         lead_cost: number;
         change_order_lead_cost_rate: number;
         change_order_lead_cost: number;
         commission_base: number;
+        gross_profit: number;
         commission_rate: number;
         commission_due: number;
         maximum_commission: number;
@@ -2493,7 +2499,7 @@ export default function Projects({
                 paymentCheckForm.setData('amount', String(
                     type === 'lead_cost'
                         ? breakdown.accounting.lead_cost
-                        : breakdown.accounting.total_commission,
+                        : breakdown.accounting.salesman_commission,
                 ));
             } finally {
                 setCommissionBreakdownLoading(false);
@@ -2502,7 +2508,7 @@ export default function Projects({
             paymentCheckForm.setData('amount', String(
                 type === 'lead_cost'
                     ? commissionBreakdown.accounting.lead_cost
-                    : commissionBreakdown.accounting.total_commission,
+                    : commissionBreakdown.accounting.salesman_commission,
             ));
         }
     };
@@ -3775,13 +3781,16 @@ export default function Projects({
                                         <header>Accounting Totals</header>
                                         <dl>
                                             <div><dt>Sale amount</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.sale_amount)}</dd></div>
-                                            <div><dt>− Total receivables</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.received_commissionable)}</dd></div>
+                                            <div><dt>Collected receivables</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.received_commissionable)}</dd></div>
                                             <div className="is-total"><dt>Project's balance</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.project_balance)}</dd></div>
                                             <div><dt>− Lead cost</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.lead_cost)}</dd></div>
                                             <div><dt>− Expenses (Comm.)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.expenses_commissionable)}</dd></div>
-                                            <div><dt>Total commission</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.total_commission)}</dd></div>
+                                            <div><dt>− Open invoices</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.open_invoices)}</dd></div>
+                                            <div className="is-base"><dt>Gross Profit</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.gross_profit)}</dd></div>
+                                            <div><dt>Office commission (50%)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.office_commission)}</dd></div>
+                                            <div><dt>Salesman commission (50%)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.salesman_commission)}</dd></div>
                                             <div><dt>− Total commission paid</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.total_commission_paid)}</dd></div>
-                                            <div className="is-net"><dt>Profit (NET)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.profit_net)}</dd></div>
+                                            <div className="is-net"><dt>Office share</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.profit_net)}</dd></div>
                                         </dl>
                                     </section>
                                     {commissionBreakdown.salesmen.map((row) => (
@@ -3796,10 +3805,11 @@ export default function Projects({
                                                 <div><dt>Received (Comm.)</dt><dd>{currencyFormatter.format(row.received)}</dd></div>
                                                 <div className="is-total"><dt>Project's balance</dt><dd>{currencyFormatter.format(row.project_balance)}</dd></div>
                                                 <div><dt>− Expenses (Comm.)</dt><dd>{currencyFormatter.format(row.expenses)}</dd></div>
+                                                <div><dt>− Open invoices</dt><dd>{currencyFormatter.format(row.open_invoices)}</dd></div>
                                                 <div><dt>− {row.lead_cost_rate}% Lead cost</dt><dd>{currencyFormatter.format(row.lead_cost)}</dd></div>
                                                 <div><dt>− {row.change_order_lead_cost_rate}% Change order lead cost</dt><dd>{currencyFormatter.format(row.change_order_lead_cost)}</dd></div>
-                                                <div className="is-base"><dt>Commission base</dt><dd>{currencyFormatter.format(row.commission_base)}</dd></div>
-                                                <div><dt>{row.commission_rate}% Commission due</dt><dd>{currencyFormatter.format(row.commission_due)}</dd></div>
+                                                <div className="is-base"><dt>Gross Profit share</dt><dd>{currencyFormatter.format(row.gross_profit)}</dd></div>
+                                                <div><dt>Salesman commission (50%)</dt><dd>{currencyFormatter.format(row.commission_due)}</dd></div>
                                                 <div><dt>Maximum future commission</dt><dd>{currencyFormatter.format(row.maximum_commission)}</dd></div>
                                                 <div><dt>− Commission paid</dt><dd>{currencyFormatter.format(row.commission_paid)}</dd></div>
                                                 <div className="is-balance"><dt>Commission balance</dt><dd>{currencyFormatter.format(row.commission_balance)}</dd></div>

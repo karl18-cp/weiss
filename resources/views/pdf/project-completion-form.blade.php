@@ -34,8 +34,10 @@
             <tr><th>Received</th><td class="money">${{ number_format($salesmanTotals['received'], 2) }}</td></tr>
             <tr><th>Project balance</th><td class="money">${{ number_format($salesmanTotals['project_balance'], 2) }}</td></tr>
             <tr><th>Expenses</th><td class="money">${{ number_format($salesmanTotals['expenses'], 2) }}</td></tr>
+            <tr><th>Open Invoices</th><td class="money">${{ number_format($salesmanTotals['open_invoices'], 2) }}</td></tr>
             <tr><th>Lead cost</th><td class="money">${{ number_format($salesmanTotals['lead_cost'] + $salesmanTotals['change_order_lead_cost'], 2) }}</td></tr>
-            <tr><th>Commission due</th><td class="money">${{ number_format($salesmanTotals['commission_due'], 2) }}</td></tr>
+            <tr><th>Gross Profit</th><td class="money">${{ number_format($salesmanTotals['gross_profit'], 2) }}</td></tr>
+            <tr><th>Salesman commission (50%)</th><td class="money">${{ number_format($salesmanTotals['commission_due'], 2) }}</td></tr>
             <tr><th>Commission paid</th><td class="money">${{ number_format($salesmanTotals['commission_paid'], 2) }}</td></tr>
             <tr class="total"><th>Commission balance</th><td class="money">${{ number_format($salesmanTotals['commission_balance'], 2) }}</td></tr>
         @else
@@ -43,6 +45,11 @@
             <tr><th>Total receivables</th><td class="money">${{ number_format($officeTotals['receivables'], 2) }}</td></tr>
             <tr><th>Project balance</th><td class="money">${{ number_format($officeTotals['balance'], 2) }}</td></tr>
             <tr><th>Expenses</th><td class="money">${{ number_format($officeTotals['expenses'], 2) }}</td></tr>
+            <tr><th>Open Invoices</th><td class="money">${{ number_format($officeTotals['open_invoices'], 2) }}</td></tr>
+            <tr><th>Lead Cost</th><td class="money">${{ number_format($officeTotals['lead_cost'], 2) }}</td></tr>
+            <tr><th>Gross Profit</th><td class="money">${{ number_format($officeTotals['gross_profit'], 2) }}</td></tr>
+            <tr><th>Office commission (50%)</th><td class="money">${{ number_format($officeTotals['office_commission'], 2) }}</td></tr>
+            <tr><th>Salesman commission (50%)</th><td class="money">${{ number_format($officeTotals['salesman_commission'], 2) }}</td></tr>
             <tr><th>Commission paid</th><td class="money">${{ number_format($officeTotals['commission_paid'], 2) }}</td></tr>
             <tr class="total"><th>Net received</th><td class="money">${{ number_format($officeTotals['net'], 2) }}</td></tr>
         @endif

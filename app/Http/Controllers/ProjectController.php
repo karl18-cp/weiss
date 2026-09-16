@@ -193,7 +193,7 @@ class ProjectController extends Controller
         ]);
         $project->loadMissing([
             'lead.company', 'lead.product', 'lead.salesmanOne', 'lead.salesmanTwo',
-            'sales', 'sales.salesman', 'accountingTransactions', 'company', 'product',
+            'sales', 'sales.salesman', 'accountingTransactions', 'invoices.accountingTransactions', 'company', 'product',
             'salesman', 'manager',
         ]);
         $this->hydrateStandaloneProject($project);
@@ -212,11 +212,25 @@ class ProjectController extends Controller
             $salesmanTotals = $this->commissions->calculate($project, $salesman);
         }
 
-        $receivables = (float) $project->accountingTransactions->where('type', 'receivable')->sum('amount');
+        $receivables = (float) $project->accountingTransactions
+            ->where('type', 'receivable')->where('status', 'deposit')->sum('amount');
         $payables = $project->accountingTransactions->where('type', 'payable');
         $expenses = (float) $payables
             ->reject(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
+            ->filter(fn ($transaction): bool => ! $transaction->project_invoice_id || $transaction->status === 'paid')
             ->sum('amount');
+        $openInvoices = (float) $project->invoices->sum(function (ProjectInvoice $invoice): float {
+            $paid = (float) $invoice->accountingTransactions
+                ->where('type', 'payable')->where('status', 'paid')->sum('amount');
+
+            return max(0, (float) $invoice->amount - $paid);
+        });
+        $leadCost = (float) $salesmen->sum(function (Salesman $salesman) use ($project): float {
+            $totals = $this->commissions->calculate($project, $salesman);
+
+            return (float) $totals['lead_cost'] + (float) $totals['change_order_lead_cost'];
+        });
+        $grossProfit = max(0, $receivables - $leadCost - $expenses - $openInvoices);
         $commissionPaid = (float) $payables
             ->filter(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
             ->where('status', 'paid')->sum('amount');
@@ -235,8 +249,13 @@ class ProjectController extends Controller
                 'receivables' => $receivables,
                 'balance' => $saleAmount - $receivables,
                 'expenses' => $expenses,
+                'open_invoices' => $openInvoices,
+                'lead_cost' => $leadCost,
+                'gross_profit' => $grossProfit,
+                'office_commission' => $grossProfit * 0.5,
+                'salesman_commission' => $grossProfit * 0.5,
                 'commission_paid' => $commissionPaid,
-                'net' => $receivables - $expenses - $commissionPaid,
+                'net' => $grossProfit - $commissionPaid,
             ],
         ])->render());
         $dompdf->setPaper('letter', 'portrait');
@@ -257,6 +276,7 @@ class ProjectController extends Controller
             'sales',
             'sales.salesman',
             'accountingTransactions',
+            'invoices.accountingTransactions',
             'salesman',
             'lead.salesmanOne',
             'lead.salesmanTwo',
@@ -274,11 +294,18 @@ class ProjectController extends Controller
         ]);
         $totalSale = (float) ($project->sales->sum('amount') ?: $project->amount);
         $received = (float) $project->accountingTransactions
-            ->where('type', 'receivable')->sum('amount');
+            ->where('type', 'receivable')->where('status', 'deposit')->sum('amount');
         $expenses = (float) $project->accountingTransactions
             ->where('type', 'payable')
             ->reject(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
+            ->filter(fn ($transaction): bool => ! $transaction->project_invoice_id || $transaction->status === 'paid')
             ->sum('amount');
+        $openInvoices = (float) $project->invoices->sum(function (ProjectInvoice $invoice): float {
+            $paid = (float) $invoice->accountingTransactions
+                ->where('type', 'payable')->where('status', 'paid')->sum('amount');
+
+            return max(0, (float) $invoice->amount - $paid);
+        });
         $referralOnlySalesmanIds = $project->sales->where('type', 'referral')->pluck('salesman_id')
             ->filter()->map(fn ($id): int => (int) $id)->unique();
         $originalSalesmanIds = collect([$project->salesman_id, $project->lead?->salesman_1_id, $project->lead?->salesman_2_id])
@@ -287,7 +314,9 @@ class ProjectController extends Controller
         $leadCosts = (float) $rows->whereIn('salesman_id', $originalSalesmanIds)
             ->sum(fn (array $row): float => (float) $row['lead_cost'] + (float) $row['change_order_lead_cost']);
         $commissionPaid = (float) $rows->sum('commission_paid');
-        $totalCommission = (float) $rows->sum('commission_due');
+        $grossProfit = max(0, $received - $expenses - $openInvoices - $leadCosts);
+        $salesmanCommission = $grossProfit * 0.5;
+        $officeCommission = $grossProfit * 0.5;
 
         return response()->json([
             'project_id' => $project->id,
@@ -298,9 +327,13 @@ class ProjectController extends Controller
                 'project_balance' => round($totalSale - $received, 2),
                 'lead_cost' => round($leadCosts, 2),
                 'expenses_commissionable' => round($expenses, 2),
-                'total_commission' => round($totalCommission, 2),
+                'open_invoices' => round($openInvoices, 2),
+                'gross_profit' => round($grossProfit, 2),
+                'salesman_commission' => round($salesmanCommission, 2),
+                'office_commission' => round($officeCommission, 2),
+                'total_commission' => round($salesmanCommission, 2),
                 'total_commission_paid' => round($commissionPaid, 2),
-                'profit_net' => round($received - $expenses - $leadCosts - $totalCommission, 2),
+                'profit_net' => round($officeCommission, 2),
             ],
             'salesmen' => $rows,
         ]);

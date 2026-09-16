@@ -335,7 +335,7 @@ test('both project overview salesmen earn from the original sale while referral-
         ->assertJsonPath('salesmen.2.salesman_name', 'Referral Only Salesman')
         ->assertJsonPath('salesmen.2.original_sale', 0)
         ->assertJsonPath('salesmen.2.change_orders', 2000)
-        ->assertJsonPath('salesmen.2.commission_rate', 30);
+        ->assertJsonPath('salesmen.2.commission_rate', 50);
 
     $project->sales()->where('type', 'referral')->update([
         'salesman_id' => $secondarySalesman->salesman_id,
@@ -363,8 +363,8 @@ test('both project overview salesmen earn from the original sale while referral-
         ->assertJsonPath('salesmen.1.lead_cost', 0)
         ->assertJsonPath('salesmen.1.change_order_lead_cost', 400)
         ->assertJsonPath('salesmen.1.commission_base', 1266.67)
-        ->assertJsonPath('salesmen.1.commission_rate', 25)
-        ->assertJsonPath('salesmen.1.commission_due', 316.67);
+        ->assertJsonPath('salesmen.1.commission_rate', 50)
+        ->assertJsonPath('salesmen.1.commission_due', 633.33);
 
     Project::query()->whereKey($project->id)->update(['status' => 'completed']);
 
@@ -373,7 +373,7 @@ test('both project overview salesmen earn from the original sale while referral-
         ->assertJsonPath('summary.sale_total', 12000)
         ->assertJsonPath('commission.summary.projects', 1)
         ->assertJsonPath('commission.rows.0.total_sale', 2000)
-        ->assertJsonPath('commission.rows.0.commission_due', 316.67);
+        ->assertJsonPath('commission.rows.0.commission_due', 633.33);
 });
 
 test('a referral salesman shares only the assigned referral while the original salesman shares every sale', function () {
@@ -431,8 +431,8 @@ test('a referral salesman shares only the assigned referral while the original s
         ->assertJsonPath('salesmen.1.change_orders', 5000)
         ->assertJsonPath('salesmen.1.total_sale', 5000)
         ->assertJsonPath('salesmen.1.project_balance', 0)
-        ->assertJsonPath('salesmen.1.commission_rate', 40)
-        ->assertJsonPath('salesmen.1.commission_due', 1600);
+        ->assertJsonPath('salesmen.1.commission_rate', 50)
+        ->assertJsonPath('salesmen.1.commission_due', 2000);
 });
 
 test('sale-linked receipts unlock commission only for their related sale', function () {
@@ -462,6 +462,46 @@ test('sale-linked receipts unlock commission only for their related sale', funct
         ->assertJsonPath('salesmen.0.commission_due', 2500)
         ->assertJsonPath('salesmen.1.received', 5000)
         ->assertJsonPath('salesmen.1.project_balance', 0)
-        ->assertJsonPath('salesmen.1.commission_due', 1250)
+        ->assertJsonPath('salesmen.1.commission_due', 2500)
         ->assertJsonPath('salesmen.1.sale_breakdown.0.sale_id', $referralSale->id);
+});
+
+test('commission uses collected receivables and reserves open invoice balances before the fifty fifty split', function () {
+    $admin = Account::query()->create(['username' => 'gross-profit@example.com', 'password' => 'password', 'role' => 'admin']);
+    $salesman = Salesman::query()->create([
+        'salesman_name' => 'Gross Profit Salesman',
+        'initial_sale_cut_percent' => 20,
+        'sale_commission_percent' => 10,
+    ]);
+    $project = Project::query()->create([
+        'project_number' => 'SBH#GROSS-PROFIT', 'customer_name' => 'Gross Profit Customer',
+        'salesman_id' => $salesman->salesman_id, 'amount' => 100000,
+        'status' => 'completed', 'created_by' => $admin->acc_id,
+    ]);
+    $sale = $project->sales()->create(['type' => 'original', 'amount' => 100000, 'sale_date' => '2026-09-16']);
+    $project->accountingTransactions()->createMany([
+        ['project_sale_id' => $sale->id, 'type' => 'receivable', 'category' => 'Customer Payment', 'transaction_date' => '2026-09-16', 'amount' => 100000, 'status' => 'deposit'],
+        ['project_sale_id' => $sale->id, 'type' => 'receivable', 'category' => 'Future Payment', 'transaction_date' => '2026-09-16', 'amount' => 20000, 'status' => 'pending'],
+    ]);
+    $invoice = $project->invoices()->create([
+        'project_sale_id' => $sale->id, 'invoice_number' => 'INV#GROSS',
+        'invoice_date' => '2026-09-16', 'amount' => 30000, 'status' => 'ok_to_pay',
+    ]);
+    $project->accountingTransactions()->create([
+        'project_sale_id' => $sale->id, 'project_invoice_id' => $invoice->id,
+        'type' => 'payable', 'category' => 'Invoice Payment', 'transaction_date' => '2026-09-16',
+        'amount' => 10000, 'status' => 'paid',
+    ]);
+
+    $this->actingAs($admin)->getJson(route('management.projects.commission-breakdown', $project))
+        ->assertOk()
+        ->assertJsonPath('accounting.received_commissionable', 100000)
+        ->assertJsonPath('accounting.lead_cost', 20000)
+        ->assertJsonPath('accounting.expenses_commissionable', 10000)
+        ->assertJsonPath('accounting.open_invoices', 20000)
+        ->assertJsonPath('accounting.gross_profit', 50000)
+        ->assertJsonPath('accounting.office_commission', 25000)
+        ->assertJsonPath('accounting.salesman_commission', 25000)
+        ->assertJsonPath('salesmen.0.commission_rate', 50)
+        ->assertJsonPath('salesmen.0.commission_due', 25000);
 });
