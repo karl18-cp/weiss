@@ -55,7 +55,7 @@
             <td class="field"><span class="label">Finance</span><span class="value">${{ number_format($finance, 2) }}</span></td>
         </tr>
         <tr><td colspan="5" class="section">Job Description</td></tr>
-        <tr><td colspan="5" class="description"><span class="value">{{ $project->lead?->product?->product_name ?: '—' }}</span></td></tr>
+        <tr><td colspan="5" class="description"><span class="value">{{ $project->lead?->product?->description ?: $project->lead?->product?->product_name ?: '—' }}</span></td></tr>
         <tr>
             <td colspan="3" class="field"><span class="label">Sale rep</span><span class="value">{{ $salesRepresentatives ?: '—' }}</span></td>
             <td colspan="2" class="field"><span class="label">Project Mgr</span><span class="value">{{ $project->manager?->manager_name ?: '—' }}</span></td>
