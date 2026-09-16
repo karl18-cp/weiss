@@ -965,7 +965,8 @@ test('project vendor invoices support files editing statuses and deletion', func
 });
 
 test('project status follows accounting activity and paid invoice balances', function () {
-    ['account' => $account, 'lead' => $lead] = projectSaleFixtures();
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
 
     $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), [
         'amount' => 1000,
@@ -1003,7 +1004,52 @@ test('project status follows accounting activity and paid invoice balances', fun
         'status' => 'paid',
     ]);
     expect($invoice->refresh()->status)->toBe('paid')
-        ->and($project->refresh()->status)->toBe('completed');
+        ->and($project->refresh()->status)->toBe('progress')
+        ->and($project->completionBlockers())->toContain('Scan and attach every invoice (1 missing).')
+        ->and($project->completionBlockers())->toContain('Enter the LC check number.')
+        ->and($project->completionBlockers())->toContain('Scan and attach the contract.');
+
+    $this->put(route('management.projects.update', $project), [
+        'project_number' => $project->project_number,
+        'status' => 'completed',
+        'company_id' => $lead->company_id,
+        'product_id' => $lead->product_id,
+        'customer_name' => $lead->customer_name,
+        'primary_number' => $lead->primary_number,
+        'secondary_number' => $lead->secondary_number,
+        'mobile_number' => $lead->mobile_number,
+        'email' => $lead->email,
+        'address' => $lead->address,
+        'city' => $lead->city,
+        'state' => $lead->state,
+        'zip_code' => $lead->zip_code,
+        'source' => $lead->source,
+        'appointment_at' => $lead->appointment_at,
+        'lead_created_at' => $lead->created_at,
+        'agent_id' => $lead->agent_id,
+        'agent_2_id' => $lead->agent_2_id,
+        'salesman_1_id' => $lead->salesman_1_id,
+        'salesman_2_id' => $lead->salesman_2_id,
+    ])->assertSessionHasErrors('status');
+    expect($project->refresh()->status)->toBe('progress');
+
+    $invoice->update(['file_path' => 'invoices/scanned.pdf', 'file_name' => 'scanned.pdf']);
+    foreach (['lead_cost', 'commission'] as $type) {
+        $project->paymentChecks()->create([
+            'type' => $type, 'amount' => 100, 'check_number' => strtoupper($type).'-100',
+            'file_path' => "checks/{$type}.jpg", 'file_name' => "{$type}.jpg", 'paid_at' => now(),
+        ]);
+    }
+    $project->documents()->create([
+        'category' => 'Completion Form - Office', 'completion_date' => '2026-09-16',
+        'file_path' => 'completion/form.pdf', 'file_name' => 'form.pdf',
+    ]);
+    $project->documents()->create([
+        'category' => 'Sale Contract', 'file_path' => 'contracts/contract.pdf', 'file_name' => 'contract.pdf',
+    ]);
+    $project->syncStatusFromAccounting();
+    expect($project->refresh()->status)->toBe('completed')
+        ->and($project->completionBlockers())->toBe([]);
 
     $payable->update(['status' => 'pending']);
     expect($invoice->refresh()->status)->toBe('pending')

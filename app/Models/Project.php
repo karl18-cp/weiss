@@ -31,16 +31,47 @@ class Project extends Model
 
         $hasInvoices = $this->invoices()->exists();
         $hasAccounting = $this->accountingTransactions()->exists();
-        $allInvoicesPaid = $hasInvoices
-            && ! $this->invoices()->where('status', '!=', 'paid')->exists();
+        $allInvoicesPaid = ! $this->invoices()->where('status', '!=', 'paid')->exists();
 
-        $status = $allInvoicesPaid
+        $status = $allInvoicesPaid && $this->completionBlockers() === []
             ? 'completed'
             : ($hasInvoices || $hasAccounting ? 'progress' : 'new');
 
         if ($this->status !== $status) {
             $this->updateQuietly(['status' => $status]);
         }
+    }
+
+    /** @return list<string> */
+    public function completionBlockers(): array
+    {
+        $blockers = [];
+        $invoices = $this->invoices()->get(['id', 'status', 'file_path', 'project_document_id']);
+        $openInvoices = $invoices->where('status', '!=', 'paid')->count();
+        $unscannedInvoices = $invoices->filter(
+            fn (ProjectInvoice $invoice): bool => blank($invoice->file_path) && blank($invoice->project_document_id),
+        )->count();
+
+        if ($openInvoices > 0) $blockers[] = "Pay all invoices ({$openInvoices} open).";
+        if ($unscannedInvoices > 0) $blockers[] = "Scan and attach every invoice ({$unscannedInvoices} missing).";
+
+        foreach (['lead_cost' => 'LC', 'commission' => 'CO'] as $type => $label) {
+            $check = $this->paymentChecks()->where('type', $type)->first();
+            if (! $check || blank($check->check_number)) $blockers[] = "Enter the {$label} check number.";
+            if (! $check || blank($check->file_path)) $blockers[] = "Scan and upload the {$label} check.";
+        }
+
+        $completionForm = $this->documents()
+            ->where('category', 'like', 'Completion Form%')
+            ->whereNotNull('completion_date')
+            ->exists();
+        if (! $completionForm) $blockers[] = 'Upload the completion form and enter its date.';
+
+        $hasContract = filled($this->contract_file_path)
+            || $this->documents()->where('category', 'Sale Contract')->exists();
+        if (! $hasContract) $blockers[] = 'Scan and attach the contract.';
+
+        return $blockers;
     }
 
     public function lead(): BelongsTo

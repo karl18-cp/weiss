@@ -207,6 +207,7 @@ type ProjectPaymentCheck = {
     id: number;
     type: 'lead_cost' | 'commission';
     amount: string;
+    check_number: string | null;
     file_name: string | null;
     file_mime: string | null;
     file_size: number | null;
@@ -298,6 +299,7 @@ type Project = {
         project_accounting_transaction_id: number | null;
         project_sale_id: number | null;
         category: string;
+        completion_date: string | null;
         file_name: string;
         file_mime: string | null;
         file_size: number | null;
@@ -644,15 +646,17 @@ export default function Projects({
         target_id: string;
         completion_audience?: 'office' | 'salesman';
         completion_salesman_id?: string;
-    }>({ files: [], target_type: 'project', target_id: '', completion_audience: 'office', completion_salesman_id: '' });
+        completion_date?: string;
+    }>({ files: [], target_type: 'project', target_id: '', completion_audience: 'office', completion_salesman_id: '', completion_date: '' });
     const [completionModalOpen, setCompletionModalOpen] = useState(false);
     const [completionAudience, setCompletionAudience] = useState<'office' | 'salesman'>('office');
     const [completionSalesmanId, setCompletionSalesmanId] = useState('');
     const [paymentCheckType, setPaymentCheckType] = useState<
         'lead_cost' | 'commission' | null
     >(null);
-    const paymentCheckForm = useForm<{ amount: string; check_file: File | null }>({
+    const paymentCheckForm = useForm<{ amount: string; check_number: string; check_file: File | null }>({
         amount: '',
+        check_number: '',
         check_file: null,
     });
     const [
@@ -2474,7 +2478,7 @@ export default function Projects({
         setCompletionSalesmanId('');
         documentUploadForm.setData({
             files: [], target_type: 'completion', target_id: '',
-            completion_audience: 'office', completion_salesman_id: '',
+            completion_audience: 'office', completion_salesman_id: '', completion_date: localDateValue(),
         });
         documentUploadForm.clearErrors();
         setCompletionModalOpen(true);
@@ -2483,7 +2487,7 @@ export default function Projects({
 
     const openPaymentCheckModal = async (type: 'lead_cost' | 'commission') => {
         const existing = selected?.payment_checks.find((check) => check.type === type);
-        paymentCheckForm.setData({ amount: existing?.amount ?? '', check_file: null });
+        paymentCheckForm.setData({ amount: existing?.amount ?? '', check_number: existing?.check_number ?? '', check_file: null });
         paymentCheckForm.clearErrors();
         setPaymentCheckType(type);
 
@@ -9427,9 +9431,18 @@ export default function Projects({
                                             />
                                             {paymentCheckForm.errors.amount && <small>{paymentCheckForm.errors.amount}</small>}
                                         </label>
+                                        <label>
+                                            Check number
+                                            <input
+                                                value={paymentCheckForm.data.check_number}
+                                                onChange={(event) => paymentCheckForm.setData('check_number', event.target.value)}
+                                                placeholder="Enter check number"
+                                            />
+                                            {paymentCheckForm.errors.check_number && <small>{paymentCheckForm.errors.check_number}</small>}
+                                        </label>
                                         <div className={`project-payment-check-status ${existing?.file_name ? 'is-paid' : ''}`}>
                                             <small>Status</small>
-                                            <strong>{existing?.file_name ? 'Paid' : 'Pending'}</strong>
+                                            <strong>{existing?.file_name && existing.check_number ? 'Paid' : 'Pending'}</strong>
                                         </div>
                                     </div>
                                     {existing?.file_name && (
@@ -9497,6 +9510,16 @@ export default function Projects({
                                 </DialogHeader>
                                 <div className="project-accounting-form-top">
                                     <label>
+                                        Completion date
+                                        <input
+                                            type="date"
+                                            value={documentUploadForm.data.completion_date ?? ''}
+                                            onChange={(event) => documentUploadForm.setData('completion_date', event.target.value)}
+                                            required
+                                        />
+                                        {documentUploadForm.errors.completion_date && <small>{documentUploadForm.errors.completion_date}</small>}
+                                    </label>
+                                    <label>
                                         Copy for
                                         <select
                                             value={completionAudience}
@@ -9561,7 +9584,7 @@ export default function Projects({
                                     >
                                         <Printer /> Export / print PDF
                                     </a>
-                                    <button type="submit" disabled={documentUploadForm.processing || documentUploadForm.data.files.length === 0 || (completionAudience === 'salesman' && !completionSalesmanId)}>
+                                    <button type="submit" disabled={documentUploadForm.processing || documentUploadForm.data.files.length === 0 || !documentUploadForm.data.completion_date || (completionAudience === 'salesman' && !completionSalesmanId)}>
                                         {documentUploadForm.processing ? 'Uploading...' : 'Upload forms'}
                                     </button>
                                 </DialogFooter>

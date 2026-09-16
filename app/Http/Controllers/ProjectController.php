@@ -370,11 +370,11 @@ class ProjectController extends Controller
                 ]),
                 'documents' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
-                        ->select(['id', 'project_id', 'project_invoice_id', 'project_accounting_transaction_id', 'project_sale_id', 'category', 'file_name', 'file_mime', 'file_size', 'created_at'])
+                        ->select(['id', 'project_id', 'project_invoice_id', 'project_accounting_transaction_id', 'project_sale_id', 'category', 'completion_date', 'file_name', 'file_mime', 'file_size', 'created_at'])
                     : $query->whereRaw('1 = 0'),
                 'paymentChecks' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
-                        ->select(['id', 'project_id', 'type', 'amount', 'file_name', 'file_mime', 'file_size', 'paid_at'])
+                        ->select(['id', 'project_id', 'type', 'amount', 'check_number', 'file_name', 'file_mime', 'file_size', 'paid_at'])
                     : $query->whereRaw('1 = 0'),
                 'activityLogs' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
@@ -434,6 +434,12 @@ class ProjectController extends Controller
     public function store(ProjectStoreRequest $request, ProjectNumberAllocator $projectNumbers): RedirectResponse
     {
         $data = $request->validated();
+
+        if ($data['status'] === 'completed') {
+            throw ValidationException::withMessages([
+                'status' => 'Create the project first, then upload all required completion documents before marking it Completed.',
+            ]);
+        }
 
         $project = DB::transaction(function () use ($request, $data, $projectNumbers): Project {
             $project = Project::query()->create([
@@ -790,6 +796,15 @@ class ProjectController extends Controller
         ProjectNumberAllocator $projectNumbers,
     ): RedirectResponse {
         $data = $request->validated();
+
+        if ($data['status'] === 'completed') {
+            $blockers = $project->completionBlockers();
+            if ($blockers !== []) {
+                throw ValidationException::withMessages([
+                    'status' => 'This job cannot be completed yet: '.implode(' ', $blockers),
+                ]);
+            }
+        }
 
         DB::transaction(function () use ($project, $data, $projectNumbers): void {
             $companyId = (int) ($data['company_id'] ?? 0);
@@ -1277,6 +1292,7 @@ class ProjectController extends Controller
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'check_number' => ['nullable', 'string', 'max:100'],
             'check_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
         ]);
         $paymentCheck = $project->paymentChecks()->firstOrNew(['type' => $type]);
@@ -1284,13 +1300,14 @@ class ProjectController extends Controller
         $uploadedFile = $request->file('check_file');
 
         $paymentCheck->amount = $data['amount'];
+        $paymentCheck->check_number = $data['check_number'] ?? null;
         if ($uploadedFile) {
             $paymentCheck->file_path = $uploadedFile->store("project-payment-checks/{$project->id}", 'local');
             $paymentCheck->file_name = $uploadedFile->getClientOriginalName();
             $paymentCheck->file_mime = $uploadedFile->getMimeType();
             $paymentCheck->file_size = $uploadedFile->getSize();
-            $paymentCheck->paid_at = now();
         }
+        $paymentCheck->paid_at = $paymentCheck->file_path && filled($paymentCheck->check_number) ? now() : null;
         $paymentCheck->save();
 
         if ($uploadedFile && $oldFilePath && $oldFilePath !== $paymentCheck->file_path) {
@@ -1302,6 +1319,7 @@ class ProjectController extends Controller
             : null;
         $label = $type === 'lead_cost' ? 'Lead cost' : 'Commission';
         Inertia::flash('toast', $this->driveSyncToast("{$label} tracking updated.", $driveSync));
+        $project->syncStatusFromAccounting();
 
         return back();
     }
@@ -1336,6 +1354,7 @@ class ProjectController extends Controller
             'file_size' => null,
             'paid_at' => null,
         ]);
+        $project->syncStatusFromAccounting();
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Check removed and status changed to pending.']);
 
         return back();
@@ -1361,6 +1380,7 @@ class ProjectController extends Controller
             'file_size' => null,
         ]);
         $document->delete();
+        $project->syncStatusFromAccounting();
 
         Inertia::flash('toast', $this->driveDeletionToast('File removed from the CRM.', $driveDeleted));
 
@@ -1382,6 +1402,7 @@ class ProjectController extends Controller
             'target_id' => ['nullable', 'integer'],
             'completion_audience' => ['nullable', 'required_if:target_type,completion', 'in:office,salesman'],
             'completion_salesman_id' => ['nullable', 'integer', 'exists:salesmen,salesman_id'],
+            'completion_date' => ['nullable', 'required_if:target_type,completion', 'date'],
         ]);
 
         $invoice = null;
@@ -1416,6 +1437,7 @@ class ProjectController extends Controller
                 'project_sale_id' => $sale?->id,
                 'uploaded_by' => $request->user()?->getAuthIdentifier(),
                 'category' => $category,
+                'completion_date' => $data['target_type'] === 'completion' ? $data['completion_date'] : null,
                 'file_path' => $path,
                 'file_name' => $file->getClientOriginalName(),
                 'file_mime' => $file->getMimeType(),
@@ -1444,6 +1466,7 @@ class ProjectController extends Controller
                 ? 'Files saved in CRM; some Google Drive uploads need retrying.'
                 : 'Files uploaded to the record, project DOC tab, and Google Drive.',
         ]);
+        $project->syncStatusFromAccounting();
 
         return back();
     }
@@ -1653,6 +1676,8 @@ class ProjectController extends Controller
                 ]);
             }
         }
+
+        $project->syncStatusFromAccounting();
 
         return $failures;
     }

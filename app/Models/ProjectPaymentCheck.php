@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['project_id', 'type', 'amount', 'file_path', 'file_name', 'file_mime', 'file_size', 'paid_at'])]
+#[Fillable(['project_id', 'type', 'amount', 'check_number', 'file_path', 'file_name', 'file_mime', 'file_size', 'paid_at'])]
 class ProjectPaymentCheck extends Model
 {
     public function project(): BelongsTo
