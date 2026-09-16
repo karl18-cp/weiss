@@ -19,6 +19,7 @@ use App\Models\Project;
 use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
 use App\Models\ProjectDocument;
+use App\Models\ProjectPaymentCheck;
 use App\Models\ProjectSale;
 use App\Models\Salesman;
 use App\Models\Vendor;
@@ -337,6 +338,10 @@ class ProjectController extends Controller
                 'documents' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
                         ->select(['id', 'project_id', 'project_invoice_id', 'project_accounting_transaction_id', 'project_sale_id', 'category', 'file_name', 'file_mime', 'file_size', 'created_at'])
+                    : $query->whereRaw('1 = 0'),
+                'paymentChecks' => fn ($query) => $selectedProjectId > 0
+                    ? $query->where('project_id', $selectedProjectId)
+                        ->select(['id', 'project_id', 'type', 'amount', 'file_name', 'file_mime', 'file_size', 'paid_at'])
                     : $query->whereRaw('1 = 0'),
                 'activityLogs' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
@@ -1231,6 +1236,76 @@ class ProjectController extends Controller
         abort_unless($document->project_id === $project->id && Storage::disk('local')->exists($document->file_path), 404);
 
         return Storage::disk('local')->response($document->file_path, $document->file_name, ['Content-Disposition' => 'inline']);
+    }
+
+    public function storePaymentCheck(Request $request, Project $project, string $type): RedirectResponse
+    {
+        abort_unless(in_array($type, ['lead_cost', 'commission'], true), 404);
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'check_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
+        ]);
+        $paymentCheck = $project->paymentChecks()->firstOrNew(['type' => $type]);
+        $oldFilePath = $paymentCheck->file_path;
+        $uploadedFile = $request->file('check_file');
+
+        $paymentCheck->amount = $data['amount'];
+        if ($uploadedFile) {
+            $paymentCheck->file_path = $uploadedFile->store("project-payment-checks/{$project->id}", 'local');
+            $paymentCheck->file_name = $uploadedFile->getClientOriginalName();
+            $paymentCheck->file_mime = $uploadedFile->getMimeType();
+            $paymentCheck->file_size = $uploadedFile->getSize();
+            $paymentCheck->paid_at = now();
+        }
+        $paymentCheck->save();
+
+        if ($uploadedFile && $oldFilePath && $oldFilePath !== $paymentCheck->file_path) {
+            Storage::disk('local')->delete($oldFilePath);
+        }
+
+        $driveSync = $uploadedFile
+            ? $this->mirrorProjectFile($project, $paymentCheck->file_path, $paymentCheck->file_name, $paymentCheck->file_mime)
+            : null;
+        $label = $type === 'lead_cost' ? 'Lead cost' : 'Commission';
+        Inertia::flash('toast', $this->driveSyncToast("{$label} tracking updated.", $driveSync));
+
+        return back();
+    }
+
+    public function showPaymentCheckFile(Project $project, ProjectPaymentCheck $paymentCheck): StreamedResponse
+    {
+        abort_unless(
+            $paymentCheck->project_id === $project->id
+            && $paymentCheck->file_path
+            && Storage::disk('local')->exists($paymentCheck->file_path),
+            404,
+        );
+
+        return Storage::disk('local')->response(
+            $paymentCheck->file_path,
+            $paymentCheck->file_name,
+            ['Content-Disposition' => 'inline'],
+        );
+    }
+
+    public function destroyPaymentCheckFile(Project $project, ProjectPaymentCheck $paymentCheck): RedirectResponse
+    {
+        abort_unless($paymentCheck->project_id === $project->id, 404);
+
+        if ($paymentCheck->file_path) {
+            Storage::disk('local')->delete($paymentCheck->file_path);
+        }
+        $paymentCheck->update([
+            'file_path' => null,
+            'file_name' => null,
+            'file_mime' => null,
+            'file_size' => null,
+            'paid_at' => null,
+        ]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Check removed and status changed to pending.']);
+
+        return back();
     }
 
     public function destroyProjectDocument(Project $project, ProjectDocument $document): RedirectResponse

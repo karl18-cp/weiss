@@ -103,6 +103,11 @@ class Project extends Model
         return $this->hasMany(ProjectDocument::class)->latest();
     }
 
+    public function paymentChecks(): HasMany
+    {
+        return $this->hasMany(ProjectPaymentCheck::class);
+    }
+
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ProjectActivityLog::class)->latest();

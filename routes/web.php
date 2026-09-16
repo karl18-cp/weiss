@@ -193,6 +193,11 @@ Route::middleware(['auth', 'verified', 'manager.permission'])->group(function ()
         Route::get('projects/{project}/documents/{document}/file', [ProjectController::class, 'showProjectDocument'])->name('projects.documents.file');
         Route::post('projects/{project}/documents', [ProjectController::class, 'storeProjectDocuments'])->name('projects.documents.store');
         Route::delete('projects/{project}/documents/{document}', [ProjectController::class, 'destroyProjectDocument'])->name('projects.documents.destroy');
+        Route::post('projects/{project}/payment-checks/{type}', [ProjectController::class, 'storePaymentCheck'])
+            ->whereIn('type', ['lead_cost', 'commission'])
+            ->name('projects.payment-checks.store');
+        Route::get('projects/{project}/payment-checks/{paymentCheck}/file', [ProjectController::class, 'showPaymentCheckFile'])->name('projects.payment-checks.file');
+        Route::delete('projects/{project}/payment-checks/{paymentCheck}/file', [ProjectController::class, 'destroyPaymentCheckFile'])->name('projects.payment-checks.file.destroy');
         Route::post('projects/{project}/accounting-transactions', [ProjectController::class, 'storeAccountingTransaction'])->name('projects.accounting-transactions.store');
         Route::match(['post', 'put'], 'projects/{project}/accounting-transactions/{accountingTransaction}', [ProjectController::class, 'updateAccountingTransaction'])->name('projects.accounting-transactions.update');
         Route::patch('projects/{project}/accounting-transactions/{accountingTransaction}/qb', [ProjectController::class, 'updateReceivableQuickBooks'])->name('projects.accounting-transactions.qb');

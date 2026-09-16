@@ -2698,6 +2698,56 @@
     grid-area: overview;
 }
 
+.project-overview-actions {
+    display: flex;
+    flex: 1;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+
+.project-overview-actions button {
+    display: inline-flex;
+    min-height: 1.9rem;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid #cdd9ea;
+    border-radius: 0.48rem;
+    color: #245bd9;
+    background: #f6f9ff;
+    font-size: 0.58rem;
+    font-weight: 800;
+}
+
+.project-overview-actions button svg {
+    width: 0.72rem;
+    height: 0.72rem;
+}
+
+.project-overview-actions button.has-file {
+    border-color: #69d69b;
+    color: #087a42;
+    background: #ddf8e9;
+}
+
+.project-payment-check-status {
+    display: flex;
+    min-height: 3.2rem;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #f1d99d;
+    border-radius: 0.55rem;
+    color: #9a6700;
+    background: #fff8e5;
+}
+
+.project-payment-check-status.is-paid {
+    border-color: #7bdca7;
+    color: #087a42;
+    background: #e4faee;
+}
+
 .project-detail-card--sale {
     grid-area: sale;
 }

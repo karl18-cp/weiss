@@ -203,6 +203,16 @@ type ProjectDocument = {
     url: string;
 };
 
+type ProjectPaymentCheck = {
+    id: number;
+    type: 'lead_cost' | 'commission';
+    amount: string;
+    file_name: string | null;
+    file_mime: string | null;
+    file_size: number | null;
+    paid_at: string | null;
+};
+
 type BalanceView = 'receivable' | 'payable' | 'invoice';
 
 type BalanceItem = {
@@ -287,6 +297,7 @@ type Project = {
         file_size: number | null;
         created_at: string;
     }>;
+    payment_checks: ProjectPaymentCheck[];
     activity_logs: Array<{
         id: number;
         subject_type: string;
@@ -631,6 +642,13 @@ export default function Projects({
     const [completionModalOpen, setCompletionModalOpen] = useState(false);
     const [completionAudience, setCompletionAudience] = useState<'office' | 'salesman'>('office');
     const [completionSalesmanId, setCompletionSalesmanId] = useState('');
+    const [paymentCheckType, setPaymentCheckType] = useState<
+        'lead_cost' | 'commission' | null
+    >(null);
+    const paymentCheckForm = useForm<{ amount: string; check_file: File | null }>({
+        amount: '',
+        check_file: null,
+    });
     const [
         accountingAttachmentTransaction,
         setAccountingAttachmentTransaction,
@@ -2455,6 +2473,38 @@ export default function Projects({
         documentUploadForm.clearErrors();
         setCompletionModalOpen(true);
         if (!commissionBreakdown) void loadCommissionBreakdown();
+    };
+
+    const openPaymentCheckModal = async (type: 'lead_cost' | 'commission') => {
+        const existing = selected?.payment_checks.find((check) => check.type === type);
+        paymentCheckForm.setData({ amount: existing?.amount ?? '', check_file: null });
+        paymentCheckForm.clearErrors();
+        setPaymentCheckType(type);
+
+        if (!existing && !commissionBreakdown && selected) {
+            setCommissionBreakdownLoading(true);
+            try {
+                const response = await fetch(`/management/projects/${selected.id}/commission-breakdown`, {
+                    headers: { Accept: 'application/json' },
+                });
+                if (!response.ok) return;
+                const breakdown = (await response.json()) as ProjectCommissionBreakdown;
+                setCommissionBreakdown(breakdown);
+                paymentCheckForm.setData('amount', String(
+                    type === 'lead_cost'
+                        ? breakdown.accounting.lead_cost
+                        : breakdown.accounting.total_commission,
+                ));
+            } finally {
+                setCommissionBreakdownLoading(false);
+            }
+        } else if (!existing && commissionBreakdown) {
+            paymentCheckForm.setData('amount', String(
+                type === 'lead_cost'
+                    ? commissionBreakdown.accounting.lead_cost
+                    : commissionBreakdown.accounting.total_commission,
+            ));
+        }
     };
 
     useEffect(() => {
@@ -5890,6 +5940,29 @@ export default function Projects({
                                             <h3>Project overview</h3>
                                             <p>Current project information</p>
                                         </div>
+                                        <div className="project-overview-actions">
+                                            <button
+                                                type="button"
+                                                className={selected.documents.some((document) => document.category.startsWith('Completion Form')) ? 'has-file' : ''}
+                                                onClick={openCompletionModal}
+                                            >
+                                                <FileText /> Completion
+                                            </button>
+                                            {(['lead_cost', 'commission'] as const).map((type) => {
+                                                const check = selected.payment_checks.find((item) => item.type === type);
+                                                return (
+                                                    <button
+                                                        key={type}
+                                                        type="button"
+                                                        className={check?.file_name ? 'has-file' : ''}
+                                                        onClick={() => void openPaymentCheckModal(type)}
+                                                        title={type === 'lead_cost' ? 'Lead Cost' : 'Total Commission'}
+                                                    >
+                                                        <CircleDollarSign /> {type === 'lead_cost' ? 'LC' : 'CO'}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </header>
                                     <div className="project-overview-grid">
                                         <div>
@@ -9303,6 +9376,91 @@ export default function Projects({
                             </DialogFooter>
                         </form>
                     </DialogContent>
+                </Dialog>
+
+                <Dialog
+                    open={paymentCheckType !== null}
+                    onOpenChange={(open) => !open && !paymentCheckForm.processing && setPaymentCheckType(null)}
+                >
+                    {selected && paymentCheckType && (() => {
+                        const existing = selected.payment_checks.find((check) => check.type === paymentCheckType);
+                        const label = paymentCheckType === 'lead_cost' ? 'Lead Cost (LC)' : 'Total Commission (CO)';
+
+                        return (
+                            <DialogContent className="project-accounting-attachment-modal">
+                                <form
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        paymentCheckForm.post(`/management/projects/${selected.id}/payment-checks/${paymentCheckType}`, {
+                                            forceFormData: true,
+                                            preserveScroll: true,
+                                            onSuccess: () => setPaymentCheckType(null),
+                                        });
+                                    }}
+                                >
+                                    <DialogHeader>
+                                        <DialogTitle>{label}</DialogTitle>
+                                        <DialogDescription>
+                                            Track this amount separately from job costs. Attaching the check marks it paid.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="project-accounting-form-top">
+                                        <label>
+                                            Amount
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={paymentCheckForm.data.amount}
+                                                onChange={(event) => paymentCheckForm.setData('amount', event.target.value)}
+                                                required
+                                            />
+                                            {paymentCheckForm.errors.amount && <small>{paymentCheckForm.errors.amount}</small>}
+                                        </label>
+                                        <div className={`project-payment-check-status ${existing?.file_name ? 'is-paid' : ''}`}>
+                                            <small>Status</small>
+                                            <strong>{existing?.file_name ? 'Paid' : 'Pending'}</strong>
+                                        </div>
+                                    </div>
+                                    {existing?.file_name && (
+                                        <div className="project-accounting-attachment-list">
+                                            <div className="project-accounting-attachment-list__item">
+                                                <FileText />
+                                                <span>{existing.file_name}</span>
+                                                <a href={`/management/projects/${selected.id}/payment-checks/${existing.id}/file`} target="_blank" rel="noreferrer">View / print</a>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => router.delete(`/management/projects/${selected.id}/payment-checks/${existing.id}/file`, {
+                                                        preserveScroll: true,
+                                                        onSuccess: () => setPaymentCheckType(null),
+                                                    })}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <label className="project-accounting-attachment-upload">
+                                        <Upload />
+                                        <strong>{paymentCheckForm.data.check_file?.name ?? (existing?.file_name ? 'Replace check' : 'Upload / scan check')}</strong>
+                                        <small>PDF, JPG, PNG, WebP, HEIC, or HEIF</small>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif"
+                                            onChange={(event) => paymentCheckForm.setData('check_file', event.target.files?.[0] ?? null)}
+                                        />
+                                    </label>
+                                    {paymentCheckForm.errors.check_file && <small>{paymentCheckForm.errors.check_file}</small>}
+                                    <DialogFooter className="project-sale-modal__footer">
+                                        <button type="button" onClick={() => setPaymentCheckType(null)}>Cancel</button>
+                                        <button type="submit" disabled={paymentCheckForm.processing || commissionBreakdownLoading}>
+                                            {paymentCheckForm.processing ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </DialogFooter>
+                                </form>
+                            </DialogContent>
+                        );
+                    })()}
                 </Dialog>
 
                 <Dialog
