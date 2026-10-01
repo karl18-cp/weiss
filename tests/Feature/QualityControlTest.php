@@ -72,6 +72,11 @@ test('quality control contains only leads related to projects', function () {
         'status' => 'new',
         'created_by' => $account->acc_id,
     ]);
+    $projectLead->notes()->create([
+        'note_type' => 'dispatch',
+        'body' => 'Original Lead Card dispatch note.',
+        'created_by' => $account->acc_id,
+    ]);
 
     $this->actingAs($account)
         ->get(route('management.quality-control'))
@@ -80,10 +85,51 @@ test('quality control contains only leads related to projects', function () {
             ->has('projects', 1)
             ->where('projects.0.lead.id', $projectLead->id)
             ->where('projects.0.lead.customer_name', 'Project Quality Customer')
+            ->where('projects.0.lead.notes.0.body', 'Original Lead Card dispatch note.')
+            ->has('projects.0.lead.movements', 1)
+            ->where('projects.0.lead.movements.0.to_status', 'project')
             ->missing('projects.1'),
         );
 
     expect($ordinaryLead->project)->toBeNull();
+});
+
+test('lead card notes and movements remain available in both Projects and Quality Control after sale', function () {
+    ['account' => $account, 'ordinaryLead' => $lead] = qualityControlFixtures();
+    foreach (range(1, 30) as $number) {
+        $lead->notes()->create([
+            'note_type' => 'dispatch',
+            'body' => "Lead Card note {$number}",
+            'created_by' => $account->acc_id,
+        ]);
+    }
+
+    $this->actingAs($account)
+        ->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 10000])
+        ->assertRedirect();
+
+    $project = $lead->refresh()->project()->firstOrFail();
+    $hasFullLeadHistory = function ($projects) use ($lead): bool {
+        $matchingProject = collect($projects)->first(
+            fn ($project): bool => (int) data_get($project, 'lead.id') === $lead->id,
+        );
+
+        return $matchingProject !== null
+            && count(data_get($matchingProject, 'lead.notes', [])) === 31
+            && count(data_get($matchingProject, 'lead.movements', [])) === 2
+            && collect(data_get($matchingProject, 'lead.notes', []))
+                ->contains(fn ($note): bool => data_get($note, 'body') === 'Lead Card note 30');
+    };
+    $this->get(route('management.projects', ['project' => $project->id, 'tab' => 'HIS']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('management/projects')
+            ->where('projects', $hasFullLeadHistory)
+        );
+    $this->get(route('management.quality-control'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('management/quality-control')
+            ->where('projects', $hasFullLeadHistory)
+        );
 });
 
 test('a quality control note is saved on the project lead', function () {

@@ -111,6 +111,7 @@ function toForm(lead?: Lead) {
 function latestNote(lead: Lead, type: string): string {
     return (
         lead.notes.find((note) => note.note_type === type)?.body ??
+        (type === 'telemarketer' && lead.telemarketer_notes ? lead.telemarketer_notes : null) ??
         `No ${type.replace('_', ' ')} note yet.`
     );
 }
@@ -808,6 +809,7 @@ export default function QualityControl({
                                         ['Telemarketer', 'telemarketer'],
                                         ['Confirmation', 'confirmation'],
                                         ['Dispatch', 'dispatch'],
+                                        ['Appointment result', 'appointment_result'],
                                     ].map(([label, type]) => (
                                         <article key={type}>
                                             <h3>{label} notes</h3>
@@ -820,6 +822,32 @@ export default function QualityControl({
                                         </article>
                                     ))}
                                 </div>
+
+                                <article className="quality-control-history">
+                                    <header>
+                                        <div><ClipboardCheck /><h3>Lead Card History &amp; Notes</h3></div>
+                                        <span>{selected.lead.notes.length + (selected.lead.movements?.length ?? 0)} records</span>
+                                    </header>
+                                    <div className="quality-control-history__list">
+                                        {[
+                                            ...selected.lead.notes.map((note) => ({ kind: 'note' as const, id: note.id, created_at: note.created_at, note })),
+                                            ...(selected.lead.movements ?? []).map((movement) => ({ kind: 'movement' as const, id: movement.id, created_at: movement.created_at, movement })),
+                                        ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((entry) => (
+                                            <div key={`${entry.kind}-${entry.id}`}>
+                                                <header>
+                                                    <strong>{entry.kind === 'note' ? entry.note.note_type.replaceAll('_', ' ') : 'Lead moved'}</strong>
+                                                    <time>{dateFormatter.format(new Date(entry.created_at))} {timeFormatter.format(new Date(entry.created_at))}</time>
+                                                </header>
+                                                {entry.kind === 'note' ? (
+                                                    <><small>By {entry.note.creator?.username || 'System'}</small><p>{entry.note.body}</p></>
+                                                ) : (
+                                                    <><small>By {entry.movement.mover?.username || 'System'}</small><p>{(entry.movement.from_status || 'Created').replaceAll('_', ' ')} → {entry.movement.to_status.replaceAll('_', ' ')}</p></>
+                                                )}
+                                            </div>
+                                        ))}
+                                        {selected.lead.notes.length === 0 && (selected.lead.movements?.length ?? 0) === 0 && <p>No lead history recorded yet.</p>}
+                                    </div>
+                                </article>
 
                                 <article className="quality-control-notes">
                                     <header>

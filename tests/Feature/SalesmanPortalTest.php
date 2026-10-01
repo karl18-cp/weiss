@@ -399,6 +399,7 @@ test('salesmen can add appointment result notes only to assigned leads', functio
     expect($assigned->refresh()->status)->toBe('project');
     expect($assigned->project)->not->toBeNull();
     expect($assigned->project->amount)->toBe('12500.00');
+    expect($assigned->project->project_number)->toBeNull();
     Storage::disk('local')->assertExists($assigned->project->contract_file_path);
 
     foreach (['appointment_result', 'dispatch'] as $noteType) {

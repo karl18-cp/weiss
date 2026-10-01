@@ -203,7 +203,7 @@ class CallToolsWebhookController extends Controller
                 'company_id' => $relationships['company_id'],
                 'source' => 'CallTools',
                 'calltools_campaign_name' => $data['campaign_name'] ?? null,
-                'agent_id' => $existingLead?->agent_id ?? $relationships['agent_id'],
+                'agent_id' => $existingLead ? $existingLead->agent_id : $relationships['agent_id'],
                 'created_by' => $relationships['created_by'],
                 'status' => 'fresh',
             ],
@@ -306,12 +306,27 @@ class CallToolsWebhookController extends Controller
                 ->where('agent_name', trim($agentName))
                 ->first(['agent_id', 'company_id']);
 
+            if (! $matchedAgent) {
+                $normalizedAgentName = $this->normalizeAgentName($agentName);
+                $normalizedMatches = Agent::query()
+                    ->get(['agent_id', 'agent_name', 'company_id'])
+                    ->filter(fn (Agent $agent): bool => $this->normalizeAgentName($agent->agent_name) === $normalizedAgentName);
+                $matchedAgent = $normalizedMatches->count() === 1
+                    ? $normalizedMatches->first()
+                    : null;
+            }
+
             if ($matchedAgent) {
                 $agentId = (int) $matchedAgent->agent_id;
-                $companyId = $matchedAgent->company_id
-                    ? (int) $matchedAgent->company_id
-                    : $companyId;
             }
+        }
+
+        // The selected agent is the authoritative source for the company.
+        // This also keeps fallback leads correct if the two CallTools default
+        // IDs were configured independently or the agent changes companies.
+        $resolvedAgent = Agent::query()->whereKey($agentId)->first(['agent_id', 'company_id']);
+        if ($resolvedAgent?->company_id) {
+            $companyId = (int) $resolvedAgent->company_id;
         }
 
         if (is_string($productName) && trim($productName) !== '') {
@@ -367,6 +382,15 @@ class CallToolsWebhookController extends Controller
     }
 
     private function normalizeProductName(string $value): string
+    {
+        return trim((string) preg_replace(
+            '/\s+/',
+            ' ',
+            preg_replace('/[^a-z0-9]+/i', ' ', mb_strtolower($value)),
+        ));
+    }
+
+    private function normalizeAgentName(string $value): string
     {
         return trim((string) preg_replace(
             '/\s+/',

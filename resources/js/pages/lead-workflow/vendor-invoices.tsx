@@ -1,6 +1,9 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
     ChevronLeft,
     ChevronRight,
     FileText,
@@ -143,7 +146,7 @@ const projectAddress = (project: ProjectOption) =>
 
 export default function VendorInvoices({
     invoices = emptyInvoices,
-    filters = { search: '', show_all: false },
+    filters = { search: '', show_all: false, sort: 'date', direction: 'desc' },
     totalInvoices = 0,
     totalAmount = 0,
     totalBalance = 0,
@@ -153,7 +156,7 @@ export default function VendorInvoices({
     vendors = [],
 }: {
     invoices: PaginatedInvoices;
-    filters: { search: string; show_all: boolean };
+    filters: { search: string; show_all: boolean; sort: string; direction: 'asc' | 'desc' };
     totalInvoices: number;
     totalAmount: string | number;
     totalBalance: string | number;
@@ -232,7 +235,7 @@ export default function VendorInvoices({
     const runSearch = (value: string) => {
         router.get(
             '/management/invoices',
-            { search: value || undefined },
+            { search: value || undefined, show_all: filters.show_all ? 1 : undefined, sort: filters.sort, direction: filters.direction },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -240,6 +243,23 @@ export default function VendorInvoices({
             },
         );
     };
+
+    const sortHeader = (key: string, label: string) => (
+        <th aria-sort={filters.sort === key ? (filters.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+            <button
+                type="button"
+                className={`vendor-data-sort ${filters.sort === key ? 'is-active' : ''}`}
+                onClick={() => router.get('/management/invoices', {
+                    search: search || undefined,
+                    show_all: filters.show_all ? 1 : undefined,
+                    sort: key,
+                    direction: filters.sort === key && filters.direction === 'asc' ? 'desc' : 'asc',
+                }, { preserveState: true, preserveScroll: true, replace: true })}
+            >{label}{filters.sort === key
+                ? filters.direction === 'asc' ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />
+                : <ArrowUpDown aria-hidden="true" />}</button>
+        </th>
+    );
 
     const openNew = () => {
         form.setData({
@@ -388,6 +408,8 @@ export default function VendorInvoices({
                                     onClick={() => router.get('/management/invoices', {
                                         search: search || undefined,
                                         show_all: filters.show_all ? undefined : 1,
+                                        sort: filters.sort,
+                                        direction: filters.direction,
                                     })}
                                 >
                                     {filters.show_all ? 'Show balances only' : 'See all invoices'}
@@ -478,16 +500,16 @@ export default function VendorInvoices({
                         <table className="vendor-data-table">
                             <thead>
                                 <tr>
-                                    <th>Charged by</th>
-                                    <th>Invoice number</th>
-                                    <th>Project #</th>
-                                    <th>Rep</th>
-                                    <th>Description</th>
-                                    <th>Date</th>
-                                    <th>Amount</th>
-                                    <th>Balance</th>
-                                    <th>Status</th>
-                                    <th>File</th>
+                                    {sortHeader('charged_by', 'Charged by')}
+                                    {sortHeader('invoice', 'Invoice number')}
+                                    {sortHeader('project', 'Project #')}
+                                    {sortHeader('rep', 'Rep')}
+                                    {sortHeader('description', 'Description')}
+                                    {sortHeader('date', 'Date')}
+                                    {sortHeader('amount', 'Amount')}
+                                    {sortHeader('balance', 'Balance')}
+                                    {sortHeader('status', 'Status')}
+                                    {sortHeader('file', 'File')}
                                 </tr>
                             </thead>
                             <tbody>

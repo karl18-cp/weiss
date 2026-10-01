@@ -10,6 +10,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['project_id', 'type', 'amount', 'sale_date', 'product_id', 'salesman_id'])]
 class ProjectSale extends Model
 {
+    protected static function booted(): void
+    {
+        static::saved(fn (self $sale) => $sale->project?->syncStatusFromAccounting());
+        static::deleted(fn (self $sale) => $sale->project?->syncStatusFromAccounting());
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

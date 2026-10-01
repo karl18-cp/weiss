@@ -20,6 +20,7 @@ use App\Models\ProjectAccountingTransaction;
 use App\Models\ProjectInvoice;
 use App\Models\ProjectDocument;
 use App\Models\ProjectPaymentCheck;
+use App\Models\ProjectPaymentCheckFile;
 use App\Models\ProjectSale;
 use App\Models\Salesman;
 use App\Models\Vendor;
@@ -75,6 +76,7 @@ class ProjectController extends Controller
             ->sum('amount');
         $expenses = (float) $project->accountingTransactions
             ->where('type', 'payable')
+            ->where('exclude_from_totals', false)
             ->sum('amount');
         $saleAmount = (float) ($project->sales->sum('amount') ?: $project->amount);
         $dateSold = $project->sales->sortBy('sale_date')->first()?->sale_date;
@@ -86,31 +88,27 @@ class ProjectController extends Controller
         ])->filter()->unique()->join(', ');
 
         $invoiceRows = $project->invoices
-            ->groupBy(fn (ProjectInvoice $invoice): string => strtolower(trim(
-                $invoice->contractor?->contractor
-                    ?? $invoice->vendor?->vendor
-                    ?? 'Unassigned',
-            )))
+            ->filter(fn (ProjectInvoice $invoice): bool => $invoice->contractor_id !== null)
+            ->groupBy(fn (ProjectInvoice $invoice): int => (int) $invoice->contractor_id)
             ->map(function ($invoices): array {
                 /** @var ProjectInvoice $first */
                 $first = $invoices->first();
 
                 return [
-                    'contractor' => $first->contractor?->contractor ?? $first->vendor?->vendor ?? 'Unassigned',
+                    'contractor_id' => (int) $first->contractor_id,
+                    'contractor' => $first->contractor?->contractor ?? 'Unassigned',
                     'date' => $invoices->sortByDesc('invoice_date')->first()?->invoice_date,
                     'bid' => (float) $invoices->sum('amount'),
                     'note' => $invoices->pluck('notes')->filter()->unique()->join('; '),
                 ];
             })
             ->values();
-        $invoicedContractors = $invoiceRows->pluck('contractor')
-            ->filter()
-            ->map(fn (string $name): string => strtolower(trim($name)))
-            ->all();
+        $invoicedContractors = $invoiceRows->pluck('contractor_id')->all();
         $contractorRows = $invoiceRows->concat(
             $project->contractors
-                ->reject(fn (Contractor $contractor): bool => in_array(strtolower(trim($contractor->contractor)), $invoicedContractors, true))
+                ->reject(fn (Contractor $contractor): bool => in_array((int) $contractor->con_id, $invoicedContractors, true))
                 ->map(fn (Contractor $contractor): array => [
+                    'contractor_id' => (int) $contractor->con_id,
                     'contractor' => $contractor->contractor,
                     'date' => null,
                     'bid' => null,
@@ -160,7 +158,7 @@ class ProjectController extends Controller
             ->sortBy([['transaction_date', 'asc'], ['id', 'asc']])
             ->values();
         $income = (float) $project->accountingTransactions->where('type', 'receivable')->sum('amount');
-        $expenses = (float) $project->accountingTransactions->where('type', 'payable')->sum('amount');
+        $expenses = (float) $project->accountingTransactions->where('type', 'payable')->where('exclude_from_totals', false)->sum('amount');
         $saleAmount = (float) ($project->sales->sum('amount') ?: $project->amount);
         $label = $type === 'payable' ? 'payables' : 'receivables';
         $fileName = preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number ?: "project-{$project->id}").'-'.$label.'.pdf';
@@ -204,37 +202,16 @@ class ProjectController extends Controller
             ...$project->sales->pluck('salesman')->all(),
         ])->filter()->unique('salesman_id')->values();
 
+        $ttl = $this->commissionBreakdown($project)->getData(true);
+        $accounting = $ttl['accounting'];
         $salesman = null;
         $salesmanTotals = null;
         if ($data['audience'] === 'salesman') {
             $salesman = $salesmen->firstWhere('salesman_id', (int) ($data['salesman_id'] ?? 0));
             abort_unless($salesman instanceof Salesman, 422, 'Select a salesman assigned to this project.');
-            $salesmanTotals = $this->commissions->calculate($project, $salesman);
+            $salesmanTotals = collect($ttl['salesmen'])->firstWhere('salesman_id', $salesman->salesman_id);
+            abort_unless(is_array($salesmanTotals), 422, 'The salesman has no TTL breakdown for this project.');
         }
-
-        $receivables = (float) $project->accountingTransactions
-            ->where('type', 'receivable')->where('status', 'deposit')->sum('amount');
-        $payables = $project->accountingTransactions->where('type', 'payable');
-        $expenses = (float) $payables
-            ->reject(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
-            ->filter(fn ($transaction): bool => ! $transaction->project_invoice_id || $transaction->status === 'paid')
-            ->sum('amount');
-        $openInvoices = (float) $project->invoices->sum(function (ProjectInvoice $invoice): float {
-            $paid = (float) $invoice->accountingTransactions
-                ->where('type', 'payable')->where('status', 'paid')->sum('amount');
-
-            return max(0, (float) $invoice->amount - $paid);
-        });
-        $leadCost = (float) $salesmen->sum(function (Salesman $salesman) use ($project): float {
-            $totals = $this->commissions->calculate($project, $salesman);
-
-            return (float) $totals['lead_cost'] + (float) $totals['change_order_lead_cost'];
-        });
-        $grossProfit = max(0, $receivables - $leadCost - $expenses - $openInvoices);
-        $commissionPaid = (float) $payables
-            ->filter(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
-            ->where('status', 'paid')->sum('amount');
-        $saleAmount = (float) ($project->sales->sum('amount') ?: $project->amount);
 
         $options = new Options();
         $options->set('isRemoteEnabled', false);
@@ -245,17 +222,18 @@ class ProjectController extends Controller
             'salesman' => $salesman,
             'salesmanTotals' => $salesmanTotals,
             'officeTotals' => [
-                'sale_amount' => $saleAmount,
-                'receivables' => $receivables,
-                'balance' => $saleAmount - $receivables,
-                'expenses' => $expenses,
-                'open_invoices' => $openInvoices,
-                'lead_cost' => $leadCost,
-                'gross_profit' => $grossProfit,
-                'office_commission' => $grossProfit * 0.5,
-                'salesman_commission' => $grossProfit * 0.5,
-                'commission_paid' => $commissionPaid,
-                'net' => $grossProfit - $commissionPaid,
+                'sale_amount' => $accounting['sale_amount'],
+                'receivables' => $accounting['received_commissionable'],
+                'balance' => $accounting['project_balance'],
+                'expenses' => $accounting['expenses_commissionable'],
+                'open_invoices' => $accounting['open_invoices'],
+                'lead_cost' => $accounting['lead_cost'],
+                'gross_profit' => $accounting['gross_profit'],
+                'commissionable_profit' => $accounting['commissionable_profit'],
+                'office_commission' => $accounting['office_commission'],
+                'salesman_commission' => $accounting['salesman_commission'],
+                'commission_paid' => $accounting['total_commission_paid'],
+                'net' => $accounting['profit_net'],
             ],
         ])->render());
         $dompdf->setPaper('letter', 'portrait');
@@ -297,6 +275,7 @@ class ProjectController extends Controller
             ->where('type', 'receivable')->where('status', 'deposit')->sum('amount');
         $expenses = (float) $project->accountingTransactions
             ->where('type', 'payable')
+            ->where('exclude_from_totals', false)
             ->reject(fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission'))
             ->filter(fn ($transaction): bool => ! $transaction->project_invoice_id || $transaction->status === 'paid')
             ->sum('amount');
@@ -314,9 +293,10 @@ class ProjectController extends Controller
         $leadCosts = (float) $rows->whereIn('salesman_id', $originalSalesmanIds)
             ->sum(fn (array $row): float => (float) $row['lead_cost'] + (float) $row['change_order_lead_cost']);
         $commissionPaid = (float) $rows->sum('commission_paid');
-        $grossProfit = max(0, $received - $expenses - $openInvoices - $leadCosts);
-        $salesmanCommission = $grossProfit * 0.5;
-        $officeCommission = $grossProfit * 0.5;
+        $grossProfit = max(0, $received - $expenses - $leadCosts);
+        $commissionableProfit = max(0, $grossProfit - $openInvoices);
+        $salesmanCommission = $commissionableProfit * 0.5;
+        $officeCommission = $commissionableProfit * 0.5;
 
         return response()->json([
             'project_id' => $project->id,
@@ -329,6 +309,7 @@ class ProjectController extends Controller
                 'expenses_commissionable' => round($expenses, 2),
                 'open_invoices' => round($openInvoices, 2),
                 'gross_profit' => round($grossProfit, 2),
+                'commissionable_profit' => round($commissionableProfit, 2),
                 'salesman_commission' => round($salesmanCommission, 2),
                 'office_commission' => round($officeCommission, 2),
                 'total_commission' => round($salesmanCommission, 2),
@@ -357,6 +338,11 @@ class ProjectController extends Controller
                 'lead.notes' => fn ($query) => $selectedLeadId > 0
                     ? $query->where('lead_id', $selectedLeadId)
                     : $query->whereRaw('1 = 0'),
+                'lead.notes.creator:acc_id,username',
+                'lead.movements' => fn ($query) => $selectedLeadId > 0
+                    ? $query->where('lead_id', $selectedLeadId)
+                    : $query->whereRaw('1 = 0'),
+                'lead.movements.mover:acc_id,username',
                 'sales.product:prod_id,product_name',
                 'sales.salesman:salesman_id,salesman_name',
                 'scheduledPayments' => fn ($query) => $selectedProjectId > 0
@@ -366,7 +352,7 @@ class ProjectController extends Controller
                 'invoices.vendor:vendor_id,vendor',
                 'accountingTransactions' => fn ($query) => $query->select([
                     'id', 'project_id', 'type', 'category', 'transaction_date',
-                    'reference_number', 'counterparty', 'amount', 'status', 'qb',
+                    'reference_number', 'counterparty', 'amount', 'status', 'qb', 'exclude_from_totals',
                 ]),
                 'documents' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
@@ -374,7 +360,8 @@ class ProjectController extends Controller
                     : $query->whereRaw('1 = 0'),
                 'paymentChecks' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
-                        ->select(['id', 'project_id', 'type', 'amount', 'check_number', 'file_name', 'file_mime', 'file_size', 'paid_at'])
+                        ->with('files:id,project_payment_check_id,file_name,file_mime,file_size')
+                        ->select(['id', 'project_id', 'type', 'amount', 'transaction_date', 'payment_method', 'check_number', 'pay_to', 'requested_by', 'notes', 'file_name', 'file_mime', 'file_size', 'paid_at'])
                     : $query->whereRaw('1 = 0'),
                 'activityLogs' => fn ($query) => $selectedProjectId > 0
                     ? $query->where('project_id', $selectedProjectId)
@@ -385,10 +372,7 @@ class ProjectController extends Controller
                 'telemarketer:agent_id,agent_name',
                 'salesman:salesman_id,salesman_name,phone',
                 'manager:manager_id,manager_name',
-                'contractors' => fn ($query) => $selectedProjectId > 0
-                    ? $query->wherePivot('project_id', $selectedProjectId)
-                        ->select(['contractors.con_id', 'contractor'])
-                    : $query->whereRaw('1 = 0'),
+                'contractors' => fn ($query) => $query->select(['contractors.con_id', 'contractor']),
             ])
             ->latest()
             ->get()
@@ -404,6 +388,7 @@ class ProjectController extends Controller
                 'accountingTransactions.salesman:salesman_id,salesman_name',
                 'accountingTransactions.company:com_id,company,prefix',
             ]);
+            $selectedProject->setAttribute('completion_blockers', $selectedProject->completionBlockers());
         }
 
         return Inertia::render('management/projects', [
@@ -488,7 +473,7 @@ class ProjectController extends Controller
         return to_route('management.projects', ['project' => $project->id]);
     }
 
-    public function storeCustomerProject(Request $request, Project $project, ProjectNumberAllocator $projectNumbers): RedirectResponse
+    public function storeCustomerProject(Request $request, Project $project): RedirectResponse
     {
         abort_if($project->lead_id === null, 422, 'A customer-linked project is required.');
 
@@ -505,7 +490,7 @@ class ProjectController extends Controller
         $sourceLead = $project->lead()->firstOrFail();
         $familyId = (int) ($sourceLead->project_family_id ?: $sourceLead->id);
 
-        $newProject = DB::transaction(function () use ($request, $project, $sourceLead, $familyId, $data, $projectNumbers): Project {
+        $newProject = DB::transaction(function () use ($request, $sourceLead, $familyId, $data): Project {
             $newLead = $sourceLead->replicate([
                 'calltools_contact_id',
                 'primary_phone_normalized',
@@ -527,7 +512,7 @@ class ProjectController extends Controller
 
             $newProject = Project::query()->create([
                 'lead_id' => $newLead->id,
-                'project_number' => $projectNumbers->allocateChild($project),
+                'project_number' => null,
                 'amount' => $data['amount'],
                 'status' => 'new',
                 'created_by' => $request->user()->getAuthIdentifier(),
@@ -603,7 +588,7 @@ class ProjectController extends Controller
     public function updateContractors(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
-            'contractor_ids' => ['required', 'array', 'size:4'],
+            'contractor_ids' => ['required', 'array', 'size:6'],
             'contractor_ids.*' => ['nullable', 'integer', 'distinct', 'exists:contractors,con_id'],
         ]);
 
@@ -706,7 +691,6 @@ class ProjectController extends Controller
     public function storeReferral(
         ProjectSaleRequest $request,
         Project $project,
-        ProjectNumberAllocator $projectNumbers,
     ): RedirectResponse
     {
         $salesmanId = $request->validated('salesman_id');
@@ -726,7 +710,6 @@ class ProjectController extends Controller
                 $familyId,
                 $companyId,
                 $salesmanId,
-                $projectNumbers,
             ): array {
                 $newLead = $sourceLead->replicate([
                     'calltools_contact_id',
@@ -747,7 +730,7 @@ class ProjectController extends Controller
 
                 $newProject = Project::query()->create([
                     'lead_id' => $newLead->id,
-                    'project_number' => $projectNumbers->allocateChild($project),
+                    'project_number' => null,
                     'amount' => $request->validated('amount'),
                     'status' => 'new',
                     'created_by' => $request->user()->getAuthIdentifier(),
@@ -763,7 +746,7 @@ class ProjectController extends Controller
 
             $driveFailures = $this->storeSaleDocuments($request, $newProject, $sale);
             Inertia::flash('toast', $this->driveSyncToast(
-                'Referral sale created under a separate project number.',
+                'Referral sale created as a separate project. Its number will be assigned after a deposit.',
                 $driveFailures === 0,
             ));
 
@@ -809,19 +792,28 @@ class ProjectController extends Controller
         DB::transaction(function () use ($project, $data, $projectNumbers): void {
             $companyId = (int) ($data['company_id'] ?? 0);
             $currentCompanyId = (int) ($project->lead?->company_id ?? $project->company_id ?? 0);
-            $requestedNumber = filled($data['project_number'] ?? null)
-                ? (string) $data['project_number']
-                : (string) ($project->project_number ?? '');
+            $requestedNumber = trim((string) ($data['project_number'] ?? ''));
+            $hasDeposit = $project->hasDepositedReceivable();
+            $isManualNumber = $project->lead_id && ! $hasDeposit && filled($requestedNumber);
             $projectNumber = $companyId > 0
                 ? ($currentCompanyId > 0 && $currentCompanyId !== $companyId
-                    ? $projectNumbers->allocateForCompany($companyId)
+                    ? (filled($requestedNumber)
+                        ? $projectNumbers->normalizeForCompany($companyId, $requestedNumber, $project->id)
+                        : ($hasDeposit ? $projectNumbers->allocateForCompany($companyId) : null))
                     : (filled($requestedNumber)
                     ? $projectNumbers->normalizeForCompany($companyId, $requestedNumber, $project->id)
-                    : $projectNumbers->allocateForCompany($companyId)))
-                : $project->project_number;
+                    : ($hasDeposit ? $projectNumbers->allocateForCompany($companyId) : null)))
+                : (filled($requestedNumber) ? $project->project_number : null);
+
+            if (filled($requestedNumber) && $companyId === 0) {
+                throw ValidationException::withMessages([
+                    'company_id' => 'Assign a company before entering a project number.',
+                ]);
+            }
 
             $project->update([
                 'project_number' => $projectNumber,
+                'project_number_manual' => $isManualNumber,
                 'status' => $data['status'],
             ]);
             $lead = $project->lead()->first();
@@ -1292,31 +1284,41 @@ class ProjectController extends Controller
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'transaction_date' => ['required', 'date'],
+            'payment_method' => ['required', 'in:check,zelle,credit_card,wire_transfer,square_transfer,cash'],
             'check_number' => ['nullable', 'string', 'max:100'],
-            'check_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
+            'pay_to' => ['required', 'string', 'max:255'],
+            'requested_by' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:10000'],
+            'check_files' => ['sometimes', 'array', 'max:20'],
+            'check_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp,heic,heif', 'max:20480'],
         ]);
         $paymentCheck = $project->paymentChecks()->firstOrNew(['type' => $type]);
-        $oldFilePath = $paymentCheck->file_path;
-        $uploadedFile = $request->file('check_file');
+        $uploadedFiles = $request->file('check_files', []);
 
         $paymentCheck->amount = $data['amount'];
+        $paymentCheck->transaction_date = $data['transaction_date'];
+        $paymentCheck->payment_method = $data['payment_method'];
         $paymentCheck->check_number = $data['check_number'] ?? null;
-        if ($uploadedFile) {
-            $paymentCheck->file_path = $uploadedFile->store("project-payment-checks/{$project->id}", 'local');
-            $paymentCheck->file_name = $uploadedFile->getClientOriginalName();
-            $paymentCheck->file_mime = $uploadedFile->getMimeType();
-            $paymentCheck->file_size = $uploadedFile->getSize();
-        }
-        $paymentCheck->paid_at = $paymentCheck->file_path && filled($paymentCheck->check_number) ? now() : null;
+        $paymentCheck->pay_to = $data['pay_to'];
+        $paymentCheck->requested_by = ($data['requested_by'] ?? null) ?: ($request->user()?->manager?->manager_name ?: $request->user()?->username);
+        $paymentCheck->notes = $data['notes'] ?? null;
         $paymentCheck->save();
-
-        if ($uploadedFile && $oldFilePath && $oldFilePath !== $paymentCheck->file_path) {
-            Storage::disk('local')->delete($oldFilePath);
+        $syncResults = [];
+        foreach ($uploadedFiles as $uploadedFile) {
+            $path = $uploadedFile->store("project-payment-checks/{$project->id}", 'local');
+            $paymentCheck->files()->create([
+                'file_path' => $path,
+                'file_name' => $uploadedFile->getClientOriginalName(),
+                'file_mime' => $uploadedFile->getMimeType(),
+                'file_size' => $uploadedFile->getSize(),
+            ]);
+            $syncResults[] = $this->mirrorProjectFile($project, $path, $uploadedFile->getClientOriginalName(), $uploadedFile->getMimeType());
         }
-
-        $driveSync = $uploadedFile
-            ? $this->mirrorProjectFile($project, $paymentCheck->file_path, $paymentCheck->file_name, $paymentCheck->file_mime)
-            : null;
+        $paymentCheck->paid_at = (filled($paymentCheck->file_path) || $paymentCheck->files()->exists()) && filled($paymentCheck->check_number) ? now() : null;
+        $paymentCheck->save();
+        $this->syncPaymentCheckPayable($project, $paymentCheck);
+        $driveSync = in_array(false, $syncResults, true) ? false : (count($syncResults) ? end($syncResults) : null);
         $label = $type === 'lead_cost' ? 'Lead cost' : 'Commission';
         Inertia::flash('toast', $this->driveSyncToast("{$label} tracking updated.", $driveSync));
         $project->syncStatusFromAccounting();
@@ -1352,12 +1354,55 @@ class ProjectController extends Controller
             'file_name' => null,
             'file_mime' => null,
             'file_size' => null,
-            'paid_at' => null,
+            'paid_at' => $paymentCheck->files()->exists() && filled($paymentCheck->check_number) ? now() : null,
         ]);
+        $this->syncPaymentCheckPayable($project, $paymentCheck->refresh());
         $project->syncStatusFromAccounting();
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Check removed and status changed to pending.']);
 
         return back();
+    }
+
+    public function showPaymentCheckAttachment(Project $project, ProjectPaymentCheckFile $file): StreamedResponse
+    {
+        abort_unless($file->paymentCheck()->where('project_id', $project->id)->exists() && Storage::disk('local')->exists($file->file_path), 404);
+
+        return Storage::disk('local')->response($file->file_path, $file->file_name, ['Content-Disposition' => 'inline']);
+    }
+
+    public function destroyPaymentCheckAttachment(Project $project, ProjectPaymentCheckFile $file): RedirectResponse
+    {
+        abort_unless($file->paymentCheck()->where('project_id', $project->id)->exists(), 404);
+        $paymentCheck = $file->paymentCheck;
+        Storage::disk('local')->delete($file->file_path);
+        $file->delete();
+        if (! $paymentCheck->files()->exists() && blank($paymentCheck->file_path)) {
+            $paymentCheck->update(['paid_at' => null]);
+        }
+        $this->syncPaymentCheckPayable($project, $paymentCheck->refresh());
+        $project->syncStatusFromAccounting();
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Check file removed.']);
+
+        return back();
+    }
+
+    private function syncPaymentCheckPayable(Project $project, ProjectPaymentCheck $paymentCheck): void
+    {
+        $category = $paymentCheck->type === 'lead_cost' ? 'LC Tracking' : 'CO Tracking';
+        $project->accountingTransactions()->updateOrCreate(
+            ['type' => 'payable', 'category' => $category, 'exclude_from_totals' => true],
+            [
+                'transaction_date' => $paymentCheck->transaction_date ?: now()->toDateString(),
+                'payment_method' => $paymentCheck->payment_method,
+                'reference_number' => $paymentCheck->check_number,
+                'counterparty' => $paymentCheck->pay_to,
+                'requested_by' => $paymentCheck->requested_by,
+                'amount' => $paymentCheck->amount,
+                'status' => $paymentCheck->paid_at ? 'paid' : 'pending',
+                'qb' => false,
+                'notes' => $paymentCheck->notes,
+            ],
+        );
     }
 
     public function destroyProjectDocument(Project $project, ProjectDocument $document): RedirectResponse

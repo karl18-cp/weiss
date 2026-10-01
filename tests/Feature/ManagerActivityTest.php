@@ -2,6 +2,7 @@
 
 use App\Models\Account;
 use App\Models\Agent;
+use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadMovement;
 use App\Models\Manager;
@@ -10,6 +11,13 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 function managerActivityFixtures(): array
 {
+    $company = Company::query()->create([
+        'com_id' => 9902,
+        'company' => 'Manager Activity Company',
+        'address' => '',
+        'prefix' => 'MAC',
+        'project_code' => 'MAC',
+    ]);
     $firstAccount = Account::query()->create([
         'username' => 'activity-one@example.com',
         'password' => 'password',
@@ -24,14 +32,18 @@ function managerActivityFixtures(): array
         'account_id' => $firstAccount->acc_id,
         'manager_name' => 'Activity One',
         'phone' => '',
+        'company_id' => $company->com_id,
         'manager_types' => ['Leads Manager'],
     ]);
     $secondManager = Manager::query()->create([
         'account_id' => $secondAccount->acc_id,
         'manager_name' => 'Activity Two',
         'phone' => '',
+        'company_id' => $company->com_id,
         'manager_types' => [],
     ]);
+    $firstManager->companies()->sync([$company->com_id]);
+    $secondManager->companies()->sync([$company->com_id]);
     $firstManager->permissions()->create([
         'module' => 'data',
         'access_level' => 'view',
@@ -53,6 +65,7 @@ function managerActivityFixtures(): array
         'years_in_house' => 0,
         'appointment_at' => now(),
         'telemarketer_notes' => '',
+        'company_id' => $company->com_id,
         'source' => 'Manual',
         'agent_id' => $agent->agent_id,
         'created_by' => $firstAccount->acc_id,

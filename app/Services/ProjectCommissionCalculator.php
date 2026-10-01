@@ -23,7 +23,7 @@ class ProjectCommissionCalculator
         $eligibleSales = $isOriginalSalesman ? $sales : $sales->filter(
             fn ($sale): bool => $sale->type !== 'original' && (int) $sale->salesman_id === (int) $salesman->salesman_id,
         )->values();
-        $payables = $project->accountingTransactions->where('type', 'payable');
+        $payables = $project->accountingTransactions->where('type', 'payable')->where('exclude_from_totals', false);
         $isCommission = fn ($transaction): bool => str_contains(strtolower((string) $transaction->category), 'commission');
         $receivedBySale = $this->allocateReceivables(
             $sales,
@@ -46,7 +46,8 @@ class ProjectCommissionCalculator
             $leadRate = $sale->type === 'original' ? (float) $salesman->initial_sale_cut_percent : (float) $salesman->change_order_cut_percent;
             $leadCost = $isDiscount ? 0.0 : $receivedShare * $leadRate / 100;
             $futureLeadCost = $isDiscount ? 0.0 : $saleShare * $leadRate / 100;
-            $base = $isDiscount ? $saleShare : max(0, $receivedShare - $expenseShare - $openInvoiceShare - $leadCost);
+            $grossProfit = $isDiscount ? $saleShare : max(0, $receivedShare - $expenseShare - $leadCost);
+            $base = $isDiscount ? $saleShare : max(0, $grossProfit - $openInvoiceShare);
             $futureBase = $isDiscount ? $saleShare : max(0, $saleShare - $expenseShare - $futureLeadCost);
             $rate = 50.0;
 
@@ -56,6 +57,7 @@ class ProjectCommissionCalculator
                 'received_share' => $money($receivedShare), 'expense_share' => $money($expenseShare),
                 'open_invoices' => $money($openInvoiceShare),
                 'lead_cost_rate' => $leadRate, 'lead_cost' => $money($leadCost),
+                'gross_profit' => $money($grossProfit),
                 'commission_base' => $money($base), 'commission_due' => $money($base * $rate / 100),
                 'maximum_commission' => $money($futureBase * $rate / 100),
             ];
@@ -79,7 +81,7 @@ class ProjectCommissionCalculator
             'change_order_lead_cost_rate' => (float) $salesman->change_order_cut_percent,
             'change_order_lead_cost' => $money((float) $saleRows->where('type', '!=', 'original')->sum('lead_cost')),
             'commission_base' => $money(max(0, (float) $saleRows->sum('commission_base'))),
-            'gross_profit' => $money(max(0, (float) $saleRows->sum('commission_base'))),
+            'gross_profit' => $money(max(0, (float) $saleRows->sum('gross_profit'))),
             'commission_rate' => 50.0,
             'commission_due' => $commissionDue,
             'maximum_commission' => $money(max(0, (float) $saleRows->sum('maximum_commission'))),
@@ -102,6 +104,11 @@ class ProjectCommissionCalculator
                 $allocated[$sale->id] += $applied;
                 $remaining -= $applied;
                 if ($remaining <= 0) break;
+            }
+            // A deposited receivable is still received even when it exceeds the
+            // recorded sale amount. Keep the full receipt in the salesman total.
+            if ($remaining > 0 && $sales->isNotEmpty()) {
+                $allocated[$sales->first()->id] += $remaining;
             }
         }
         return $allocated;

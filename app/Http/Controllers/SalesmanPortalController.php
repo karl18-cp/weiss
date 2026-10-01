@@ -317,7 +317,6 @@ class SalesmanPortalController extends Controller
         Request $request,
         Lead $lead,
         WebPushService $push,
-        \App\Services\ProjectNumberAllocator $projectNumbers,
         GoogleDriveProjectStorage $googleDrive,
     ): RedirectResponse
     {
@@ -357,7 +356,7 @@ class SalesmanPortalController extends Controller
             $body .= ' — Sale amount: $'.number_format($saleAmount, 2);
         }
 
-        $soldProject = DB::transaction(function () use ($request, $lead, $body, $user, $action, $saleAmount, $projectNumbers): ?Project {
+        $soldProject = DB::transaction(function () use ($request, $lead, $body, $user, $action, $saleAmount): ?Project {
             LeadNote::query()->create([
                 'lead_id' => $lead->id,
                 'note_type' => 'appointment_result',
@@ -379,9 +378,8 @@ class SalesmanPortalController extends Controller
                 $project->fill([
                     'amount' => $saleAmount,
                     'status' => 'new',
-                    'project_number' => $project->exists
-                        ? $project->project_number
-                        : ($lead->company_id ? $projectNumbers->allocate($lead) : null),
+                    'project_number' => null,
+                    'project_number_manual' => false,
                     'created_by' => $user->getAuthIdentifier(),
                 ])->save();
 

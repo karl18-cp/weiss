@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\ManagerAccess;
+use App\Support\ManagerCompanyAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,10 @@ class EnforceManagerPermission
         $user = $request->user();
         if (! $user || $user->role === 'admin') {
             return $next($request);
+        }
+
+        if ($user->role === 'manager') {
+            ManagerCompanyAccess::assertRequestCompanies($request);
         }
 
         $permissionPath = $request->path();

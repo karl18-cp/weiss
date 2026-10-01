@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\ValidationException;
 
 #[Fillable([
     'project_id',
@@ -28,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'amount',
     'status',
     'qb',
+    'exclude_from_totals',
     'notes',
     'file_path',
     'file_name',
@@ -38,6 +40,20 @@ class ProjectAccountingTransaction extends Model
 {
     protected static function booted(): void
     {
+        static::saving(function (self $transaction): void {
+            if ($transaction->type !== 'receivable' || $transaction->status !== 'deposit'
+                || (! $transaction->isDirty('status') && ! $transaction->isDirty('project_id') && $transaction->exists)) {
+                return;
+            }
+
+            $project = Project::query()->with('lead:id,company_id')->find($transaction->project_id);
+            if ($project?->lead_id && blank($project->project_number)
+                && ! ($project->lead?->company_id ?? $project->company_id)) {
+                throw ValidationException::withMessages([
+                    'company_id' => 'Assign a company before recording the first deposit and job number.',
+                ]);
+            }
+        });
         static::created(function (self $transaction): void {
             $transaction->syncLinkedInvoice();
             $transaction->syncProjectStatus();
@@ -131,6 +147,7 @@ class ProjectAccountingTransaction extends Model
             'transaction_date' => 'date',
             'amount' => 'decimal:2',
             'qb' => 'boolean',
+            'exclude_from_totals' => 'boolean',
             'file_size' => 'integer',
         ];
     }

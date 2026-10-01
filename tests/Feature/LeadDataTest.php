@@ -9,6 +9,7 @@ use App\Models\LeadNote;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectAccountingTransaction;
+use App\Models\ProjectInvoice;
 use App\Models\Salesman;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -264,6 +265,63 @@ test('accounting registers filter by salesman and contractor', function () {
             ->where('transactions.data.0.notes', 'Matching Payable')
             ->where('filters.salesman', $salesman->salesman_id)
             ->where('filters.contractor', $contractor->con_id));
+
+    $this->get(route('management.payables', ['sort' => 'party', 'direction' => 'asc']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('transactions.data', 2)
+            ->where('transactions.data.0.contractor', 'Filtered Contractor')
+            ->where('transactions.data.1.contractor', 'Other Contractor')
+            ->where('filters.sort', 'party')
+            ->where('filters.direction', 'asc'));
+});
+
+test('payables receivables and invoices sort before pagination', function () {
+    $admin = dataAdmin();
+    $project = Project::query()->create([
+        'lead_id' => dataLead(['status' => 'project'])->id,
+        'amount' => 1000,
+        'created_by' => $admin->acc_id,
+    ]);
+
+    foreach ([100, 300] as $amount) {
+        foreach (['receivable', 'payable'] as $type) {
+            ProjectAccountingTransaction::query()->create([
+                'project_id' => $project->id,
+                'type' => $type,
+                'category' => $type === 'receivable' ? 'Customer Payment' : 'Vendor Payment',
+                'transaction_date' => '2026-09-17',
+                'amount' => $amount,
+                'status' => $type === 'receivable' ? 'deposit' : 'ok_to_pay',
+                'file_path' => $amount === 300 ? 'scans/transaction.pdf' : null,
+            ]);
+        }
+        ProjectInvoice::query()->create([
+            'project_id' => $project->id,
+            'invoice_number' => "INV#SORT-{$amount}",
+            'invoice_date' => '2026-09-17',
+            'amount' => $amount,
+            'status' => 'pending',
+            'file_path' => $amount === 300 ? 'scans/invoice.pdf' : null,
+        ]);
+    }
+
+    foreach (['receivables', 'payables'] as $register) {
+        $this->actingAs($admin)->get(route("management.{$register}", ['sort' => 'amount', 'direction' => 'desc']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('transactions.data.0.amount', '300.00')
+                ->where('transactions.data.1.amount', '100.00'));
+        $this->get(route("management.{$register}", ['sort' => 'file', 'direction' => 'desc']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('transactions.data.0.amount', '300.00'));
+    }
+
+    $this->get(route('management.invoices', ['sort' => 'amount', 'direction' => 'asc']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('invoices.data.0.amount', '100.00')
+            ->where('invoices.data.1.amount', '300.00'));
+    $this->get(route('management.invoices', ['sort' => 'file', 'direction' => 'desc']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('invoices.data.0.amount', '300.00'));
 });
 
 test('booking board contains only dispatched leads', function () {

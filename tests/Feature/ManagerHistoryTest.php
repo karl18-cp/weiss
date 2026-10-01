@@ -2,6 +2,7 @@
 
 use App\Models\Account;
 use App\Models\Agent;
+use App\Models\Company;
 use App\Models\Lead;
 use App\Models\LeadMovement;
 use App\Models\Manager;
@@ -9,10 +10,19 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 function managerHistoryFixtures(): array
 {
+    $company = Company::query()->create([
+        'com_id' => 9903,
+        'company' => 'Manager History Company',
+        'address' => '',
+        'prefix' => 'MHC',
+        'project_code' => 'MHC',
+    ]);
     $firstAccount = Account::query()->create(['username' => 'history-one@example.com', 'password' => 'password', 'role' => 'manager']);
     $secondAccount = Account::query()->create(['username' => 'history-two@example.com', 'password' => 'password', 'role' => 'manager']);
-    $firstManager = Manager::query()->create(['account_id' => $firstAccount->acc_id, 'manager_name' => 'History One', 'phone' => '', 'manager_types' => []]);
-    $secondManager = Manager::query()->create(['account_id' => $secondAccount->acc_id, 'manager_name' => 'History Two', 'phone' => '', 'manager_types' => []]);
+    $firstManager = Manager::query()->create(['account_id' => $firstAccount->acc_id, 'manager_name' => 'History One', 'phone' => '', 'company_id' => $company->com_id, 'manager_types' => []]);
+    $secondManager = Manager::query()->create(['account_id' => $secondAccount->acc_id, 'manager_name' => 'History Two', 'phone' => '', 'company_id' => $company->com_id, 'manager_types' => []]);
+    $firstManager->companies()->sync([$company->com_id]);
+    $secondManager->companies()->sync([$company->com_id]);
     $agent = Agent::query()->create(['agent_name' => 'History Agent']);
     $lead = Lead::query()->create([
         'customer_name' => 'History Customer', 'marital_status' => 'Unknown',
@@ -20,6 +30,7 @@ function managerHistoryFixtures(): array
         'zip_code' => '00000', 'city' => 'History City', 'county' => 'History County',
         'state' => 'CA', 'years_in_house' => 0, 'appointment_at' => now(),
         'telemarketer_notes' => '', 'source' => 'Manual', 'agent_id' => $agent->agent_id,
+        'company_id' => $company->com_id,
         'created_by' => $firstAccount->acc_id, 'status' => 'dispatched',
     ]);
     LeadMovement::query()->create(['lead_id' => $lead->id, 'from_status' => 'confirmed', 'to_status' => 'dispatched', 'moved_by' => $firstAccount->acc_id]);

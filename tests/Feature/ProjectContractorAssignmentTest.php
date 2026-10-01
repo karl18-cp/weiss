@@ -4,7 +4,7 @@ use App\Models\Account;
 use App\Models\Contractor;
 use App\Models\Project;
 
-test('admin can assign up to four distinct contractors to a project in position order', function () {
+test('admin can assign up to six distinct contractors to a project in position order', function () {
     $admin = Account::query()->create([
         'username' => 'project-contractors-admin',
         'password' => 'password',
@@ -15,7 +15,7 @@ test('admin can assign up to four distinct contractors to a project in position 
         'amount' => 0,
         'created_by' => $admin->acc_id,
     ]);
-    $contractors = collect(['One', 'Two', 'Three'])->map(fn (string $name) => Contractor::query()->create([
+    $contractors = collect(['One', 'Two', 'Three', 'Four', 'Five', 'Six'])->map(fn (string $name) => Contractor::query()->create([
         'contractor' => "Contractor {$name}",
         'address' => '',
         'zip' => 0,
@@ -33,6 +33,8 @@ test('admin can assign up to four distinct contractors to a project in position 
                 $contractors[1]->con_id,
                 null,
                 $contractors[2]->con_id,
+                $contractors[3]->con_id,
+                $contractors[4]->con_id,
             ],
         ])
         ->assertRedirect();
@@ -41,10 +43,17 @@ test('admin can assign up to four distinct contractors to a project in position 
         $contractors[0]->con_id,
         $contractors[1]->con_id,
         $contractors[2]->con_id,
+        $contractors[3]->con_id,
+        $contractors[4]->con_id,
     ]);
     $this->assertDatabaseHas('project_contractor_assignments', [
         'project_id' => $project->id,
         'contractor_id' => $contractors[2]->con_id,
         'position' => 4,
+    ]);
+    $this->assertDatabaseHas('project_contractor_assignments', [
+        'project_id' => $project->id,
+        'contractor_id' => $contractors[4]->con_id,
+        'position' => 6,
     ]);
 });

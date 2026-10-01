@@ -322,6 +322,7 @@ export type LeadsShopProps = {
     selectedQueueManager?: string;
     canViewAllQueueManagers?: boolean;
     selectedDate: string | null;
+    selectedQueueStatus?: string | null;
     selectedCity?: string;
     activeShopStatus?: string | null;
     verifyCount?: number;
@@ -883,6 +884,7 @@ export default function LeadsShop({
     selectedQueueManager = 'all',
     canViewAllQueueManagers = false,
     selectedDate,
+    selectedQueueStatus = null,
     selectedCity = 'all',
     activeShopStatus = null,
     verifyCount = 0,
@@ -967,15 +969,21 @@ export default function LeadsShop({
                     ? {
                       search: nextSearch,
                       date_field: serverDateField,
-                      ...(activeShopStatus
-                          ? { queue_status: activeShopStatus }
+                      ...(selectedQueueStatus || activeShopStatus
+                          ? {
+                                queue_status:
+                                    selectedQueueStatus ?? activeShopStatus,
+                            }
                           : {}),
                       ...managerQuery,
                   }
                 : {
                       date_field: serverDateField,
-                      ...(activeShopStatus
-                          ? { queue_status: activeShopStatus }
+                      ...(selectedQueueStatus || activeShopStatus
+                          ? {
+                                queue_status:
+                                    selectedQueueStatus ?? activeShopStatus,
+                            }
                           : {}),
                       ...managerQuery,
                   },
@@ -997,11 +1005,21 @@ export default function LeadsShop({
         }, 350);
 
         return () => window.clearTimeout(timer);
-    }, [search, selectedQueueManager]);
+    }, [
+        search,
+        selectedQueueManager,
+        selectedQueueStatus,
+        activeShopStatus,
+        serverDateField,
+    ]);
 
     const [dateField, setDateField] = useState<DateField>(serverDateField);
     const [selectedStatus, setSelectedStatus] = useState(
-        requestedLead?.status ?? activeShopStatus ?? queue?.status ?? 'all',
+        requestedLead?.status ??
+            selectedQueueStatus ??
+            activeShopStatus ??
+            queue?.status ??
+            'all',
     );
     const [companyFilter, setCompanyFilter] = useState('all');
     const [sourceFilter, setSourceFilter] = useState('all');
@@ -1380,12 +1398,15 @@ export default function LeadsShop({
         setProductFilter('all');
         setAgentFilter('all');
         setSelectedId(null);
-        setSelectedStatus('all');
+        if (!queue?.statusFilters) setSelectedStatus('all');
         router.get(
             window.location.pathname,
             {
                 date: key,
                 date_field: nextDateField,
+                ...(queue?.statusFilters && selectedStatus !== 'all'
+                    ? { queue_status: selectedStatus }
+                    : {}),
                 ...managerQuery,
             },
             { preserveState: true, preserveScroll: true, replace: true },
@@ -1512,6 +1533,29 @@ export default function LeadsShop({
 
         setSelectedId(null);
         setSelectedStatus(status);
+
+        if (queue?.statusFilters) {
+            router.get(
+                window.location.pathname,
+                {
+                    queue_status: status,
+                    date_field: effectiveDateField,
+                    ...managerQuery,
+                },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    replace: true,
+                    only: [
+                        'leads',
+                        'dateRows',
+                        'selectedDate',
+                        'selectedQueueStatus',
+                    ],
+                },
+            );
+            return;
+        }
 
         if (['verify', 'ng'].includes(status) || activeShopStatus) {
             router.get(
@@ -1684,13 +1728,22 @@ export default function LeadsShop({
             {
                 date: selectedDate,
                 date_field: effectiveDateField,
+                ...(queue?.statusFilters
+                    ? { queue_status: queue.status }
+                    : {}),
                 ...managerQuery,
             },
             {
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
-                only: ['leads', 'selectedCity'],
+                only: [
+                    'leads',
+                    'dateRows',
+                    'selectedDate',
+                    'selectedQueueStatus',
+                    'selectedCity',
+                ],
                 onFinish: () => setIsRefreshing(false),
             },
         );
@@ -2772,23 +2825,32 @@ export default function LeadsShop({
                                         ))}
                                     </>
                                 ) : (
-                                    statusFilters.map(([status, label]) => (
-                                        <button
-                                            type="button"
-                                            key={status}
-                                            className={
-                                                selectedStatus === status
-                                                    ? 'lead-status-filter lead-status-filter--active'
-                                                    : 'lead-status-filter'
-                                            }
-                                            onClick={() =>
-                                                selectStatus(status)
-                                            }
-                                        >
-                                            {label}
-                                            <span>{statusCounts[status] ?? 0}</span>
-                                        </button>
-                                    ))
+                                    <>
+                                        {statusFilters.map(([status, label]) => (
+                                            <button
+                                                type="button"
+                                                key={status}
+                                                className={
+                                                    selectedStatus === status
+                                                        ? 'lead-status-filter lead-status-filter--active'
+                                                        : 'lead-status-filter'
+                                                }
+                                                onClick={() =>
+                                                    selectStatus(status)
+                                                }
+                                            >
+                                                {label}
+                                                <span>
+                                                    {statusCounts[status] ?? 0}
+                                                </span>
+                                            </button>
+                                        ))}
+                                        {queue?.statusFilters && (
+                                            <div className="lead-status-filter lead-status-filter--total">
+                                                Total <span>{leads.length}</span>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                                 <button
                                     type="button"

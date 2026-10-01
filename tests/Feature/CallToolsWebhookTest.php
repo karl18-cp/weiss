@@ -17,7 +17,10 @@ function configureCallToolsWebhook(): array
         'project_code' => 'CT-001',
     ]);
     $product = Product::query()->create(['product_name' => 'Default Product']);
-    $agent = Agent::query()->create(['agent_name' => 'Default Agent']);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Default Agent',
+        'company_id' => $company->com_id,
+    ]);
     $account = Account::query()->create([
         'username' => 'calltools@example.com',
         'password' => 'password',
@@ -159,6 +162,59 @@ test('calltools webhook creates and updates one lead per contact', function () {
         ->and($resentLead->primary_number)->toBe('+15557654321')
         ->and($resentLead->created_at->equalTo($originalCreatedAt))->toBeTrue()
         ->and(LeadNote::query()->where('lead_id', $lead->id)->count())->toBe(1);
+});
+
+test('calltools always derives the lead company from the selected agent', function () {
+    $defaults = configureCallToolsWebhook();
+    $agentCompany = Company::query()->create([
+        'com_id' => 103,
+        'company' => 'Updated Agent Company',
+        'address' => '',
+        'prefix' => 'UAC',
+        'project_code' => 'UAC-001',
+    ]);
+    $defaults['agent']->update(['company_id' => $agentCompany->com_id]);
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => 'default-agent-company',
+            'phone_number' => '+15551230001',
+        ])
+        ->assertCreated();
+
+    $lead = Lead::query()->where('calltools_contact_id', 'default-agent-company')->firstOrFail();
+
+    expect($lead->agent_id)->toBe($defaults['agent']->agent_id)
+        ->and($lead->company_id)->toBe($agentCompany->com_id)
+        ->and($lead->company_id)->not->toBe($defaults['company']->com_id);
+});
+
+test('calltools tolerates harmless formatting differences in an agent name', function () {
+    configureCallToolsWebhook();
+    $agentCompany = Company::query()->create([
+        'com_id' => 104,
+        'company' => 'Formatted Agent Company',
+        'address' => '',
+        'prefix' => 'FAC',
+        'project_code' => 'FAC-001',
+    ]);
+    $agent = Agent::query()->create([
+        'agent_name' => 'Jamie A. Agent',
+        'company_id' => $agentCompany->com_id,
+    ]);
+
+    $this->withToken('test-webhook-secret')
+        ->postJson(route('webhooks.calltools'), [
+            'contact_id' => 'formatted-agent-name',
+            'phone_number' => '+15551230002',
+            'agent_name' => '  JAMIE A AGENT  ',
+        ])
+        ->assertCreated();
+
+    $lead = Lead::query()->where('calltools_contact_id', 'formatted-agent-name')->firstOrFail();
+
+    expect($lead->agent_id)->toBe($agent->agent_id)
+        ->and($lead->company_id)->toBe($agentCompany->com_id);
 });
 
 test('calltools marks a new contact with the same normalized phone as a duplicate of the older lead', function () {

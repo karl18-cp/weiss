@@ -466,6 +466,27 @@ test('sale-linked receipts unlock commission only for their related sale', funct
         ->assertJsonPath('salesmen.1.sale_breakdown.0.sale_id', $referralSale->id);
 });
 
+test('salesman received total includes the full deposited receivable beyond the sale amount', function () {
+    $admin = Account::query()->create(['username' => 'full-receivable@example.com', 'password' => 'password', 'role' => 'admin']);
+    $salesman = Salesman::query()->create(['salesman_name' => 'Receivable Salesman']);
+    $project = Project::query()->create([
+        'project_number' => 'SBH#FULL-RECEIVABLE', 'customer_name' => 'Receivable Customer',
+        'salesman_id' => $salesman->salesman_id, 'amount' => 10000,
+        'status' => 'completed', 'created_by' => $admin->acc_id,
+    ]);
+    $project->sales()->create(['type' => 'original', 'amount' => 10000, 'sale_date' => '2026-09-16']);
+    $project->accountingTransactions()->createMany([
+        ['type' => 'receivable', 'category' => 'Customer Payment', 'transaction_date' => '2026-09-16', 'amount' => 12000, 'status' => 'deposit'],
+        ['type' => 'receivable', 'category' => 'Future Payment', 'transaction_date' => '2026-09-17', 'amount' => 2000, 'status' => 'pending'],
+    ]);
+
+    $this->actingAs($admin)->getJson(route('management.projects.commission-breakdown', $project))
+        ->assertOk()
+        ->assertJsonPath('accounting.received_commissionable', 12000)
+        ->assertJsonPath('salesmen.0.total_sale', 10000)
+        ->assertJsonPath('salesmen.0.received', 12000);
+});
+
 test('commission uses collected receivables and reserves open invoice balances before the fifty fifty split', function () {
     $admin = Account::query()->create(['username' => 'gross-profit@example.com', 'password' => 'password', 'role' => 'admin']);
     $salesman = Salesman::query()->create([
@@ -499,9 +520,12 @@ test('commission uses collected receivables and reserves open invoice balances b
         ->assertJsonPath('accounting.lead_cost', 20000)
         ->assertJsonPath('accounting.expenses_commissionable', 10000)
         ->assertJsonPath('accounting.open_invoices', 20000)
-        ->assertJsonPath('accounting.gross_profit', 50000)
+        ->assertJsonPath('accounting.gross_profit', 70000)
+        ->assertJsonPath('accounting.commissionable_profit', 50000)
         ->assertJsonPath('accounting.office_commission', 25000)
         ->assertJsonPath('accounting.salesman_commission', 25000)
         ->assertJsonPath('salesmen.0.commission_rate', 50)
+        ->assertJsonPath('salesmen.0.gross_profit', 70000)
+        ->assertJsonPath('salesmen.0.commission_base', 50000)
         ->assertJsonPath('salesmen.0.commission_due', 25000);
 });

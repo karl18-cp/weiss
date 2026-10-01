@@ -15,6 +15,7 @@ use App\Models\Vendor;
 use App\Services\GoogleDriveProjectStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\View;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('a project cover page renders as an inline pdf from project totals', function () {
@@ -48,9 +49,64 @@ test('a project cover page renders as an inline pdf from project totals', functi
         ->assertHeader('content-type', 'application/pdf')
         ->assertHeader(
             'content-disposition',
-            'attachment; filename="'.preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number).'-cover-page.pdf"',
+            'attachment; filename="'.preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number ?: "project-{$project->id}").'-cover-page.pdf"',
         );
     expect($response->getContent())->toStartWith('%PDF');
+});
+
+test('cover page omits the contractor table when there are no contractor rows', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 10000]);
+    $project = $lead->refresh()->project()->firstOrFail();
+
+    $data = [
+        'project' => $project,
+        'income' => 0,
+        'expenses' => 0,
+        'profitLoss' => 0,
+        'saleAmount' => 10000,
+        'finance' => 10000,
+        'dateSold' => null,
+        'salesRepresentatives' => '',
+        'contractorRows' => collect(),
+    ];
+
+    expect(view('pdf.project-cover-page', $data)->render())->not->toContain('Latest invoice');
+    expect(view('pdf.project-cover-page', [
+        ...$data,
+        'contractorRows' => collect([['contractor' => 'Assigned Contractor', 'date' => null, 'bid' => null, 'note' => null]]),
+    ])->render())->toContain('Latest invoice')->toContain('Assigned Contractor');
+});
+
+test('cover page combines invoices for the same contractor into one total', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 10000]);
+    $project = $lead->refresh()->project()->firstOrFail();
+    $contractor = Contractor::query()->create([
+        'contractor' => 'Cover Page Contractor', 'address' => '', 'zip' => 0,
+        'city' => '', 'state' => '', 'email' => '', 'phone' => 0, 'license' => 0,
+    ]);
+    foreach ([
+        ['invoice_number' => 'COVER-1', 'invoice_date' => '2026-09-01', 'amount' => 1250.50],
+        ['invoice_number' => 'COVER-2', 'invoice_date' => '2026-09-10', 'amount' => 749.50],
+    ] as $invoice) {
+        $project->invoices()->create([
+            ...$invoice, 'contractor_id' => $contractor->con_id, 'status' => 'pending',
+        ]);
+    }
+    $capturedRows = null;
+    View::composer('pdf.project-cover-page', function ($view) use (&$capturedRows): void {
+        $capturedRows = $view->getData()['contractorRows'];
+    });
+
+    $this->get(route('management.projects.cover-page', $project))->assertOk();
+
+    expect($capturedRows)->toHaveCount(1)
+        ->and($capturedRows->first()['contractor'])->toBe('Cover Page Contractor')
+        ->and($capturedRows->first()['bid'])->toBe(2000.0)
+        ->and($capturedRows->first()['date']->format('Y-m-d'))->toBe('2026-09-10');
 });
 
 test('project accounting downloads separate payables and receivables pdfs', function () {
@@ -77,10 +133,41 @@ test('project accounting downloads separate payables and receivables pdfs', func
             ->assertHeader('content-type', 'application/pdf')
             ->assertHeader(
                 'content-disposition',
-                'attachment; filename="'.preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number).'-'.$label.'.pdf"',
+                'attachment; filename="'.preg_replace('/[^A-Za-z0-9._-]+/', '-', $project->project_number ?: "project-{$project->id}").'-'.$label.'.pdf"',
             );
         expect($response->getContent())->toStartWith('%PDF');
     }
+});
+
+test('LC and CO create visible payables that are excluded from project payable totals', function () {
+    Storage::fake('local');
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 10000]);
+    $project = $lead->refresh()->project()->firstOrFail();
+
+    foreach ([['lead_cost', 300, 'Lead Provider'], ['commission', 700, 'Sales Team']] as [$type, $amount, $payTo]) {
+        $this->post(route('management.projects.payment-checks.store', [$project, $type]), [
+            'amount' => $amount,
+            'transaction_date' => '2026-09-22',
+            'payment_method' => 'check',
+            'check_number' => strtoupper($type).'-10',
+            'pay_to' => $payTo,
+            'requested_by' => 'Koby',
+            'notes' => 'Tracked from the LC/CO form.',
+            'check_files' => [UploadedFile::fake()->image("{$type}.jpg")],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+    }
+
+    $trackingRows = $project->accountingTransactions()->where('exclude_from_totals', true)->orderBy('amount')->get();
+    expect($trackingRows)->toHaveCount(2)
+        ->and($trackingRows->pluck('category')->all())->toBe(['CO Tracking', 'LC Tracking'])
+        ->and((float) $trackingRows->sum('amount'))->toBe(1000.0)
+        ->and($trackingRows->every(fn ($row) => $row->status === 'paid'))->toBeTrue();
+
+    $this->get(route('management.projects.commission-breakdown', $project))
+        ->assertOk()
+        ->assertJsonPath('accounting.expenses_commissionable', 0);
 });
 
 test('a sale attachment can be removed without deleting its sale', function () {
@@ -157,7 +244,6 @@ function projectSaleFixtures(): array
 
 test('a sale requires an assigned salesman', function () {
     ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
-    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
 
     $this->actingAs($account)
         ->post(route('lead-workflow.leads-shop.sale', $lead), [
@@ -238,9 +324,48 @@ test('project details can update the company and product', function () {
         ->and($lead->salesman_1_id)->toBe($salesman->salesman_id)
         ->and($lead->salesman_2_id)->toBe($secondSalesman->salesman_id)
         ->and($project->refresh()->status)->toBe('new')
-        ->and($project->project_number)->toBe('RC#100')
-        ->and($company->refresh()->project_code)->toBe('RC#101')
+        ->and($project->project_number)->toBeNull()
+        ->and($company->refresh()->project_code)->toBe('RC-100')
         ->and($project->sales()->where('type', 'original')->firstOrFail()->product_id)->toBe($product->prod_id);
+});
+
+test('an authorized user can manually assign a number before the first deposit', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 12500]);
+    $project = $lead->project()->firstOrFail();
+
+    expect($project->project_number)->toBeNull()
+        ->and($project->hasDepositedReceivable())->toBeFalse();
+
+    $this->put(route('management.projects.update', $project), [
+        'project_number' => 'SBH#9100',
+        'status' => 'new',
+        'company_id' => $lead->company_id,
+        'product_id' => $lead->product_id,
+        'customer_name' => $lead->customer_name,
+        'primary_number' => $lead->primary_number,
+        'secondary_number' => $lead->secondary_number,
+        'mobile_number' => $lead->mobile_number,
+        'email' => $lead->email,
+        'address' => $lead->address,
+        'city' => $lead->city,
+        'state' => $lead->state,
+        'zip_code' => $lead->zip_code,
+        'source' => $lead->source,
+        'appointment_at' => $lead->appointment_at,
+        'lead_created_at' => $lead->created_at,
+        'agent_id' => $lead->agent_id,
+        'agent_2_id' => $lead->agent_2_id,
+        'salesman_1_id' => $lead->salesman_1_id,
+        'salesman_2_id' => $lead->salesman_2_id,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $project->refresh()->syncStatusFromAccounting();
+
+    expect($project->refresh()->project_number)->toBe('SBH#9100')
+        ->and($project->project_number_manual)->toBeTrue()
+        ->and($project->status)->toBe('new');
 });
 
 test('project details can save an imported project with incomplete legacy fields', function () {
@@ -290,6 +415,10 @@ test('project overview preserves a decimal project number suffix', function () {
     $lead->update(['salesman_1_id' => $salesman->salesman_id]);
     $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 12500]);
     $project = $lead->refresh()->project;
+    $project->accountingTransactions()->create([
+        'type' => 'receivable', 'category' => 'Customer Payment',
+        'transaction_date' => '2026-09-17', 'amount' => 100, 'status' => 'deposit',
+    ]);
 
     $this->put(route('management.projects.update', $project), [
         'project_number' => 'PC#5071.1',
@@ -374,6 +503,7 @@ test('a customer can have multiple independently managed projects', function () 
     $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 12500]);
 
     $firstProject = $lead->project()->firstOrFail();
+    $firstProject->accountingTransactions()->create(['type' => 'receivable', 'category' => 'Customer Payment', 'amount' => 1000, 'status' => 'deposit', 'transaction_date' => '2026-09-11']);
     $secondProduct = Product::query()->create(['product_name' => 'Roofing']);
     $secondSalesman = Salesman::query()->create(['salesman_name' => 'Second Job Salesman']);
 
@@ -387,7 +517,8 @@ test('a customer can have multiple independently managed projects', function () 
         'notes' => '',
     ])->assertRedirect()->assertSessionHasNoErrors();
 
-    $secondProject = Project::query()->where('project_number', 'PC#001.1')->firstOrFail();
+    $secondProject = Project::query()->whereKeyNot($firstProject->id)->firstOrFail();
+    expect($secondProject->project_number)->toBeNull();
     $secondLead = $secondProject->lead()->firstOrFail();
 
     $secondProject->invoices()->create([
@@ -407,6 +538,8 @@ test('a customer can have multiple independently managed projects', function () 
         ]);
     }
 
+    expect($secondProject->refresh()->project_number)->toBe('PC#001.1');
+
     expect($secondLead->id)->not->toBe($lead->id)
         ->and($secondLead->project_family_id)->toBe($lead->id)
         ->and($secondLead->customer_name)->toBe($lead->customer_name)
@@ -423,7 +556,7 @@ test('a customer can have multiple independently managed projects', function () 
         ->and($secondProject->sales()->firstOrFail()->amount)->toBe('18000.00')
         ->and($firstProject->refresh()->amount)->toBe('12500.00')
         ->and($firstProject->invoices()->count())->toBe(0)
-        ->and($firstProject->accountingTransactions()->count())->toBe(0);
+        ->and($firstProject->accountingTransactions()->count())->toBe(1);
 });
 
 test('additional customer projects auto increment and can be deleted independently', function () {
@@ -432,6 +565,7 @@ test('additional customer projects auto increment and can be deleted independent
     $lead->update(['salesman_1_id' => $salesman->salesman_id]);
     $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 10000]);
     $rootProject = $lead->project()->firstOrFail();
+    $rootProject->accountingTransactions()->create(['type' => 'receivable', 'category' => 'Customer Payment', 'amount' => 1000, 'status' => 'deposit', 'transaction_date' => '2026-09-14']);
 
     $payload = [
         'company_id' => $lead->company_id,
@@ -445,12 +579,18 @@ test('additional customer projects auto increment and can be deleted independent
     $this->post(route('management.projects.customer-projects.store', $rootProject), $payload)
         ->assertRedirect()
         ->assertSessionHasNoErrors();
-    $firstChild = Project::query()->where('project_number', 'PC#001.1')->firstOrFail();
+    $firstChild = Project::query()->whereKeyNot($rootProject->id)->firstOrFail();
+    expect($firstChild->project_number)->toBeNull();
+    $firstChild->accountingTransactions()->create(['type' => 'receivable', 'category' => 'Customer Payment', 'amount' => 1000, 'status' => 'deposit', 'transaction_date' => '2026-09-15']);
+    expect($firstChild->refresh()->project_number)->toBe('PC#001.1');
 
     $this->post(route('management.projects.customer-projects.store', $firstChild), $payload)
         ->assertRedirect()
         ->assertSessionHasNoErrors();
-    $secondChild = Project::query()->where('project_number', 'PC#001.2')->firstOrFail();
+    $secondChild = Project::query()->whereNotIn('id', [$rootProject->id, $firstChild->id])->firstOrFail();
+    expect($secondChild->project_number)->toBeNull();
+    $secondChild->accountingTransactions()->create(['type' => 'receivable', 'category' => 'Customer Payment', 'amount' => 1000, 'status' => 'deposit', 'transaction_date' => '2026-09-15']);
+    expect($secondChild->refresh()->project_number)->toBe('PC#001.2');
 
     $path = "project-documents/{$firstChild->id}/child-contract.pdf";
     Storage::disk('local')->put($path, 'child contract');
@@ -557,6 +697,68 @@ test('newly accepted sales remain unnumbered until work starts', function () {
     expect($firstLead->refresh()->project->project_number)->toBeNull()
         ->and($secondLead->refresh()->project->project_number)->toBeNull()
         ->and($firstLead->company->refresh()->project_code)->toBe('PC-001');
+});
+
+test('reselling a dispatched lead clears an old project number until a deposit is received', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+    $project = Project::query()->create([
+        'lead_id' => $lead->id,
+        'project_number' => 'PC#099',
+        'amount' => 9000,
+        'status' => 'canceled',
+        'created_by' => $account->acc_id,
+    ]);
+    $lead->update(['status' => 'dispatched']);
+
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), [
+        'amount' => 12000,
+    ])->assertRedirect();
+
+    expect($project->refresh()->status)->toBe('new')
+        ->and($project->project_number)->toBeNull()
+        ->and($lead->refresh()->status)->toBe('project');
+});
+
+test('sold jobs wait for a deposited receivable before numbering and commission visibility', function () {
+    ['account' => $account, 'lead' => $lead, 'salesman' => $salesman] = projectSaleFixtures();
+    $lead->update(['salesman_1_id' => $salesman->salesman_id]);
+
+    $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), [
+        'amount' => 1000,
+    ])->assertRedirect();
+    $project = $lead->refresh()->project;
+    expect($project->status)->toBe('new')
+        ->and($project->project_number)->toBeNull()
+        ->and($lead->company->refresh()->project_code)->toBe('PC-001');
+
+    $receivable = $project->accountingTransactions()->create([
+        'type' => 'receivable', 'category' => 'Customer Payment',
+        'transaction_date' => '2026-09-17', 'amount' => 200, 'status' => 'pending',
+    ]);
+    $project->invoices()->create([
+        'invoice_number' => 'INV#WAIT', 'invoice_date' => '2026-09-17',
+        'amount' => 100, 'status' => 'pending',
+    ]);
+    expect($project->refresh()->status)->toBe('new')
+        ->and($project->project_number)->toBeNull();
+    $this->getJson(route('management.salesmen.report', $salesman))
+        ->assertOk()->assertJsonPath('commission.summary.projects', 0);
+
+    $receivable->update(['status' => 'deposit']);
+    expect($project->refresh()->status)->toBe('progress')
+        ->and($project->project_number)->toBe('PC#001')
+        ->and($lead->company->refresh()->project_code)->toBe('PC#002');
+    $this->getJson(route('management.salesmen.report', $salesman))
+        ->assertOk()
+        ->assertJsonPath('commission.summary.projects', 1)
+        ->assertJsonPath('commission.rows.0.project_number', 'PC#001');
+
+    $receivable->update(['status' => 'pending']);
+    expect($project->refresh()->status)->toBe('new')
+        ->and($project->project_number)->toBe('PC#001');
+    $this->getJson(route('management.salesmen.report', $salesman))
+        ->assertOk()->assertJsonPath('commission.summary.projects', 0);
 });
 
 test('a dispatched sale can become a new project without company or product details', function () {
@@ -726,6 +928,7 @@ test('a referral sale can create a separate project with isolated accounting', f
     $this->actingAs($account)->post(route('lead-workflow.leads-shop.sale', $lead), ['amount' => 12500]);
 
     $originalProject = $lead->project()->firstOrFail();
+    $originalProject->accountingTransactions()->create(['type' => 'receivable', 'category' => 'Customer Payment', 'amount' => 1000, 'status' => 'deposit', 'transaction_date' => '2026-09-07']);
     $referralSalesman = Salesman::query()->create(['salesman_name' => 'Referral Project Salesman']);
 
     $this->post(route('management.projects.sales.store', $originalProject), [
@@ -737,7 +940,8 @@ test('a referral sale can create a separate project with isolated accounting', f
         'project_number' => 'PC#001.1',
     ])->assertRedirect()->assertSessionHasNoErrors();
 
-    $referralProject = Project::query()->where('project_number', 'PC#001.1')->firstOrFail();
+    $referralProject = Project::query()->whereKeyNot($originalProject->id)->firstOrFail();
+    expect($referralProject->project_number)->toBeNull();
     $referralLead = $referralProject->lead()->firstOrFail();
 
     expect($referralProject->id)->not->toBe($originalProject->id)
@@ -750,7 +954,7 @@ test('a referral sale can create a separate project with isolated accounting', f
         ->and($referralProject->accountingTransactions()->count())->toBe(0)
         ->and($originalProject->sales()->where('type', 'referral')->count())->toBe(0)
         ->and($originalProject->invoices()->count())->toBe(0)
-        ->and($originalProject->accountingTransactions()->count())->toBe(0);
+        ->and($originalProject->accountingTransactions()->count())->toBe(1);
 });
 
 test('the original sale can be edited but cannot be deleted', function () {
@@ -993,7 +1197,7 @@ test('project status follows accounting activity and paid invoice balances', fun
         'amount' => 500,
         'status' => 'pending',
     ]);
-    expect($project->refresh()->status)->toBe('progress');
+    expect($project->refresh()->status)->toBe('new');
 
     $payable = $project->accountingTransactions()->create([
         'project_invoice_id' => $invoice->id,
@@ -1004,7 +1208,7 @@ test('project status follows accounting activity and paid invoice balances', fun
         'status' => 'paid',
     ]);
     expect($invoice->refresh()->status)->toBe('paid')
-        ->and($project->refresh()->status)->toBe('progress')
+        ->and($project->refresh()->status)->toBe('new')
         ->and($project->completionBlockers())->toContain('Scan and attach every invoice (1 missing).')
         ->and($project->completionBlockers())->toContain('Enter the LC check number.')
         ->and($project->completionBlockers())->toContain('Scan and attach the contract.');
@@ -1031,9 +1235,31 @@ test('project status follows accounting activity and paid invoice balances', fun
         'salesman_1_id' => $lead->salesman_1_id,
         'salesman_2_id' => $lead->salesman_2_id,
     ])->assertSessionHasErrors('status');
-    expect($project->refresh()->status)->toBe('progress');
+    expect($project->refresh()->status)->toBe('new');
+
+    $receivable = $project->accountingTransactions()->create([
+        'type' => 'receivable', 'category' => 'Customer Payment',
+        'transaction_date' => '2026-08-28', 'amount' => 100, 'status' => 'deposit',
+    ]);
+    $referralSale = $project->sales()->create([
+        'type' => 'referral', 'amount' => 100, 'sale_date' => '2026-08-28',
+        'salesman_id' => $salesman->salesman_id,
+    ]);
+    $commission = $project->accountingTransactions()->create([
+        'type' => 'payable', 'category' => 'Commission',
+        'transaction_date' => '2026-08-28', 'amount' => 50, 'status' => 'paid',
+        'salesman_id' => $salesman->salesman_id,
+    ]);
+    expect($project->completionBlockers())
+        ->toContain("Scan and attach the referral sale #{$referralSale->id}.")
+        ->toContain("Scan and attach the receivable transaction #{$receivable->id}.")
+        ->toContain("Scan and attach the payable transaction #{$payable->id}.")
+        ->toContain("Scan and attach the commission transaction #{$commission->id}.");
 
     $invoice->update(['file_path' => 'invoices/scanned.pdf', 'file_name' => 'scanned.pdf']);
+    $receivable->update(['file_path' => 'receivables/scanned.pdf', 'file_name' => 'scanned.pdf']);
+    $payable->update(['file_path' => 'payables/scanned.pdf', 'file_name' => 'scanned.pdf']);
+    $commission->update(['file_path' => 'commissions/scanned.pdf', 'file_name' => 'scanned.pdf']);
     foreach (['lead_cost', 'commission'] as $type) {
         $project->paymentChecks()->create([
             'type' => $type, 'amount' => 100, 'check_number' => strtoupper($type).'-100',
@@ -1045,11 +1271,22 @@ test('project status follows accounting activity and paid invoice balances', fun
         'file_path' => 'completion/form.pdf', 'file_name' => 'form.pdf',
     ]);
     $project->documents()->create([
+        'project_sale_id' => $project->sales()->where('type', 'original')->firstOrFail()->id,
         'category' => 'Sale Contract', 'file_path' => 'contracts/contract.pdf', 'file_name' => 'contract.pdf',
+    ]);
+    $project->documents()->create([
+        'project_sale_id' => $referralSale->id,
+        'category' => 'Sale Contract', 'file_path' => 'contracts/referral.pdf', 'file_name' => 'referral.pdf',
     ]);
     $project->syncStatusFromAccounting();
     expect($project->refresh()->status)->toBe('completed')
         ->and($project->completionBlockers())->toBe([]);
+
+    $commission->update(['file_path' => null, 'file_name' => null]);
+    expect($project->refresh()->status)->toBe('progress')
+        ->and($project->completionBlockers())->toContain("Scan and attach the commission transaction #{$commission->id}.");
+    $commission->update(['file_path' => 'commissions/scanned.pdf', 'file_name' => 'scanned.pdf']);
+    expect($project->refresh()->status)->toBe('completed');
 
     $payable->update(['status' => 'pending']);
     expect($invoice->refresh()->status)->toBe('pending')

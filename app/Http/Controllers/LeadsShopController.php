@@ -852,7 +852,7 @@ class LeadsShopController extends Controller
         return back();
     }
 
-    public function sell(LeadSaleRequest $request, Lead $lead, \App\Services\ProjectNumberAllocator $projectNumbers): RedirectResponse
+    public function sell(LeadSaleRequest $request, Lead $lead): RedirectResponse
     {
         if (! $lead->salesman_1_id && ! $lead->salesman_2_id) {
             throw ValidationException::withMessages([
@@ -860,15 +860,14 @@ class LeadsShopController extends Controller
             ]);
         }
 
-        $project = DB::transaction(function () use ($request, $lead, $projectNumbers): Project {
+        $project = DB::transaction(function () use ($request, $lead): Project {
             $project = Project::query()->firstOrNew(['lead_id' => $lead->id]);
 
             $project->fill([
                 'amount' => $request->validated('amount'),
                 'status' => 'new',
-                'project_number' => $project->exists
-                    ? $project->project_number
-                    : ($lead->company_id ? $projectNumbers->allocate($lead) : null),
+                'project_number' => null,
+                'project_number_manual' => false,
                 'created_by' => $request->user()->getAuthIdentifier(),
             ])->save();
 

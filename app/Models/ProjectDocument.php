@@ -9,6 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['project_id', 'project_invoice_id', 'project_accounting_transaction_id', 'project_sale_id', 'uploaded_by', 'category', 'completion_date', 'file_path', 'file_name', 'file_mime', 'file_size', 'drive_file_id', 'drive_url'])]
 class ProjectDocument extends Model
 {
+    protected static function booted(): void
+    {
+        static::saved(fn (self $document) => $document->project?->syncStatusFromAccounting());
+        static::deleted(fn (self $document) => $document->project?->syncStatusFromAccounting());
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

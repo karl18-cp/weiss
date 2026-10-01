@@ -61,21 +61,22 @@
             <td colspan="2" class="field"><span class="label">Project Mgr</span><span class="value">{{ $project->manager?->manager_name ?: '—' }}</span></td>
         </tr>
     </table>
+    @if($contractorRows->isNotEmpty())
     <table class="contractors">
         <colgroup><col style="width:30%"><col style="width:17%"><col style="width:18%"><col style="width:35%"></colgroup>
         <thead><tr><th>Contractor</th><th>Latest invoice</th><th>Total</th><th>Note</th></tr></thead>
         <tbody>
-            @for($index = 0; $index < 10; $index++)
-                @php($row = $contractorRows->get($index))
+            @foreach($contractorRows as $row)
                 <tr>
                     <td>{{ $row['contractor'] ?? '' }}</td>
                     <td>{{ !empty($row['date']) ? $row['date']->format('m/d/Y') : '' }}</td>
                     <td class="amount">{{ isset($row['bid']) ? '$'.number_format($row['bid'], 2) : '' }}</td>
                     <td>{{ $row['note'] ?? '' }}</td>
                 </tr>
-            @endfor
+            @endforeach
         </tbody>
     </table>
+    @endif
     <table><tr><td class="notes"><span class="label">Notes</span>{{ $project->manual_notes ?: $project->lead?->notes?->pluck('body')->take(4)->join("\n") }}</td></tr></table>
     <div class="footer">Generated {{ now('America/Los_Angeles')->format('m/d/Y g:i A T') }}</div>
 </body>

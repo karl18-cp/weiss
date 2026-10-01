@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Manager;
+use App\Support\ManagerCompanyAccess;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,7 @@ class ManagerHistoryController extends Controller
             ->join('accounts', 'accounts.acc_id', '=', 'activity.actor_id')
             ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
             ->leftJoin('agents', 'agents.agent_id', '=', 'activity.target_id')
+            ->tap(fn ($query) => ManagerCompanyAccess::scopeColumn($query, 'leads.company_id', $user))
             ->when($managerAccountId, fn (Builder $query) => $query->where('activity.actor_id', $managerAccountId))
             ->when($from, fn (Builder $query) => $query->where('activity.created_at', '>=', $from))
             ->when($to, fn (Builder $query) => $query->where('activity.created_at', '<=', $to))

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\Manager;
 use App\Models\RingCentralCall;
+use App\Support\ManagerCompanyAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -59,6 +60,7 @@ class ManagerActivityController extends Controller
                 ->join('accounts', 'accounts.acc_id', '=', 'activity.actor_id')
                 ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
                 ->leftJoin('agents', 'agents.agent_id', '=', 'activity.target_id')
+                ->tap(fn ($query) => ManagerCompanyAccess::scopeColumn($query, 'leads.company_id', $user))
                 ->when($managerAccountId, fn (Builder $query) => $query->where('activity.actor_id', $managerAccountId))
                 ->when($destination, fn (Builder $query) => $query
                     ->where('activity.activity_type', 'movement')
@@ -158,7 +160,7 @@ class ManagerActivityController extends Controller
                         ? route('lead-workflow.leads-shop.ringcentral-calls.recording', [$call->lead_id, $call->id])
                         : null,
                 ];
-             });
+            });
 
         $movementTotals = DB::table('lead_movements as manager_returns')
             ->join('leads', 'leads.id', '=', 'manager_returns.lead_id')
@@ -166,6 +168,7 @@ class ManagerActivityController extends Controller
             ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
             ->where('manager_returns.to_status', 'fresh')
             ->whereNotNull('manager_returns.from_status')
+            ->tap(fn ($query) => ManagerCompanyAccess::scopeColumn($query, 'leads.company_id', $user))
             ->when($managerAccountId, fn (Builder $query) => $query->where('manager_returns.moved_by', $managerAccountId))
             ->where('manager_returns.created_at', '>=', $fromCalifornia)
             ->where('manager_returns.created_at', '<=', $toCalifornia)

@@ -9,6 +9,7 @@ use App\Models\LeadMovement;
 use App\Models\Manager;
 use App\Models\ManagerPermission;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\Salesman;
 use App\Models\Team;
 use App\Support\CaliforniaServiceAreas;
@@ -17,6 +18,12 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 function createCallbackManager(string $username, bool $canViewAll = false): Account
 {
+    $company = Company::query()->firstOrCreate(['com_id' => 9901], [
+        'company' => 'Callback Test Company',
+        'address' => '',
+        'prefix' => 'CBT',
+        'project_code' => 'CBT',
+    ]);
     $account = Account::query()->create([
         'username' => $username,
         'password' => 'password',
@@ -26,8 +33,10 @@ function createCallbackManager(string $username, bool $canViewAll = false): Acco
         'account_id' => $account->acc_id,
         'manager_name' => $username,
         'phone' => '',
+        'company_id' => $company->com_id,
         'manager_types' => ['Leads Manager'],
     ]);
+    $manager->companies()->sync([$company->com_id]);
     ManagerPermission::query()->create([
         'manager_id' => $manager->manager_id,
         'module' => 'leads_shop',
@@ -55,6 +64,7 @@ function createOwnedCallbackLead(Account $creator, Account $owner, Agent $agent,
         'state' => 'CA',
         'years_in_house' => 0,
         'telemarketer_notes' => '',
+        'company_id' => $owner->manager->company_id,
         'source' => 'CallTools',
         'agent_id' => $agent->agent_id,
         'created_by' => $creator->acc_id,
@@ -701,6 +711,57 @@ test('555 workspace groups 555 ORA LA NG and TOSS leads', function () {
             ->has('leads', 5));
 });
 
+test('555 workflow date rows follow the selected status filter', function () {
+    $account = Account::query()->create([
+        'username' => '555-date-filter-admin',
+        'password' => 'password',
+        'role' => 'admin',
+    ]);
+    $agent = Agent::query()->create(['agent_name' => '555 Date Filter Agent']);
+
+    foreach ([
+        ['la', '2026-10-01 12:00:00'],
+        ['la', '2026-09-30 12:00:00'],
+        ['la', null],
+        ['555', '2026-10-02 12:00:00'],
+    ] as $index => [$status, $appointment]) {
+        Lead::query()->create([
+            'customer_name' => strtoupper($status).' Date Lead '.$index,
+            'marital_status' => 'Unknown',
+            'primary_number' => '+1555111000'.$index,
+            'address' => '555 Date Filter Street',
+            'zip_code' => '90001',
+            'city' => 'Los Angeles',
+            'county' => '',
+            'state' => 'CA',
+            'years_in_house' => 0,
+            'appointment_at' => $appointment,
+            'telemarketer_notes' => '',
+            'source' => 'CallTools',
+            'agent_id' => $agent->agent_id,
+            'created_by' => $account->acc_id,
+            'status' => $status,
+        ]);
+    }
+    Lead::query()
+        ->where('customer_name', 'LA Date Lead 2')
+        ->update(['created_at' => '2026-09-29 12:00:00']);
+
+    $this->actingAs($account)
+        ->get(route('lead-workflow.five-five-five', ['queue_status' => 'la']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedQueueStatus', 'la')
+            ->where('selectedDate', '2026-10-01')
+            ->has('dateRows', 3)
+            ->where('dateRows.0.key', '2026-10-01')
+            ->where('dateRows.0.count', 1)
+            ->where('dateRows.1.key', '2026-09-30')
+            ->where('dateRows.1.count', 1)
+            ->where('dateRows.2.key', '2026-09-29')
+            ->where('dateRows.2.count', 1));
+});
+
 test('salesmen are redirected away from the full CRM leads shop', function () {
     $agentAccount = Account::query()->create([
         'username' => 'booking-link-agent',
@@ -893,7 +954,7 @@ test('admins can delete a lead and its linked project together', function () {
         'created_by' => $admin->acc_id,
         'status' => 'fresh',
     ]);
-    $project = \App\Models\Project::query()->create([
+    $project = Project::query()->create([
         'lead_id' => $lead->id,
         'amount' => 1000,
         'created_by' => $admin->acc_id,

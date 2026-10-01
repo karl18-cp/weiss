@@ -1,6 +1,9 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
     ChevronLeft,
     ChevronRight,
     FileText,
@@ -161,7 +164,7 @@ export default function AccountingRegister({
 }: {
     type: RegisterType;
     transactions: PaginatedTransactions;
-    filters: { search: string; invoice: number | null; show_all: boolean; salesman: number | null; contractor: number | null };
+    filters: { search: string; invoice: number | null; show_all: boolean; salesman: number | null; contractor: number | null; sort: string; direction: 'asc' | 'desc' };
     totalAmount: string | number;
     projects: ProjectOption[];
     companies: CompanyOption[];
@@ -368,6 +371,8 @@ export default function AccountingRegister({
                 show_all: showAll ? 1 : undefined,
                 salesman: salesman || undefined,
                 contractor: contractor || undefined,
+                sort: filters.sort,
+                direction: filters.direction,
             },
             {
                 preserveState: true,
@@ -376,6 +381,27 @@ export default function AccountingRegister({
             },
         );
     };
+
+    const sortHeader = (key: string, label: string) => (
+        <th aria-sort={filters.sort === key ? (filters.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+            <button
+                type="button"
+                className={`accounting-register-sort ${filters.sort === key ? 'is-active' : ''}`}
+                onClick={() => router.get(baseUrl, {
+                    search: search || undefined,
+                    show_all: filters.show_all ? 1 : undefined,
+                    salesman: filters.salesman || undefined,
+                    contractor: filters.contractor || undefined,
+                    sort: key,
+                    direction: filters.sort === key && filters.direction === 'asc' ? 'desc' : 'asc',
+                }, { preserveState: true, preserveScroll: true, replace: true })}
+            >
+                {label}{filters.sort === key
+                    ? filters.direction === 'asc' ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />
+                    : <ArrowUpDown aria-hidden="true" />}
+            </button>
+        </th>
+    );
 
     const updateStatus = (
         transaction: AccountingRow,
@@ -618,35 +644,35 @@ export default function AccountingRegister({
                             <thead>
                                 {isPayable ? (
                                     <tr>
-                                        <th>Req. 2 Pay @</th>
-                                        <th>CMP</th>
-                                        <th>Proj. #</th>
-                                        <th>Rep</th>
-                                        <th>Pay To</th>
-                                        <th>Pay For (Invoice)</th>
-                                        <th>Payment Method</th>
-                                        <th>Req. By</th>
-                                        <th>Status</th>
-                                        <th>$ Amount To Pay</th>
-                                        <th>Check #</th>
-                                        <th>Category</th>
-                                        <th>Notes</th>
-                                        <th>File</th>
-                                        <th>Payment</th>
+                                        {sortHeader('date', 'Req. 2 Pay @')}
+                                        {sortHeader('company', 'CMP')}
+                                        {sortHeader('project', 'Proj. #')}
+                                        {sortHeader('rep', 'Rep')}
+                                        {sortHeader('party', 'Pay To')}
+                                        {sortHeader('invoice', 'Pay For (Invoice)')}
+                                        {sortHeader('payment_method', 'Payment Method')}
+                                        {sortHeader('requested_by', 'Req. By')}
+                                        {sortHeader('status', 'Status')}
+                                        {sortHeader('amount', '$ Amount To Pay')}
+                                        {sortHeader('reference', 'Check #')}
+                                        {sortHeader('category', 'Category')}
+                                        {sortHeader('notes', 'Notes')}
+                                        {sortHeader('file', 'File')}
+                                        {sortHeader('status', 'Payment')}
                                     </tr>
                                 ) : (
                                     <tr>
-                                        <th>Date</th>
-                                        <th>Reference #</th>
-                                        <th>Received From</th>
-                                        <th>Project #</th>
-                                        <th>Rep</th>
-                                        <th>Notes</th>
-                                        <th>Amount</th>
-                                        <th>Status</th>
-                                        <th>QB</th>
-                                        <th>Category</th>
-                                        <th>File</th>
+                                        {sortHeader('date', 'Date')}
+                                        {sortHeader('reference', 'Reference #')}
+                                        {sortHeader('party', 'Received From')}
+                                        {sortHeader('project', 'Project #')}
+                                        {sortHeader('rep', 'Rep')}
+                                        {sortHeader('notes', 'Notes')}
+                                        {sortHeader('amount', 'Amount')}
+                                        {sortHeader('status', 'Status')}
+                                        {sortHeader('qb', 'QB')}
+                                        {sortHeader('category', 'Category')}
+                                        {sortHeader('file', 'File')}
                                     </tr>
                                 )}
                             </thead>

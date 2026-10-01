@@ -190,7 +190,8 @@ class LeadQueueController extends Controller
             ? 'COALESCE((SELECT MIN(lm.created_at) FROM lead_movements lm WHERE lm.lead_id = leads.id), leads.created_at)'
             : 'leads.'.$dateField;
         $usesDateFallback = request()->routeIs('lead-workflow.la')
-            || request()->routeIs('lead-workflow.his');
+            || request()->routeIs('lead-workflow.his')
+            || request()->routeIs('lead-workflow.five-five-five');
         if ($usesDateFallback) {
             $dateExpression = 'COALESCE(leads.appointment_at, leads.created_at)';
         }
@@ -230,6 +231,12 @@ class LeadQueueController extends Controller
                     LeadSearch::orWhereFullAddress($query, $search);
                 });
             });
+
+        $requestedQueueStatus = trim((string) request()->query('queue_status', ''));
+        $selectedQueueStatus = is_array($status)
+            && in_array($requestedQueueStatus, $status, true)
+                ? $requestedQueueStatus
+                : null;
 
         $queueManagers = collect();
         $selectedQueueManager = 'all';
@@ -294,7 +301,11 @@ class LeadQueueController extends Controller
         }
 
         $currentMonth = now($crmTimezone)->format('Y-m');
-        $dateRows = (clone $queueQuery)
+        $dateRowsQuery = clone $queueQuery;
+        if ($selectedQueueStatus) {
+            $dateRowsQuery->where('status', $selectedQueueStatus);
+        }
+        $dateRows = $dateRowsQuery
             ->when(
                 $usesDateFallback,
                 fn ($query) => $query->whereRaw("{$dateExpression} IS NOT NULL"),
@@ -453,6 +464,7 @@ class LeadQueueController extends Controller
                 ),
             'dateRows' => $dateRows,
             'selectedDate' => $selectedDate,
+            'selectedQueueStatus' => $selectedQueueStatus,
             'selectedCity' => $selectedCity !== '' ? $selectedCity : 'all',
             'dateField' => $dateField,
             'dateGranularity' => $dateGranularity,

@@ -6,6 +6,7 @@ use App\Models\Lead;
 use App\Models\Project;
 use App\Models\Salesman;
 use App\Models\Team;
+use App\Support\ManagerCompanyAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -148,6 +149,7 @@ class DashboardController extends Controller
             ->join('managers', 'managers.account_id', '=', 'accounts.acc_id')
             ->where('manager_returns.to_status', 'fresh')
             ->whereNotNull('manager_returns.from_status')
+            ->tap(fn ($query) => ManagerCompanyAccess::scopeColumn($query, 'leads.company_id', $request->user()))
             ->whereBetween('manager_returns.created_at', $createdRange)
             ->groupBy('managers.manager_id', 'managers.manager_name')
             ->selectRaw("managers.manager_id as id, managers.manager_name as name,

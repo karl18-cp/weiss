@@ -502,11 +502,30 @@
     display: flex;
     flex: none;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 0.75rem;
     padding: 0.65rem 0.75rem;
     border-bottom: 1px solid #e1e8f2;
     background: #f8fafc;
+}
+
+.projects-list-sort-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #536177;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.projects-list-sort-control select {
+    min-height: 2.1rem;
+    padding: 0.35rem 1.8rem 0.35rem 0.65rem;
+    border: 1px solid #cfdaea;
+    border-radius: 0.5rem;
+    color: #27344b;
+    background: #fff;
+    font-size: 0.68rem;
 }
 
 .projects-status-filter {
@@ -2551,8 +2570,10 @@
 }
 
 .project-details-panel {
+    display: flex;
     min-width: 0;
     min-height: 0;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid #dce4ef;
     border-radius: 1rem;
@@ -2562,6 +2583,7 @@
 
 .project-details-header {
     display: flex;
+    flex: none;
     min-height: 3.65rem;
     align-items: center;
     justify-content: space-between;
@@ -2667,7 +2689,8 @@
 
 .project-details-grid {
     display: grid;
-    height: calc(100% - 3.65rem);
+    min-height: 0;
+    flex: 1;
     grid-template-columns: minmax(18rem, 0.9fr) minmax(24rem, 1.35fr) minmax(
             17rem,
             0.75fr
@@ -2701,6 +2724,7 @@
 .project-overview-actions {
     display: flex;
     flex: 1;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.35rem;
 }
@@ -2717,6 +2741,7 @@
     background: #f6f9ff;
     font-size: 0.58rem;
     font-weight: 800;
+    white-space: nowrap;
 }
 
 .project-overview-actions button svg {
@@ -2759,6 +2784,23 @@
 .project-detail-card--notes {
     grid-area: notes;
 }
+
+.project-view-lead-history {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-left: auto;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #cbdaf6;
+    border-radius: 0.5rem;
+    color: #245bd9;
+    background: #f3f7ff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.project-view-lead-history svg { width: 0.8rem; height: 0.8rem; }
 
 .project-detail-card > header {
     display: flex;
@@ -4969,6 +5011,35 @@
     color: #713636;
 }
 
+.project-completion-blockers-modal {
+    width: min(34rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    border: 1px solid #f0c36a;
+    border-radius: 0.75rem;
+}
+
+.project-completion-blockers-modal ul {
+    margin: 0.25rem 0;
+    padding: 0.75rem 1rem 0.75rem 2rem;
+    border-radius: 0.5rem;
+    background: #fff9eb;
+    color: #784b12;
+}
+
+.project-completion-blockers-modal li + li {
+    margin-top: 0.45rem;
+}
+
+.project-completion-blockers-modal [data-slot='dialog-footer'] button {
+    min-height: 2.25rem;
+    padding: 0.45rem 0.9rem;
+    border-radius: 0.5rem;
+    color: #fff;
+    background: #245bd9;
+    font-weight: 750;
+}
+
 .project-accounting-reference-link {
     padding: 0;
     border: 0;
@@ -4995,6 +5066,147 @@
 .project-accounting-attachment-modal form {
     display: grid;
     gap: 14px;
+}
+.project-accounting-attachment-modal.project-compact-attachment-modal {
+    width: min(42rem, calc(100vw - 2rem));
+    max-width: min(42rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 24px;
+}
+.project-accounting-attachment-modal.project-completion-modal {
+    width: min(48rem, calc(100vw - 2rem));
+    max-width: min(48rem, calc(100vw - 2rem));
+}
+.project-accounting-attachment-modal.project-completion-download-modal {
+    width: min(34rem, calc(100vw - 2rem));
+    max-width: min(34rem, calc(100vw - 2rem));
+}
+.project-completion-download-fields {
+    display: grid;
+    gap: 14px;
+}
+.project-completion-download-fields label {
+    display: grid;
+    gap: 6px;
+    color: #526076;
+    font-size: 12px;
+    font-weight: 800;
+}
+.project-completion-download-fields select {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #dce4ef;
+    border-radius: 10px;
+    color: #27344b;
+    background: #fff;
+    font-size: 13px;
+}
+.project-completion-download-fields p[role='alert'] {
+    margin: 0;
+    color: #b42331;
+    font-size: 12px;
+}
+.project-completion-download-modal .project-sale-modal__footer .project-completion-download-button {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 16px;
+    border: 1px solid #245bd9;
+    border-radius: 10px;
+    color: #fff;
+    background: #245bd9;
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
+}
+.project-completion-download-button svg {
+    width: 16px;
+    height: 16px;
+}
+.project-completion-download-button[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.project-accounting-attachment-modal.project-compact-attachment-modal > form {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+}
+.project-compact-attachment-modal [data-slot='dialog-header'] {
+    padding-right: 24px;
+}
+.project-compact-attachment-modal .project-accounting-form-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(8rem, 0.75fr);
+    gap: 12px;
+    padding: 0;
+}
+.project-completion-modal .project-accounting-form-top {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.project-compact-attachment-modal .project-accounting-form-top label {
+    color: #526076;
+    font-size: 12px;
+    font-weight: 800;
+}
+.project-compact-attachment-modal .project-accounting-attachment-upload {
+    width: 100%;
+}
+.project-compact-attachment-modal .project-sale-modal__footer {
+    width: 100%;
+    flex-wrap: wrap;
+    padding: 16px 0 0;
+    background: transparent;
+}
+.project-completion-modal .project-sale-modal__footer .project-print-cover {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 14px;
+    border: 1px solid #b9ccf6;
+    border-radius: 10px;
+    color: #174cae;
+    background: #e7efff;
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
+}
+.project-completion-modal .project-sale-modal__footer .project-print-cover svg {
+    width: 16px;
+    height: 16px;
+}
+.project-completion-modal .project-print-cover[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+@media (max-width: 640px) {
+    .project-accounting-attachment-modal.project-compact-attachment-modal {
+        width: calc(100vw - 1rem);
+        max-width: calc(100vw - 1rem);
+        max-height: calc(100vh - 1rem);
+        padding: 18px;
+    }
+    .project-compact-attachment-modal .project-accounting-form-top,
+    .project-completion-modal .project-accounting-form-top {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .project-compact-attachment-modal .project-accounting-attachment-list__item {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+    .project-compact-attachment-modal .project-accounting-attachment-list__item a,
+    .project-compact-attachment-modal .project-accounting-attachment-list__item button {
+        grid-column: 2;
+        justify-self: start;
+    }
+    .project-compact-attachment-modal .project-sale-modal__footer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 .project-accounting-attachment-list {
     display: grid;
@@ -5119,6 +5331,8 @@
 .project-history-content > header strong { color: #17243b; font-size: 13px; }
 .project-history-content > header span, .project-history-content > p, .project-history-content time { color: #718096; font-size: 10px; }
 .project-history-content > p { margin: 4px 0 0; }
+.project-history-content .project-history-note-body { margin-top: 9px; color: #334155; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.project-history-list article.is-lead-history .project-history-marker { color: #087a42; background: #ddf8e9; }
 .project-history-content dl { display: grid; gap: 5px; margin-top: 10px; }
 .project-history-content dl > div { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 6px 8px; border-radius: 7px; background: #f7f9fc; font-size: 11px; }
 .project-history-content dt { color: #4d5d75; font-weight: 800; }

@@ -28,7 +28,9 @@ class SalesmanController extends Controller
             ->get()
             ->each(function (Salesman $salesman): void {
                 $projects = Project::query()
-                    ->where('status', 'completed')
+                    ->whereIn('status', ['progress', 'completed'])
+                    ->whereHas('accountingTransactions', fn ($transactions) => $transactions
+                        ->where('type', 'receivable')->where('status', 'deposit'))
                     ->where(function ($query) use ($salesman): void {
                         $query->where('salesman_id', $salesman->salesman_id)
                             ->orWhereHas('lead', fn ($lead) => $lead
@@ -41,7 +43,7 @@ class SalesmanController extends Controller
                     ->with([
                         'lead:id,salesman_1_id',
                         'sales:id,project_id,type,amount,salesman_id',
-                        'accountingTransactions:id,project_id,project_sale_id,salesman_id,type,category,amount,status',
+                        'accountingTransactions:id,project_id,project_sale_id,salesman_id,type,category,amount,status,transaction_date',
                     ])
                     ->get();
                 $breakdowns = $projects->map(
@@ -149,7 +151,9 @@ class SalesmanController extends Controller
         $saleTotal = $rows->where('sold', true)->sum('sale_total');
 
         $completedProjects = Project::query()
-            ->where('status', 'completed')
+            ->whereIn('status', ['progress', 'completed'])
+            ->whereHas('accountingTransactions', fn ($transactions) => $transactions
+                ->where('type', 'receivable')->where('status', 'deposit'))
             ->where(function ($query) use ($salesman): void {
                 $query->where('salesman_id', $salesman->salesman_id)
                     ->orWhereHas('lead', fn ($lead) => $lead
@@ -179,7 +183,9 @@ class SalesmanController extends Controller
                 'customer' => $project->customer_name ?: $project->lead?->customer_name ?: '—',
                 'company' => $project->company?->company ?: '—',
                 'city' => $project->city ?: $project->lead?->city ?: '—',
-                'completed_at' => $project->updated_at?->toIso8601String(),
+                'completed_at' => $project->accountingTransactions
+                    ->where('type', 'receivable')->where('status', 'deposit')
+                    ->sortBy('transaction_date')->first()?->transaction_date?->toIso8601String(),
                 'original_sale' => round($calculation['original_sale'], 2),
                 'change_orders' => round($calculation['change_orders'], 2),
                 'total_sale' => round($calculation['total_sale'], 2),

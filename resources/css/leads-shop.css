@@ -3469,6 +3469,13 @@ body.is-resizing-lead-cards {
     color: var(--shop-purple);
 }
 
+.lead-status-filter--total,
+.lead-status-filter--total:hover {
+    color: #175f58;
+    border-color: #b9e4dc;
+    background: #e9f8f4;
+}
+
 .lead-dropdown-filters label {
     border-color: #ddd2f7;
     background: #fcfbff;

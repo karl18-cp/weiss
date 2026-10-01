@@ -290,6 +290,23 @@
     white-space: nowrap;
 }
 
+.vendor-data-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+}
+
+.vendor-data-sort svg { width: 0.7rem; height: 0.7rem; opacity: 0.55; }
+.vendor-data-sort.is-active { color: #245bd9; }
+
 .vendor-data-table td {
     max-width: 15rem;
     padding: 0.72rem 0.78rem;

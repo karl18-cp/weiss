@@ -298,7 +298,7 @@ export default function Salesmen({
                 .replace(/\)/g, '\\)')
                 .replace(/[^\x20-\x7E]/g, '');
         const lines = [
-            `${selected.salesman_name} - Completed Project Commission Report`,
+            `${selected.salesman_name} - Deposited Project Commission Report`,
             `Projects: ${report.commission.summary.projects}   Sales: ${reportMoney.format(report.commission.summary.sales)}   Received: ${reportMoney.format(report.commission.summary.received)}`,
             `Expenses: ${reportMoney.format(report.commission.summary.expenses)}   Balance: ${reportMoney.format(report.commission.summary.balance)}   Commission Due: ${reportMoney.format(report.commission.summary.commission_due)}   Paid: ${reportMoney.format(report.commission.summary.commission_paid)}   Owed: ${reportMoney.format(report.commission.summary.commission_balance)}`,
             `Rates - Lead cost: ${report.commission.rates.initial_sale}%   Change order lead cost: ${report.commission.rates.change_order}%   Additional commission: ${report.commission.rates.sale_commission}%   Shared-project commission: ${report.commission.rates.shared_sale_commission}%`,
@@ -613,24 +613,23 @@ export default function Salesmen({
                                 <header>
                                     <div>
                                         <strong>
-                                            Completed project commission
+                                            Deposited project commission
                                         </strong>
                                         <span>
                                             These rates calculate the salesman
-                                            cut only after a project is
-                                            Completed.
+                                            cut after a receivable is deposited.
                                         </span>
                                     </div>
                                     <div className="salesman-commission-totals">
                                         <span>
-                                            <small>Completed projects</small>
+                                            <small>Deposited projects</small>
                                             <strong>
                                                 {selected?.completed_projects_count ??
                                                     0}
                                             </strong>
                                         </span>
                                         <span>
-                                            <small>Completed sales</small>
+                                            <small>Deposited sales</small>
                                             <strong>
                                                 {reportMoney.format(
                                                     selected?.completed_sales_total ??
@@ -906,7 +905,7 @@ export default function Salesmen({
                                 commission report
                             </DialogTitle>
                             <DialogDescription>
-                                Completed projects, collected payments,
+                                Deposited projects, collected payments,
                                 expenses, balances, and calculated salesman
                                 cuts.
                             </DialogDescription>
@@ -919,7 +918,7 @@ export default function Salesmen({
                             <>
                                 <div className="salesman-report-summary">
                                     <span>
-                                        <small>Completed projects</small>
+                                        <small>Deposited projects</small>
                                         <strong>
                                             {report.commission.summary.projects}
                                         </strong>
@@ -1032,7 +1031,7 @@ export default function Salesmen({
                                                 <th>Project</th>
                                                 <th>Customer</th>
                                                 <th>Company</th>
-                                                <th>Completed</th>
+                                                <th>First deposit</th>
                                                 <th>Original sale</th>
                                                 <th>Change orders</th>
                                                 <th>Total sale</th>
@@ -1145,7 +1144,7 @@ export default function Salesmen({
                                                 0 && (
                                                 <tr>
                                                     <td colSpan={16}>
-                                                        No completed projects
+                                                        No deposited projects
                                                         for this salesman.
                                                     </td>
                                                 </tr>

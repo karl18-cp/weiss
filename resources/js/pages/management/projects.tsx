@@ -111,6 +111,7 @@ type ProjectSortKey =
     | 'salesman'
     | 'sale'
     | 'product'
+    | 'contractor'
     | 'notes';
 
 type ProjectSale = {
@@ -128,6 +129,7 @@ type ScheduledPayment = {
     payment_stage: string;
     amount: string;
     qb: boolean;
+    exclude_from_totals: boolean;
     printed_sent: boolean;
     notes: string | null;
 };
@@ -207,11 +209,17 @@ type ProjectPaymentCheck = {
     id: number;
     type: 'lead_cost' | 'commission';
     amount: string;
+    transaction_date: string | null;
+    payment_method: AccountingTransaction['payment_method'];
     check_number: string | null;
+    pay_to: string | null;
+    requested_by: string | null;
+    notes: string | null;
     file_name: string | null;
     file_mime: string | null;
     file_size: number | null;
     paid_at: string | null;
+    files: { id: number; file_name: string; file_mime: string | null; file_size: number | null }[];
 };
 
 type BalanceView = 'receivable' | 'payable' | 'invoice';
@@ -237,6 +245,7 @@ type ProjectCommissionBreakdown = {
         expenses_commissionable: number;
         open_invoices: number;
         gross_profit: number;
+        commissionable_profit: number;
         salesman_commission: number;
         office_commission: number;
         total_commission: number;
@@ -288,6 +297,7 @@ type Project = {
     project_number: string | null;
     amount: string;
     status: string;
+    completion_blockers?: string[];
     created_at: string;
     sales: ProjectSale[];
     scheduled_payments: ScheduledPayment[];
@@ -344,7 +354,15 @@ type Project = {
             note_type: string;
             body: string;
             created_at: string;
+            creator: { acc_id: number; username: string } | null;
         }[];
+        movements: Array<{
+            id: number;
+            from_status: string | null;
+            to_status: string;
+            created_at: string;
+            mover: { acc_id: number; username: string } | null;
+        }>;
     };
 };
 
@@ -608,7 +626,7 @@ export default function Projects({
         number[]
     >([]);
     const contractorAssignmentForm = useForm({
-        contractor_ids: ['', '', '', ''] as string[],
+        contractor_ids: ['', '', '', '', '', ''] as string[],
     });
     const [selectedScheduledPaymentId, setSelectedScheduledPaymentId] =
         useState<number | null>(null);
@@ -649,15 +667,23 @@ export default function Projects({
         completion_date?: string;
     }>({ files: [], target_type: 'project', target_id: '', completion_audience: 'office', completion_salesman_id: '', completion_date: '' });
     const [completionModalOpen, setCompletionModalOpen] = useState(false);
+    const [completionBlockersOpen, setCompletionBlockersOpen] = useState(false);
+    const [completionDownloadOpen, setCompletionDownloadOpen] = useState(false);
+    const [completionDownloadError, setCompletionDownloadError] = useState<string | null>(null);
     const [completionAudience, setCompletionAudience] = useState<'office' | 'salesman'>('office');
     const [completionSalesmanId, setCompletionSalesmanId] = useState('');
     const [paymentCheckType, setPaymentCheckType] = useState<
         'lead_cost' | 'commission' | null
     >(null);
-    const paymentCheckForm = useForm<{ amount: string; check_number: string; check_file: File | null }>({
+    const paymentCheckForm = useForm<{ amount: string; transaction_date: string; payment_method: NonNullable<AccountingTransaction['payment_method']>; check_number: string; pay_to: string; requested_by: string; notes: string; check_files: File[] }>({
         amount: '',
+        transaction_date: localDateValue(),
+        payment_method: 'check',
         check_number: '',
-        check_file: null,
+        pay_to: '',
+        requested_by: currentRequester ?? '',
+        notes: '',
+        check_files: [],
     });
     const [
         accountingAttachmentTransaction,
@@ -1052,7 +1078,7 @@ export default function Projects({
             .map((contractor) => String(contractor.con_id));
         contractorAssignmentForm.setData(
             'contractor_ids',
-            Array.from({ length: 4 }, (_, index) => assigned[index] ?? ''),
+            Array.from({ length: 6 }, (_, index) => assigned[index] ?? ''),
         );
         contractorAssignmentForm.clearErrors();
     }, [selectedId]);
@@ -1260,6 +1286,8 @@ export default function Projects({
                     return projectSaleTotal(project);
                 case 'product':
                     return project.lead.product?.product_name ?? '';
+                case 'contractor':
+                    return project.contractors.map((contractor) => contractor.contractor).join(', ');
                 case 'notes':
                     return latestNote(project);
             }
@@ -1668,6 +1696,10 @@ export default function Projects({
 
     const saveProjectDetails = () => {
         if (!selected) return;
+        if (projectDetailsForm.data.status === 'completed' && (selected.completion_blockers?.length ?? 0) > 0) {
+            setCompletionBlockersOpen(true);
+            return;
+        }
 
         projectDetailsForm.put(`/management/projects/${selected.id}`, {
             preserveScroll: true,
@@ -1682,7 +1714,8 @@ export default function Projects({
 
     const noteByType = (project: Project, type: string) =>
         plainNote(
-            project.lead.notes.find((note) => note.note_type === type)?.body,
+            project.lead.notes.find((note) => note.note_type === type)?.body
+                ?? (type === 'telemarketer' ? project.lead.telemarketer_notes : ''),
         ) || '—';
 
     const salesmanAssignmentHistory = (project: Project) =>
@@ -1759,6 +1792,7 @@ export default function Projects({
 
                     return (
                         transaction.type === type &&
+                        !transaction.exclude_from_totals &&
                         (type === 'receivable' || isCommission === commissions)
                     );
                 })
@@ -1781,7 +1815,7 @@ export default function Projects({
             original: saleTotal('original'),
             referral: saleTotal('referral'),
             payables: selected.accounting_transactions
-                .filter((transaction) => transaction.type === 'payable')
+                .filter((transaction) => transaction.type === 'payable' && !transaction.exclude_from_totals)
                 .reduce(
                     (sum, transaction) => sum + Number(transaction.amount),
                     0,
@@ -2485,9 +2519,28 @@ export default function Projects({
         if (!commissionBreakdown) void loadCommissionBreakdown();
     };
 
+    const openCompletionDownloadModal = () => {
+        setCompletionAudience('office');
+        setCompletionSalesmanId('');
+        setCompletionDownloadError(null);
+        setCompletionDownloadOpen(true);
+        void loadCommissionBreakdown().catch(() => {
+            setCompletionDownloadError('Unable to load the salesman totals. Close and reopen this form to retry.');
+        });
+    };
+
     const openPaymentCheckModal = async (type: 'lead_cost' | 'commission') => {
         const existing = selected?.payment_checks.find((check) => check.type === type);
-        paymentCheckForm.setData({ amount: existing?.amount ?? '', check_number: existing?.check_number ?? '', check_file: null });
+        paymentCheckForm.setData({
+            amount: existing?.amount ?? '',
+            transaction_date: existing?.transaction_date?.slice(0, 10) ?? localDateValue(),
+            payment_method: existing?.payment_method ?? 'check',
+            check_number: existing?.check_number ?? '',
+            pay_to: existing?.pay_to ?? '',
+            requested_by: existing?.requested_by ?? currentRequester ?? '',
+            notes: existing?.notes ?? '',
+            check_files: [],
+        });
         paymentCheckForm.clearErrors();
         setPaymentCheckType(type);
 
@@ -3379,6 +3432,28 @@ export default function Projects({
                                 </div>
                             </header>
                             <div className="project-history-list">
+                                {[
+                                    ...selected.lead.notes.map((note) => ({ kind: 'note' as const, id: note.id, created_at: note.created_at, note })),
+                                    ...(selected.lead.movements ?? []).map((movement) => ({ kind: 'movement' as const, id: movement.id, created_at: movement.created_at, movement })),
+                                ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((entry) => (
+                                    <article key={`lead-${entry.kind}-${entry.id}`} className="is-lead-history">
+                                        <div className="project-history-marker"><History /></div>
+                                        <div className="project-history-content">
+                                            <header>
+                                                <div>
+                                                    <strong>{entry.kind === 'note' ? entry.note.note_type.replaceAll('_', ' ') : 'Lead moved'}</strong>
+                                                    <span>Lead Card history</span>
+                                                </div>
+                                                <time>{new Intl.DateTimeFormat('en-US', { timeZone: CRM_TIME_ZONE, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.created_at))}</time>
+                                            </header>
+                                            {entry.kind === 'note' ? (
+                                                <><p>By {entry.note.creator?.username || 'System'}</p><p className="project-history-note-body">{entry.note.body}</p></>
+                                            ) : (
+                                                <><p>By {entry.movement.mover?.username || 'System'}</p><p className="project-history-note-body">{(entry.movement.from_status || 'Created').replaceAll('_', ' ')} → {entry.movement.to_status.replaceAll('_', ' ')}</p></>
+                                            )}
+                                        </div>
+                                    </article>
+                                ))}
                                 {(selected.activity_logs ?? []).map((entry) => {
                                     const fields = Array.from(new Set([
                                         ...Object.keys(entry.old_values ?? {}),
@@ -3409,7 +3484,7 @@ export default function Projects({
                                         </article>
                                     );
                                 })}
-                                {(selected.activity_logs ?? []).length === 0 && (
+                                {(selected.activity_logs ?? []).length === 0 && selected.lead.notes.length === 0 && (selected.lead.movements ?? []).length === 0 && (
                                     <div className="project-history-empty"><History /><strong>No project history recorded yet</strong><span>New changes will appear here after activity logging is activated.</span></div>
                                 )}
                             </div>
@@ -3789,8 +3864,9 @@ export default function Projects({
                                             <div className="is-total"><dt>Project's balance</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.project_balance)}</dd></div>
                                             <div><dt>− Lead cost</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.lead_cost)}</dd></div>
                                             <div><dt>− Expenses (Comm.)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.expenses_commissionable)}</dd></div>
-                                            <div><dt>− Open invoices</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.open_invoices)}</dd></div>
                                             <div className="is-base"><dt>Gross Profit</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.gross_profit)}</dd></div>
+                                            <div><dt>− Open invoice balances</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.open_invoices)}</dd></div>
+                                            <div className="is-base"><dt>Total commission base</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.commissionable_profit)}</dd></div>
                                             <div><dt>Office commission (50%)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.office_commission)}</dd></div>
                                             <div><dt>Salesman commission (50%)</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.salesman_commission)}</dd></div>
                                             <div><dt>− Total commission paid</dt><dd>{currencyFormatter.format(commissionBreakdown.accounting.total_commission_paid)}</dd></div>
@@ -3809,11 +3885,12 @@ export default function Projects({
                                                 <div><dt>Received (Comm.)</dt><dd>{currencyFormatter.format(row.received)}</dd></div>
                                                 <div className="is-total"><dt>Project's balance</dt><dd>{currencyFormatter.format(row.project_balance)}</dd></div>
                                                 <div><dt>− Expenses (Comm.)</dt><dd>{currencyFormatter.format(row.expenses)}</dd></div>
-                                                <div><dt>− Open invoices</dt><dd>{currencyFormatter.format(row.open_invoices)}</dd></div>
                                                 <div><dt>− {row.lead_cost_rate}% Lead cost</dt><dd>{currencyFormatter.format(row.lead_cost)}</dd></div>
                                                 <div><dt>− {row.change_order_lead_cost_rate}% Change order lead cost</dt><dd>{currencyFormatter.format(row.change_order_lead_cost)}</dd></div>
                                                 <div className="is-base"><dt>Gross Profit share</dt><dd>{currencyFormatter.format(row.gross_profit)}</dd></div>
-                                                <div><dt>Salesman commission (50%)</dt><dd>{currencyFormatter.format(row.commission_due)}</dd></div>
+                                                <div><dt>− Open invoice balances</dt><dd>{currencyFormatter.format(row.open_invoices)}</dd></div>
+                                                <div className="is-base"><dt>Commission base share</dt><dd>{currencyFormatter.format(row.commission_base)}</dd></div>
+                                                <div><dt>Salesman commission ({commissionBreakdown.accounting.commissionable_profit > 0 ? `${Number((row.commission_due / commissionBreakdown.accounting.commissionable_profit * 100).toFixed(2))}% of total` : '0% of total'})</dt><dd>{currencyFormatter.format(row.commission_due)}</dd></div>
                                                 <div><dt>Maximum future commission</dt><dd>{currencyFormatter.format(row.maximum_commission)}</dd></div>
                                                 <div><dt>− Commission paid</dt><dd>{currencyFormatter.format(row.commission_paid)}</dd></div>
                                                 <div className="is-balance"><dt>Commission balance</dt><dd>{currencyFormatter.format(row.commission_balance)}</dd></div>
@@ -5031,6 +5108,23 @@ export default function Projects({
                     {activeTab === 'PRJ' && (
                         <section className="projects-panel">
                             <div className="projects-table-toolbar">
+                                <label className="projects-list-sort-control">
+                                    Sort
+                                    <select
+                                        value={`${projectSort.key}:${projectSort.direction}`}
+                                        onChange={(event) => {
+                                            const [key, direction] = event.target.value.split(':') as [ProjectSortKey, ProjectSortDirection];
+                                            setProjectSort({ key, direction });
+                                        }}
+                                    >
+                                        <option value="signed:desc">Signed date — newest</option>
+                                        <option value="projectNumber:asc">Job number — ascending</option>
+                                        <option value="projectNumber:desc">Job number — descending</option>
+                                        <option value="contractor:asc">Contractor — A to Z</option>
+                                        <option value="contractor:desc">Contractor — Z to A</option>
+                                        <option value="customer:asc">Customer — A to Z</option>
+                                    </select>
+                                </label>
                                 <div className="projects-project-only-actions">
                                     {!projectOnlySelectionMode ? (
                                         <button
@@ -5962,13 +6056,16 @@ export default function Projects({
                                             >
                                                 <FileText /> Completion
                                             </button>
+                                            <button type="button" onClick={openCompletionDownloadModal}>
+                                                <Printer /> Completion Form
+                                            </button>
                                             {(['lead_cost', 'commission'] as const).map((type) => {
                                                 const check = selected.payment_checks.find((item) => item.type === type);
                                                 return (
                                                     <button
                                                         key={type}
                                                         type="button"
-                                                        className={check?.file_name ? 'has-file' : ''}
+                                                        className={check?.file_name || check?.files?.length ? 'has-file' : ''}
                                                         onClick={() => void openPaymentCheckModal(type)}
                                                         title={type === 'lead_cost' ? 'Lead Cost' : 'Total Commission'}
                                                     >
@@ -6221,6 +6318,10 @@ export default function Projects({
                                                             const status =
                                                                 event.target
                                                                     .value;
+                                                            if (status === 'completed' && (selected.completion_blockers?.length ?? 0) > 0) {
+                                                                setCompletionBlockersOpen(true);
+                                                                return;
+                                                            }
                                                             projectDetailsForm.setData(
                                                                 'status',
                                                                 status,
@@ -6868,6 +6969,9 @@ export default function Projects({
                                                 workflow
                                             </p>
                                         </div>
+                                        <button type="button" className="project-view-lead-history" onClick={() => setActiveTab('HIS')}>
+                                            <History /> View all history
+                                        </button>
                                     </header>
                                     <div className="project-notes-grid">
                                         <div>
@@ -6896,6 +7000,10 @@ export default function Projects({
                                                     'dispatch',
                                                 )}
                                             </p>
+                                        </div>
+                                        <div>
+                                            <small>Appointment result</small>
+                                            <p>{noteByType(selected, 'appointment_result')}</p>
                                         </div>
                                         <div>
                                             <small>Quality control</small>
@@ -7826,7 +7934,6 @@ export default function Projects({
                                                 </option>
                                                 <option value="new_project">
                                                     Create a separate project
-                                                    number
                                                 </option>
                                             </select>
                                             <small>
@@ -7849,11 +7956,9 @@ export default function Projects({
                                         saleForm.data.destination ===
                                             'new_project' && (
                                             <div className="project-sale-auto-number">
-                                                <strong>New project number</strong>
+                                                <strong>Job number after deposit</strong>
                                                 <span>
-                                                    Assigned automatically as the next number after{' '}
-                                                    {selected?.project_number?.replace(/\.\d+$/, '') ?? 'this project'}
-                                                    —for example .1, then .2.
+                                                    This project stays New without a job number until its first receivable deposit is recorded.
                                                 </span>
                                             </div>
                                         )}
@@ -9401,7 +9506,7 @@ export default function Projects({
                         const label = paymentCheckType === 'lead_cost' ? 'Lead Cost (LC)' : 'Total Commission (CO)';
 
                         return (
-                            <DialogContent className="project-accounting-attachment-modal">
+                            <DialogContent className="project-accounting-attachment-modal project-compact-attachment-modal project-payment-check-modal">
                                 <form
                                     onSubmit={(event) => {
                                         event.preventDefault();
@@ -9414,11 +9519,21 @@ export default function Projects({
                                 >
                                     <DialogHeader>
                                         <DialogTitle>{label}</DialogTitle>
-                                        <DialogDescription>
-                                            Track this amount separately from job costs. Attaching the check marks it paid.
+                                    <DialogDescription>
+                                            Enter it like a payable. It will appear in the project's Payables table but is excluded from payable totals.
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="project-accounting-form-top">
+                                        <label>
+                                            Transaction date
+                                            <input type="date" value={paymentCheckForm.data.transaction_date} onChange={(event) => paymentCheckForm.setData('transaction_date', event.target.value)} required />
+                                            {paymentCheckForm.errors.transaction_date && <small>{paymentCheckForm.errors.transaction_date}</small>}
+                                        </label>
+                                        <label>
+                                            Pay to
+                                            <input value={paymentCheckForm.data.pay_to} onChange={(event) => paymentCheckForm.setData('pay_to', event.target.value)} placeholder="Person or company" required />
+                                            {paymentCheckForm.errors.pay_to && <small>{paymentCheckForm.errors.pay_to}</small>}
+                                        </label>
                                         <label>
                                             Amount
                                             <input
@@ -9432,6 +9547,12 @@ export default function Projects({
                                             {paymentCheckForm.errors.amount && <small>{paymentCheckForm.errors.amount}</small>}
                                         </label>
                                         <label>
+                                            Payment method
+                                            <select value={paymentCheckForm.data.payment_method} onChange={(event) => paymentCheckForm.setData('payment_method', event.target.value as NonNullable<AccountingTransaction['payment_method']>)}>
+                                                <option value="check">Check</option><option value="zelle">Zelle</option><option value="credit_card">Credit card</option><option value="wire_transfer">Wire transfer</option><option value="square_transfer">Square transfer</option><option value="cash">Cash</option>
+                                            </select>
+                                        </label>
+                                        <label>
                                             Check number
                                             <input
                                                 value={paymentCheckForm.data.check_number}
@@ -9440,13 +9561,30 @@ export default function Projects({
                                             />
                                             {paymentCheckForm.errors.check_number && <small>{paymentCheckForm.errors.check_number}</small>}
                                         </label>
-                                        <div className={`project-payment-check-status ${existing?.file_name ? 'is-paid' : ''}`}>
+                                        <label>
+                                            Requested by
+                                            <input value={paymentCheckForm.data.requested_by} onChange={(event) => paymentCheckForm.setData('requested_by', event.target.value)} />
+                                        </label>
+                                        <div className={`project-payment-check-status ${existing?.file_name || existing?.files?.length ? 'is-paid' : ''}`}>
                                             <small>Status</small>
-                                            <strong>{existing?.file_name && existing.check_number ? 'Paid' : 'Pending'}</strong>
+                                            <strong>{(existing?.file_name || existing?.files?.length) && existing.check_number ? 'Paid' : 'Pending'}</strong>
                                         </div>
                                     </div>
-                                    {existing?.file_name && (
+                                    <label className="project-accounting-notes-field">
+                                        <span>Notes</span>
+                                        <textarea value={paymentCheckForm.data.notes} onChange={(event) => paymentCheckForm.setData('notes', event.target.value)} placeholder="Payment notes" />
+                                    </label>
+                                    {(existing?.file_name || Boolean(existing?.files?.length)) && (
                                         <div className="project-accounting-attachment-list">
+                                            {existing?.files?.map((file) => (
+                                                <div className="project-accounting-attachment-list__item" key={file.id}>
+                                                    <FileText />
+                                                    <span>{file.file_name}</span>
+                                                    <a href={`/management/projects/${selected.id}/payment-check-files/${file.id}`} target="_blank" rel="noreferrer">View / print</a>
+                                                    <button type="button" onClick={() => router.delete(`/management/projects/${selected.id}/payment-check-files/${file.id}`, { preserveScroll: true, onSuccess: () => setPaymentCheckType(null) })}>Remove</button>
+                                                </div>
+                                            ))}
+                                            {existing?.file_name && (
                                             <div className="project-accounting-attachment-list__item">
                                                 <FileText />
                                                 <span>{existing.file_name}</span>
@@ -9461,19 +9599,21 @@ export default function Projects({
                                                     Remove
                                                 </button>
                                             </div>
+                                            )}
                                         </div>
                                     )}
                                     <label className="project-accounting-attachment-upload">
                                         <Upload />
-                                        <strong>{paymentCheckForm.data.check_file?.name ?? (existing?.file_name ? 'Replace check' : 'Upload / scan check')}</strong>
-                                        <small>PDF, JPG, PNG, WebP, HEIC, or HEIF</small>
+                                        <strong>{paymentCheckForm.data.check_files.length ? `${paymentCheckForm.data.check_files.length} file(s) selected` : 'Upload / scan checks'}</strong>
+                                        <small>Up to 20 files: PDF, JPG, PNG, WebP, HEIC, or HEIF</small>
                                         <input
                                             type="file"
+                                            multiple
                                             accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif"
-                                            onChange={(event) => paymentCheckForm.setData('check_file', event.target.files?.[0] ?? null)}
+                                            onChange={(event) => paymentCheckForm.setData('check_files', Array.from(event.target.files ?? []))}
                                         />
                                     </label>
-                                    {paymentCheckForm.errors.check_file && <small>{paymentCheckForm.errors.check_file}</small>}
+                                    {paymentCheckForm.errors.check_files && <small>{paymentCheckForm.errors.check_files}</small>}
                                     <DialogFooter className="project-sale-modal__footer">
                                         <button type="button" onClick={() => setPaymentCheckType(null)}>Cancel</button>
                                         <button type="submit" disabled={paymentCheckForm.processing || commissionBreakdownLoading}>
@@ -9486,12 +9626,29 @@ export default function Projects({
                     })()}
                 </Dialog>
 
+                <Dialog open={completionBlockersOpen} onOpenChange={setCompletionBlockersOpen}>
+                    <DialogContent className="project-completion-blockers-modal">
+                        <DialogHeader>
+                            <DialogTitle>Project cannot be marked Completed yet</DialogTitle>
+                            <DialogDescription>Complete these items first, then change the status to Completed.</DialogDescription>
+                        </DialogHeader>
+                        <ul>
+                            {selected?.completion_blockers?.map((blocker) => (
+                                <li key={blocker}>{blocker}</li>
+                            ))}
+                        </ul>
+                        <DialogFooter>
+                            <button type="button" onClick={() => setCompletionBlockersOpen(false)}>Close</button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
                 <Dialog
                     open={completionModalOpen}
                     onOpenChange={(open) => !documentUploadForm.processing && setCompletionModalOpen(open)}
                 >
                     {selected && (
-                        <DialogContent className="project-accounting-attachment-modal">
+                        <DialogContent className="project-accounting-attachment-modal project-compact-attachment-modal project-completion-modal">
                             <form
                                 onSubmit={(event) => {
                                     event.preventDefault();
@@ -9589,6 +9746,65 @@ export default function Projects({
                                     </button>
                                 </DialogFooter>
                             </form>
+                        </DialogContent>
+                    )}
+                </Dialog>
+
+                <Dialog open={completionDownloadOpen} onOpenChange={setCompletionDownloadOpen}>
+                    {selected && (
+                        <DialogContent className="project-accounting-attachment-modal project-compact-attachment-modal project-completion-download-modal">
+                            <DialogHeader>
+                                <DialogTitle>Completion Form</DialogTitle>
+                                <DialogDescription>
+                                    Download a PDF using the current Totals &amp; Commissions (TTL) figures.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="project-completion-download-fields">
+                                <label>
+                                    Accounting copy
+                                    <select value={completionAudience} onChange={(event) => {
+                                        setCompletionAudience(event.target.value as 'office' | 'salesman');
+                                        setCompletionSalesmanId('');
+                                    }}>
+                                        <option value="office">All accounting totals</option>
+                                        <option value="salesman">Salesman accounting only</option>
+                                    </select>
+                                </label>
+                                {completionAudience === 'salesman' && (
+                                    <label>
+                                        Salesman
+                                        <select
+                                            value={completionSalesmanId}
+                                            onChange={(event) => setCompletionSalesmanId(event.target.value)}
+                                            disabled={commissionBreakdownLoading}
+                                        >
+                                            <option value="">{commissionBreakdownLoading ? 'Loading salesmen...' : 'Select salesman'}</option>
+                                            {(commissionBreakdown?.salesmen ?? []).map((row) => (
+                                                <option key={row.salesman_id} value={row.salesman_id}>{row.salesman_name}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                )}
+                                {completionDownloadError && <p role="alert">{completionDownloadError}</p>}
+                            </div>
+                            <DialogFooter className="project-sale-modal__footer">
+                                <button type="button" onClick={() => setCompletionDownloadOpen(false)}>Cancel</button>
+                                <a
+                                    className="project-completion-download-button"
+                                    href={`/management/projects/${selected.id}/completion-form?audience=${completionAudience}${completionAudience === 'salesman' ? `&salesman_id=${completionSalesmanId}` : ''}`}
+                                    download
+                                    aria-disabled={completionAudience === 'salesman' && !completionSalesmanId}
+                                    onClick={(event) => {
+                                        if (completionAudience === 'salesman' && !completionSalesmanId) {
+                                            event.preventDefault();
+                                        } else {
+                                            setCompletionDownloadOpen(false);
+                                        }
+                                    }}
+                                >
+                                    <Printer /> Download PDF
+                                </a>
+                            </DialogFooter>
                         </DialogContent>
                     )}
                 </Dialog>

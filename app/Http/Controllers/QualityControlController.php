@@ -29,6 +29,7 @@ class QualityControlController extends Controller
                     'lead.salesmanOne:salesman_id,salesman_name',
                     'lead.salesmanTwo:salesman_id,salesman_name',
                     'lead.notes.creator:acc_id,username',
+                    'lead.movements.mover:acc_id,username',
                 ])
                 ->latest()
                 ->get(),

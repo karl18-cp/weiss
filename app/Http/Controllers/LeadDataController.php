@@ -293,6 +293,8 @@ class LeadDataController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
         $showAll = $request->boolean('show_all');
+        $sort = (string) $request->query('sort', 'date');
+        $direction = $request->query('direction') === 'asc' ? 'asc' : 'desc';
 
         $invoiceTotals = ProjectInvoice::query()
             ->withSum([
@@ -313,6 +315,14 @@ class LeadDataController extends Controller
                 'linked_project_number' => Project::query()
                     ->select('project_number')
                     ->whereColumn('projects.id', 'project_invoices.project_id')
+                    ->limit(1),
+                'linked_contractor_name' => Contractor::query()
+                    ->select('contractor')
+                    ->whereColumn('contractors.con_id', 'project_invoices.contractor_id')
+                    ->limit(1),
+                'linked_vendor_name' => Vendor::query()
+                    ->select('vendor')
+                    ->whereColumn('vendors.vendor_id', 'project_invoices.vendor_id')
                     ->limit(1),
             ])
             ->withSum([
@@ -349,7 +359,27 @@ class LeadDataController extends Controller
                                 ->orWhere('prefix', 'like', "%{$search}%")));
                 });
             })
-            ->latest('invoice_date')
+            ->when($sort === 'charged_by', fn (Builder $query) => $query->orderByRaw(
+                "COALESCE(linked_contractor_name, linked_vendor_name, '') {$direction}",
+            ))
+            ->when($sort === 'balance', fn (Builder $query) => $query->orderByRaw(
+                "(project_invoices.amount - COALESCE((SELECT SUM(project_accounting_transactions.amount) FROM project_accounting_transactions WHERE project_accounting_transactions.project_invoice_id = project_invoices.id AND project_accounting_transactions.type = 'payable' AND project_accounting_transactions.status = 'paid'), 0)) {$direction}",
+            ))
+            ->when($sort === 'rep', fn (Builder $query) => $query->orderByRaw(
+                "(SELECT salesmen.salesman_name FROM projects JOIN leads ON leads.id = projects.lead_id LEFT JOIN salesmen ON salesmen.salesman_id = leads.salesman_1_id WHERE projects.id = project_invoices.project_id LIMIT 1) {$direction}",
+            ))
+            ->when($sort === 'file', fn (Builder $query) => $query->orderByRaw(
+                "CASE WHEN project_invoices.file_path IS NOT NULL OR project_invoices.project_document_id IS NOT NULL OR EXISTS (SELECT 1 FROM project_documents WHERE project_documents.project_invoice_id = project_invoices.id AND project_documents.file_path IS NOT NULL) THEN 1 ELSE 0 END {$direction}",
+            ))
+            ->when(! in_array($sort, ['charged_by', 'balance', 'rep', 'file'], true), function (Builder $query) use ($sort, $direction): void {
+                $column = [
+                    'invoice' => 'invoice_number', 'project' => 'linked_project_number',
+                    'description' => 'notes', 'date' => 'invoice_date', 'amount' => 'amount',
+                    'status' => 'status',
+                ][$sort] ?? 'invoice_date';
+                $query->orderBy($column, $direction);
+            })
+            ->orderBy('id', $direction)
             ->paginate(25)
             ->withQueryString()
             ->through(fn (ProjectInvoice $invoice): array => [
@@ -389,7 +419,7 @@ class LeadDataController extends Controller
 
         return Inertia::render('lead-workflow/vendor-invoices', [
             'invoices' => $invoices,
-            'filters' => ['search' => $search, 'show_all' => $showAll],
+            'filters' => ['search' => $search, 'show_all' => $showAll, 'sort' => $sort, 'direction' => $direction],
             'totalInvoices' => $outstandingInvoices->count(),
             'totalAmount' => $invoiceTotals->sum('amount'),
             'totalBalance' => $invoiceTotals->sum(
@@ -432,11 +462,29 @@ class LeadDataController extends Controller
         $requestedInvoiceId = $request->integer('invoice') ?: null;
         $salesmanId = $request->integer('salesman') ?: null;
         $contractorId = $request->integer('contractor') ?: null;
+        $sort = (string) $request->query('sort', 'date');
+        $direction = $request->query('direction') === 'asc' ? 'asc' : 'desc';
         $query = ProjectAccountingTransaction::query()
             ->addSelect([
                 'linked_project_number' => Project::query()
                     ->select('project_number')
                     ->whereColumn('projects.id', 'project_accounting_transactions.project_id')
+                    ->limit(1),
+                'linked_contractor_name' => Contractor::query()
+                    ->select('contractor')
+                    ->whereColumn('contractors.con_id', 'project_accounting_transactions.contractor_id')
+                    ->limit(1),
+                'linked_vendor_name' => Vendor::query()
+                    ->select('vendor')
+                    ->whereColumn('vendors.vendor_id', 'project_accounting_transactions.vendor_id')
+                    ->limit(1),
+                'linked_invoice_number' => ProjectInvoice::query()
+                    ->select('invoice_number')
+                    ->whereColumn('project_invoices.id', 'project_accounting_transactions.project_invoice_id')
+                    ->limit(1),
+                'linked_salesman_name' => Salesman::query()
+                    ->select('salesman_name')
+                    ->whereColumn('salesmen.salesman_id', 'project_accounting_transactions.salesman_id')
                     ->limit(1),
             ])
             ->where('type', $type)
@@ -499,10 +547,34 @@ class LeadDataController extends Controller
                 });
             });
 
-        $totalAmount = (clone $query)->sum('amount');
+        $totalAmount = (clone $query)->where('exclude_from_totals', false)->sum('amount');
+        $sortColumns = [
+            'date' => 'transaction_date', 'company' => 'company_id', 'project' => 'linked_project_number',
+            'payment_method' => 'payment_method', 'requested_by' => 'requested_by', 'status' => 'status',
+            'amount' => 'amount', 'reference' => 'reference_number', 'category' => 'category',
+            'notes' => 'notes', 'file' => 'file_name', 'qb' => 'qb',
+        ];
         $transactions = $query
-            ->latest('transaction_date')
-            ->latest('id')
+            ->when($sort === 'party', fn (Builder $query) => $query->orderByRaw(
+                ($type === 'receivable'
+                    ? "COALESCE(project_accounting_transactions.counterparty, '')"
+                    : "COALESCE(linked_contractor_name, linked_vendor_name, project_accounting_transactions.counterparty, '')")." {$direction}",
+            ))
+            ->when($sort === 'invoice', fn (Builder $query) => $query->orderByRaw(
+                "COALESCE(linked_invoice_number, project_accounting_transactions.invoice_order_number, '') {$direction}",
+            ))
+            ->when($sort === 'company', fn (Builder $query) => $query->orderByRaw(
+                "COALESCE((SELECT companies.prefix FROM projects JOIN leads ON leads.id = projects.lead_id LEFT JOIN companies ON companies.com_id = leads.company_id WHERE projects.id = project_accounting_transactions.project_id LIMIT 1), (SELECT companies.prefix FROM companies WHERE companies.com_id = project_accounting_transactions.company_id LIMIT 1), '') {$direction}",
+            ))
+            ->when($sort === 'rep', fn (Builder $query) => $query->orderByRaw(
+                "COALESCE(linked_salesman_name, (SELECT salesmen.salesman_name FROM projects JOIN leads ON leads.id = projects.lead_id LEFT JOIN salesmen ON salesmen.salesman_id = leads.salesman_1_id WHERE projects.id = project_accounting_transactions.project_id LIMIT 1), '') {$direction}",
+            ))
+            ->when($sort === 'file', fn (Builder $query) => $query->orderByRaw(
+                "CASE WHEN project_accounting_transactions.file_path IS NOT NULL OR project_accounting_transactions.project_document_id IS NOT NULL OR EXISTS (SELECT 1 FROM project_documents WHERE project_documents.project_accounting_transaction_id = project_accounting_transactions.id AND project_documents.file_path IS NOT NULL) THEN 1 ELSE 0 END {$direction}",
+            ))
+            ->when(! in_array($sort, ['party', 'invoice', 'company', 'rep', 'file'], true), fn (Builder $query) => $query
+                ->orderBy($sortColumns[$sort] ?? 'transaction_date', $direction))
+            ->orderBy('id', $direction)
             ->paginate(25)
             ->withQueryString()
             ->through(function (ProjectAccountingTransaction $transaction): array {
@@ -569,6 +641,8 @@ class LeadDataController extends Controller
                 'show_all' => $showAll,
                 'salesman' => $salesmanId,
                 'contractor' => $contractorId,
+                'sort' => $sort,
+                'direction' => $direction,
             ],
             'totalAmount' => $totalAmount,
             'projects' => Project::query()
